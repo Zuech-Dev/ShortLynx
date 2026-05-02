@@ -1,0 +1,6 @@
+@ShortLynx.Core_HostAddress = http://localhost:5129
+
+GET {{ShortLynx.Core_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

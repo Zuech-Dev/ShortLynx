@@ -1,0 +1,8 @@
+<Solution>
+  <Project Path="ShortLynx.Admin/ShortLynx.Admin.csproj" />
+  <Project Path="ShortLynx.Core/ShortLynx.Core.csproj" />
+  <Project Path="ShortLynx.Models/ShortLynx.Models.csproj" />
+  <Project Path="ShortLynx.Repository/ShortLynx.Repository.csproj" />
+  <Project Path="ShortLynx.Services/ShortLynx.Services.csproj" />
+  <Project Path="ShortLynx.Web/ShortLynx.Web.csproj" />
+</Solution>

@@ -7,4 +7,9 @@
         <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
     </PropertyGroup>
 
+    <ItemGroup>
+      <PackageReference Include="Microsoft.AspNetCore.App.Internal.Assets" Version="10.0.7" />
+      <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.18.0" />
+    </ItemGroup>
+
 </Project>

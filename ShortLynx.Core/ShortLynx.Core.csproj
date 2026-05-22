@@ -17,6 +17,7 @@
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.7" />
         <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.18.0" />
         <PackageReference Include="Npgsql.DependencyInjection" Version="10.0.2" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.7" />
         <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.1" />
         <PackageReference Include="Npgsql.Json.NET" Version="10.0.2" />
         <PackageReference Include="Serilog" Version="4.3.1" />
@@ -39,6 +40,11 @@
       <Content Update="appsettings.Development.json">
         <DependentUpon>appsettings.json</DependentUpon>
       </Content>
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\ShortLynx.Data\ShortLynx.Data.csproj" />
+      <ProjectReference Include="..\ShortLynx.Repository\ShortLynx.Repository.csproj" />
     </ItemGroup>
 
 </Project>

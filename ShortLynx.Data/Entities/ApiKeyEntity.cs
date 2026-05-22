@@ -1,5 +1,8 @@
+using System.ComponentModel.DataAnnotations.Schema;
+
 namespace ShortLynx.Data.Entities;
 
+[Table("ApiKeys")]
 public class ApiKeyEntity
 {
     public Guid Id { get; set; }

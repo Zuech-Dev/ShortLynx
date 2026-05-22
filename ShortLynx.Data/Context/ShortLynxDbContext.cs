@@ -3,7 +3,7 @@ using ShortLynx.Data.Entities;
 
 namespace ShortLynx.Data.Context;
 
-public partial class ShortLynxDbContext() : DbContext
+public partial class ShortLynxDbContext(DbContextOptions<ShortLynxDbContext> options) : DbContext(options)
 {
     public DbSet<ApiKeyEntity> ApiKeyEntities { get; set; }
     public DbSet<LinkEntity> LinkEntities { get; set; }

@@ -1,5 +1,8 @@
+using System.ComponentModel.DataAnnotations.Schema;
+
 namespace ShortLynx.Data.Entities;
 
+[Table("UserVisits")]
 public class UserVisitEntity
 {
     public Guid Id { get; set; }
@@ -9,5 +12,5 @@ public class UserVisitEntity
     public string HashedIp { get; set; } = null!;
     public string? Referrer { get; set; }
     public string? UserAgent { get; set; }
-    public virtual LinkEntity Link { get; set; } = null!;
+    public virtual UserLinkCodeEntity UserLinkCode { get; set; } = null!;
 }

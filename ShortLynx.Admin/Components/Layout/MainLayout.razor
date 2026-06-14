@@ -1,4 +1,4 @@
-﻿@inherits LayoutComponentBase
+@inherits LayoutComponentBase
 
 <div class="page">
     <div class="sidebar">
@@ -6,8 +6,13 @@
     </div>
 
     <main>
-        <div class="top-row px-4">
-            <a href="https://learn.microsoft.com/aspnet/core/" target="_blank">About</a>
+        <div class="top-row px-4 d-flex justify-content-end align-items-center gap-3">
+            <AuthorizeView>
+                <Authorized>
+                    <span class="text-muted small">@context.User.Identity?.Name</span>
+                    <a href="/auth/logout" class="btn btn-sm btn-outline-secondary">Sign out</a>
+                </Authorized>
+            </AuthorizeView>
         </div>
 
         <article class="content px-4">

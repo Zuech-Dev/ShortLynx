@@ -1,0 +1,126 @@
+@page "/links"
+@attribute [Authorize]
+@inject IDbContextFactory<ShortLynxDbContext> DbFactory
+@inject NavigationManager Nav
+
+<PageTitle>Links — ShortLynx Admin</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="mb-0">Links</h1>
+</div>
+
+@if (!_loaded)
+{
+    <p class="text-muted">Loading…</p>
+}
+else if (_rows.Count == 0)
+{
+    <p class="text-muted">No links yet.</p>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table table-hover align-middle">
+            <thead class="table-light">
+            <tr>
+                <th>Code</th>
+                <th>URL</th>
+                <th>API Key</th>
+                <th>Mode</th>
+                <th class="text-end">Clicks</th>
+                <th>Created</th>
+                <th></th>
+            </tr>
+            </thead>
+            <tbody>
+            @foreach (var r in _rows)
+            {
+                <tr>
+                    <td><code>@r.ShortCode</code></td>
+                    <td class="text-truncate" style="max-width:280px" title="@r.Url">@r.Url</td>
+                    <td class="text-muted small">@r.ApiKeyName</td>
+                    <td><span class="badge @(r.Mode == "Anonymous" ? "bg-secondary" : "bg-primary")">@r.Mode</span></td>
+                    <td class="text-end">@r.Clicks</td>
+                    <td class="text-muted small text-nowrap">@r.CreatedAt.ToString("yyyy-MM-dd")</td>
+                    <td><a class="btn btn-sm btn-outline-primary" href="/links/@r.Id">View</a></td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+
+    <div class="d-flex gap-2">
+        <button class="btn btn-sm btn-outline-secondary" @onclick="PrevPage" disabled="@(_page == 1)">← Prev</button>
+        <span class="align-self-center text-muted small">Page @_page</span>
+        <button class="btn btn-sm btn-outline-secondary" @onclick="NextPage" disabled="@(_rows.Count < PageSize)">Next →</button>
+    </div>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    const int PageSize = 20;
+    int _page = 1;
+    bool _loaded;
+    bool _resolved;
+    Guid _uid;
+    List<LinkRow> _rows = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var userId = (await AuthState).User.GetUserId();
+        if (userId is null) { _loaded = true; return; }
+        _uid = userId.Value;
+        _resolved = true;
+        await LoadAsync();
+    }
+
+    async Task LoadAsync()
+    {
+        if (!_resolved) return;
+        _loaded = false;
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        var links = await db.LinkEntities
+            .Include(l => l.ApiKey)
+            .Where(l => l.ApiKey.UserAccountId == _uid)
+            .OrderByDescending(l => l.Id)
+            .Skip((_page - 1) * PageSize)
+            .Take(PageSize)
+            .ToListAsync();
+
+        var linkIds = links.Select(l => l.Id).ToList();
+
+        var codes = await db.ShortCodeEntities
+            .Where(sc => linkIds.Contains(sc.LinkId))
+            .ToListAsync();
+
+        var codeMap = codes.ToDictionary(sc => sc.LinkId, sc => sc);
+        var codeIds = codes.Select(sc => sc.Id).ToList();
+
+        var visits = await db.VisitEntities
+            .Where(v => codeIds.Contains(v.ShortCodeId))
+            .GroupBy(v => v.ShortCodeId)
+            .Select(g => new { Id = g.Key, Count = g.Count() })
+            .ToListAsync();
+
+        var clickMap = visits.ToDictionary(v => v.Id, v => v.Count);
+
+        _rows = links.Select(l =>
+        {
+            var sc = codeMap.GetValueOrDefault(l.Id);
+            var clicks = sc is not null ? clickMap.GetValueOrDefault(sc.Id, 0) : 0;
+            return new LinkRow(l.Id, l.OriginalUrl, l.Mode.ToString(),
+                sc?.Code ?? string.Empty, l.ApiKey?.Name ?? "—",
+                l.CreatedAt, clicks);
+        }).ToList();
+
+        _loaded = true;
+    }
+
+    async Task PrevPage() { if (_page > 1) { _page--; await LoadAsync(); } }
+    async Task NextPage() { _page++; await LoadAsync(); }
+
+    sealed record LinkRow(Guid Id, string Url, string Mode, string ShortCode,
+        string ApiKeyName, DateTimeOffset CreatedAt, int Clicks);
+}

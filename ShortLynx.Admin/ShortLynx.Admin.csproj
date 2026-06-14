@@ -8,8 +8,16 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <PackageReference Include="Microsoft.AspNetCore.App.Internal.Assets" Version="10.0.7" />
-      <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.18.0" />
+        <PackageReference Include="Microsoft.AspNetCore.App.Internal.Assets" Version="10.0.7" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.7" />
+        <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.18.0" />
+        <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.1" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\ShortLynx.Data\ShortLynx.Data.csproj" />
+        <ProjectReference Include="..\ShortLynx.Repository\ShortLynx.Repository.csproj" />
+        <ProjectReference Include="..\ShortLynx.Services\ShortLynx.Services.csproj" />
     </ItemGroup>
 
 </Project>

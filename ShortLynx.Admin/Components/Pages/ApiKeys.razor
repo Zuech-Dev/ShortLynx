@@ -1,0 +1,83 @@
+@page "/api-keys"
+@attribute [Authorize]
+@inject IDbContextFactory<ShortLynxDbContext> DbFactory
+
+<PageTitle>API Keys — ShortLynx Admin</PageTitle>
+<h1 class="mb-4">API Keys</h1>
+
+@if (!_loaded)
+{
+    <p class="text-muted">Loading…</p>
+}
+else if (_rows.Count == 0)
+{
+    <p class="text-muted">No API keys yet.</p>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table table-hover align-middle">
+            <thead class="table-light">
+            <tr>
+                <th>Name</th>
+                <th>Prefix</th>
+                <th>Scopes</th>
+                <th>Status</th>
+                <th>Created</th>
+            </tr>
+            </thead>
+            <tbody>
+            @foreach (var r in _rows)
+            {
+                <tr class="@(!r.IsActive ? "table-secondary text-muted" : null)">
+                    <td>@r.Name</td>
+                    <td><code>@r.Prefix…</code></td>
+                    <td class="small">@(string.Join(", ", r.Scopes))</td>
+                    <td>
+                        @if (r.IsActive)
+                        {
+                            <span class="badge bg-success">Active</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-secondary">Revoked</span>
+                        }
+                    </td>
+                    <td class="text-muted small text-nowrap">@r.CreatedAt.ToString("yyyy-MM-dd")</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    bool _loaded;
+    List<ApiKeyRow> _rows = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var userId = (await AuthState).User.GetUserId();
+        if (userId is null) { _loaded = true; return; }
+        var uid = userId.Value;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var keys = await db.ApiKeyEntities
+            .Where(k => k.UserAccountId == uid)
+            .OrderByDescending(k => k.Id)
+            .ToListAsync();
+
+        _rows = keys.Select(k => new ApiKeyRow(
+            k.Name,
+            k.Prefix,
+            k.Scopes.Split(',', StringSplitOptions.RemoveEmptyEntries),
+            k.IsActive,
+            k.CreatedAt)).ToList();
+
+        _loaded = true;
+    }
+
+    sealed record ApiKeyRow(string Name, string Prefix, string[] Scopes, bool IsActive, DateTimeOffset CreatedAt);
+}

@@ -1,7 +1,94 @@
-﻿@page "/"
+@page "/"
+@attribute [Authorize]
+@inject IDbContextFactory<ShortLynxDbContext> DbFactory
 
-<PageTitle>Home</PageTitle>
+<PageTitle>Dashboard — ShortLynx Admin</PageTitle>
+<h1 class="mb-4">Dashboard</h1>
 
-<h1>Hello, world!</h1>
+@if (!_loaded)
+{
+    <p class="text-muted">Loading…</p>
+}
+else
+{
+    <div class="row g-3 mb-5">
+        <div class="col-sm-6 col-xl-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="text-muted small text-uppercase fw-semibold mb-1">Links</div>
+                    <div class="fs-2 fw-bold">@_totalLinks</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-xl-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="text-muted small text-uppercase fw-semibold mb-1">Anonymous Clicks</div>
+                    <div class="fs-2 fw-bold">@_totalClicks</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-xl-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="text-muted small text-uppercase fw-semibold mb-1">User Clicks</div>
+                    <div class="fs-2 fw-bold">@_totalUserClicks</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-xl-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="text-muted small text-uppercase fw-semibold mb-1">API Keys (active)</div>
+                    <div class="fs-2 fw-bold">@_totalApiKeys</div>
+                </div>
+            </div>
+        </div>
+        @if (_isSuperAdmin)
+        {
+            <div class="col-sm-6 col-xl-3">
+                <div class="card border-0 shadow-sm h-100 border-start border-4 border-warning">
+                    <div class="card-body">
+                        <div class="text-muted small text-uppercase fw-semibold mb-1">Users (all tenants)</div>
+                        <div class="fs-2 fw-bold">@_totalUsers</div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
 
-Welcome to your new app.
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    bool _loaded;
+    bool _isSuperAdmin;
+    int _totalLinks, _totalClicks, _totalUserClicks, _totalApiKeys, _totalUsers;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var principal = (await AuthState).User;
+        _isSuperAdmin = principal.IsSuperAdmin();
+        var userId = principal.GetUserId();
+        if (userId is null) { _loaded = true; return; }
+        var uid = userId.Value;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        // All counts scoped to links/keys owned by the signed-in user via ApiKey.UserAccountId.
+        _totalLinks = await db.LinkEntities
+            .CountAsync(l => l.ApiKey.UserAccountId == uid);
+        _totalClicks = await db.VisitEntities
+            .CountAsync(v => v.ShortCode.Link.ApiKey.UserAccountId == uid);
+        _totalUserClicks = await db.UserVisitEntities
+            .CountAsync(v => v.UserLinkCode.Link.ApiKey.UserAccountId == uid);
+        _totalApiKeys = await db.ApiKeyEntities
+            .CountAsync(k => k.UserAccountId == uid && k.IsActive);
+
+        // Cross-tenant total only for super-admins.
+        if (_isSuperAdmin)
+            _totalUsers = await db.UserAccountEntities.CountAsync();
+
+        _loaded = true;
+    }
+}

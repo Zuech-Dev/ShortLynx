@@ -1,0 +1,188 @@
+@page "/links/{Id:guid}"
+@attribute [Authorize]
+@inject IDbContextFactory<ShortLynxDbContext> DbFactory
+@inject NavigationManager Nav
+
+<PageTitle>Link Detail — ShortLynx Admin</PageTitle>
+
+@if (_notFound)
+{
+    <p class="text-danger">Link not found.</p>
+    <a href="/links" class="btn btn-sm btn-outline-secondary">← Back to Links</a>
+}
+else if (!_loaded)
+{
+    <p class="text-muted">Loading…</p>
+}
+else
+{
+    <div class="d-flex align-items-center gap-2 mb-3">
+        <a href="/links" class="btn btn-sm btn-outline-secondary">← Back</a>
+        <h1 class="mb-0 fs-4">Link Detail</h1>
+    </div>
+
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body">
+            <dl class="row mb-0">
+                <dt class="col-sm-3">URL</dt>
+                <dd class="col-sm-9"><a href="@_link!.OriginalUrl" target="_blank" rel="noopener">@_link.OriginalUrl</a></dd>
+
+                <dt class="col-sm-3">Short Code</dt>
+                <dd class="col-sm-9"><code>@_shortCode</code></dd>
+
+                <dt class="col-sm-3">Mode</dt>
+                <dd class="col-sm-9">@_link.Mode</dd>
+
+                <dt class="col-sm-3">API Key</dt>
+                <dd class="col-sm-9">@(_link.ApiKey?.Name ?? "—")</dd>
+
+                <dt class="col-sm-3">Created</dt>
+                <dd class="col-sm-9">@_link.CreatedAt.ToString("yyyy-MM-dd HH:mm") UTC</dd>
+            </dl>
+        </div>
+    </div>
+
+    @if (_link.Mode == LinkMode.Anonymous)
+    {
+        <h5>Click Analytics</h5>
+        <p class="text-muted">Total clicks: <strong>@_totalClicks</strong></p>
+
+        @if (_recentVisits.Count > 0)
+        {
+            <table class="table table-sm table-hover">
+                <thead class="table-light">
+                <tr><th>Clicked At</th><th>Referrer</th></tr>
+                </thead>
+                <tbody>
+                @foreach (var v in _recentVisits)
+                {
+                    <tr>
+                        <td class="text-nowrap">@v.ClickedAt.ToString("yyyy-MM-dd HH:mm") UTC</td>
+                        <td class="text-muted small text-truncate" style="max-width:300px">@(v.Referrer ?? "—")</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+            @if (_totalClicks > 50)
+            {
+                <p class="text-muted small">Showing 50 most recent clicks.</p>
+            }
+        }
+    }
+    else
+    {
+        <h5>User Code Analytics</h5>
+        @if (_userRows.Count == 0)
+        {
+            <p class="text-muted">No user codes provisioned yet.</p>
+        }
+        else
+        {
+            <table class="table table-sm table-hover">
+                <thead class="table-light">
+                <tr><th>Code</th><th>User ID</th><th class="text-end">Clicks</th></tr>
+                </thead>
+                <tbody>
+                @foreach (var r in _userRows)
+                {
+                    <tr>
+                        <td><code>@r.Code</code></td>
+                        <td class="text-muted small font-monospace">@r.UserId</td>
+                        <td class="text-end">@r.Clicks</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        }
+    }
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+    [Parameter] public Guid Id { get; set; }
+
+    bool _loaded, _notFound;
+    bool _authResolved, _isSuperAdmin;
+    Guid _uid;
+    LinkEntity? _link;
+    string _shortCode = string.Empty;
+    int _totalClicks;
+    List<VisitEntity> _recentVisits = [];
+    List<UserCodeRow> _userRows = [];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!_authResolved)
+        {
+            var principal = (await AuthState).User;
+            _isSuperAdmin = principal.IsSuperAdmin();
+            var userId = principal.GetUserId();
+            if (userId is null) { _notFound = true; _loaded = true; return; }
+            _uid = userId.Value;
+            _authResolved = true;
+        }
+        await LoadAsync();
+    }
+
+    async Task LoadAsync()
+    {
+        _loaded = false;
+        _notFound = false;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        _link = await db.LinkEntities
+            .Include(l => l.ApiKey)
+            .FirstOrDefaultAsync(l => l.Id == Id);
+
+        if (_link is null) { _notFound = true; _loaded = true; return; }
+
+        // Ownership: tenants may only view their own links; super-admins may view any.
+        // Report "not found" (not "forbidden") so existence isn't leaked across tenants.
+        if (!_isSuperAdmin && _link.ApiKey?.UserAccountId != _uid)
+        {
+            _link = null;
+            _notFound = true;
+            _loaded = true;
+            return;
+        }
+
+        if (_link.Mode == LinkMode.Anonymous)
+        {
+            var sc = await db.ShortCodeEntities.FirstOrDefaultAsync(s => s.LinkId == Id);
+            _shortCode = sc?.Code ?? string.Empty;
+
+            if (sc is not null)
+            {
+                _totalClicks = await db.VisitEntities.CountAsync(v => v.ShortCodeId == sc.Id);
+                _recentVisits = await db.VisitEntities
+                    .Where(v => v.ShortCodeId == sc.Id)
+                    .OrderByDescending(v => v.Id)
+                    .Take(50)
+                    .ToListAsync();
+            }
+        }
+        else
+        {
+            var codes = await db.UserLinkCodeEntities
+                .Where(c => c.LinkId == Id)
+                .OrderByDescending(c => c.Id)
+                .ToListAsync();
+
+            var codeIds = codes.Select(c => c.Id).ToList();
+            var clicks = await db.UserVisitEntities
+                .Where(v => codeIds.Contains(v.UserLinkCodeId))
+                .GroupBy(v => v.UserLinkCodeId)
+                .Select(g => new { Id = g.Key, Count = g.Count() })
+                .ToListAsync();
+
+            var clickMap = clicks.ToDictionary(x => x.Id, x => x.Count);
+            _userRows = codes.Select(c => new UserCodeRow(c.Code, c.UserId,
+                clickMap.GetValueOrDefault(c.Id, 0))).ToList();
+        }
+
+        _loaded = true;
+    }
+
+    sealed record UserCodeRow(string Code, Guid UserId, int Clicks);
+}

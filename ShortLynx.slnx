@@ -12,5 +12,6 @@
   <Project Path="ShortLynx.Models/ShortLynx.Models.csproj" />
   <Project Path="ShortLynx.Repository/ShortLynx.Repository.csproj" />
   <Project Path="ShortLynx.Services/ShortLynx.Services.csproj" />
+  <Project Path="ShortLynx.Tests/ShortLynx.Tests.csproj" />
   <Project Path="ShortLynx.Web/ShortLynx.Web.csproj" />
 </Solution>

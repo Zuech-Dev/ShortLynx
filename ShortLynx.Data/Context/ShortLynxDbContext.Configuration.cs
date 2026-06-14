@@ -62,6 +62,41 @@ public partial class ShortLynxDbContext
                     entity.HasIndex(e => e.Prefix);
                     entity.Property(e => e.Id).ValueGeneratedNever();
                     entity.Property(e => e.Prefix).HasMaxLength(8);
+                    entity.HasOne<UserAccountEntity>(e => e.UserAccount)
+                          .WithMany()
+                          .HasForeignKey(e => e.UserAccountId)
+                          .OnDelete(DeleteBehavior.NoAction);
+                }
+            )
+           .Entity<UserAccountEntity>(entity =>
+                {
+                    entity.HasKey(e => e.Id);
+                    entity.HasIndex(e => e.Email).IsUnique();
+                    entity.Property(e => e.Id).ValueGeneratedNever();
+                    entity.Property(e => e.Email).IsRequired().HasMaxLength(254);
+                }
+            )
+           .Entity<MagicLinkTokenEntity>(entity =>
+                {
+                    entity.HasKey(e => e.Id);
+                    entity.HasIndex(e => e.TokenHash);
+                    entity.HasOne<UserAccountEntity>(e => e.UserAccount)
+                          .WithMany(u => u.MagicLinkTokens)
+                          .HasForeignKey(e => e.UserAccountId)
+                          .OnDelete(DeleteBehavior.Cascade);
+                    entity.Property(e => e.Id).ValueGeneratedNever();
+                }
+            )
+           .Entity<CustomDomainEntity>(entity =>
+                {
+                    entity.HasKey(e => e.Id);
+                    entity.HasIndex(e => e.Domain).IsUnique();
+                    entity.HasOne<UserAccountEntity>(e => e.UserAccount)
+                          .WithMany(u => u.CustomDomains)
+                          .HasForeignKey(e => e.UserAccountId)
+                          .OnDelete(DeleteBehavior.Cascade);
+                    entity.Property(e => e.Id).ValueGeneratedNever();
+                    entity.Property(e => e.VerificationStatus).HasConversion<int>();
                 }
             );
 

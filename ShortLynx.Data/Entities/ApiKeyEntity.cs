@@ -14,5 +14,7 @@ public class ApiKeyEntity
     public bool IsActive { get; set; }
     // TODO: Parse in the service layer
     public string Scopes { get; set; }
+    public Guid? UserAccountId { get; set; }
     public virtual ICollection<LinkEntity> Links { get; set; } = [];
+    public virtual UserAccountEntity? UserAccount { get; set; }
 }

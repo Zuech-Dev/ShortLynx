@@ -45,6 +45,7 @@
     <ItemGroup>
       <ProjectReference Include="..\ShortLynx.Data\ShortLynx.Data.csproj" />
       <ProjectReference Include="..\ShortLynx.Repository\ShortLynx.Repository.csproj" />
+      <ProjectReference Include="..\ShortLynx.Services\ShortLynx.Services.csproj" />
     </ItemGroup>
 
 </Project>

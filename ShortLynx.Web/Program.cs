@@ -1,27 +1,52 @@
+using ShortLynx.Services.Visits;
+using ShortLynx.Services.Redirect;
+using ShortLynx.Web.Extensions;
+
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
 builder.Services.AddRazorPages();
+builder.Services.AddShortLynxDatabase(builder.Configuration);
+builder.Services.AddShortLynxRedirect(builder.Configuration);
+builder.Services.AddShortLynxRateLimiter(builder.Configuration);
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error");
-    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
 }
 
 app.UseHttpsRedirection();
-
-app.UseRouting();
-
-app.UseAuthorization();
-
+app.UseRateLimiter();
 app.MapStaticAssets();
+app.MapRazorPages().WithStaticAssets();
 
-app.MapRazorPages()
-   .WithStaticAssets();
+// Short-link redirect endpoint — must come after Razor Pages so literal routes (/Privacy, /Error)
+// take precedence over the /{code} parameter route.
+app.MapGet("/{code}", async (
+    string code,
+    HttpContext ctx,
+    IRedirectService redirectSvc,
+    IVisitEventSink sink) =>
+{
+    var entry = await redirectSvc.LookupAsync(code, ctx.RequestAborted);
+    if (entry is null) return Results.NotFound();
+
+    var ip = ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+    var referrer = ctx.Request.Headers.Referer.ToString();
+    var ua = ctx.Request.Headers.UserAgent.ToString();
+
+    await sink.EnqueueAsync(new VisitEvent(
+        ShortCodeId: entry.ShortCodeId,
+        UserLinkCodeId: entry.UserLinkCodeId,
+        UserId: entry.UserId,
+        RawIp: ip,
+        Referrer: referrer.Length > 0 ? referrer : null,
+        UserAgent: ua.Length > 0 ? ua : null,
+        ClickedAt: DateTimeOffset.UtcNow));
+
+    return Results.Redirect(entry.OriginalUrl, permanent: false);
+}).RequireRateLimiting("redirect");
 
 app.Run();

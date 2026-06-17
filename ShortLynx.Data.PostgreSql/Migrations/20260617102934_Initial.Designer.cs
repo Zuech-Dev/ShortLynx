@@ -12,8 +12,8 @@ using ShortLynx.Data.Context;
 namespace ShortLynx.Data.PostgreSql.Migrations
 {
     [DbContext(typeof(ShortLynxDbContext))]
-    [Migration("20260613022218_AddUsersAndCustomDomains")]
-    partial class AddUsersAndCustomDomains
+    [Migration("20260617102934_Initial")]
+    partial class Initial
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -218,6 +218,9 @@ namespace ShortLynx.Data.PostgreSql.Migrations
                         .HasColumnType("character varying(254)");
 
                     b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsAdmin")
                         .HasColumnType("boolean");
 
                     b.HasKey("Id");

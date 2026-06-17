@@ -12,6 +12,22 @@ namespace ShortLynx.Data.PostgreSql.Migrations
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.CreateTable(
+                name: "UserAccounts",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Email = table.Column<string>(type: "character varying(254)", maxLength: 254, nullable: false),
+                    DisplayName = table.Column<string>(type: "text", nullable: true),
+                    CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    IsActive = table.Column<bool>(type: "boolean", nullable: false),
+                    IsAdmin = table.Column<bool>(type: "boolean", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_UserAccounts", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "ApiKeys",
                 columns: table => new
                 {
@@ -22,11 +38,63 @@ namespace ShortLynx.Data.PostgreSql.Migrations
                     CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     ExpiresAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
                     IsActive = table.Column<bool>(type: "boolean", nullable: false),
-                    Scopes = table.Column<string>(type: "text", nullable: false)
+                    Scopes = table.Column<string>(type: "text", nullable: false),
+                    UserAccountId = table.Column<Guid>(type: "uuid", nullable: true)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_ApiKeys", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_ApiKeys_UserAccounts_UserAccountId",
+                        column: x => x.UserAccountId,
+                        principalTable: "UserAccounts",
+                        principalColumn: "Id");
+                });
+
+            migrationBuilder.CreateTable(
+                name: "CustomDomains",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    UserAccountId = table.Column<Guid>(type: "uuid", nullable: false),
+                    Domain = table.Column<string>(type: "text", nullable: false),
+                    CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    IsActive = table.Column<bool>(type: "boolean", nullable: false),
+                    VerificationStatus = table.Column<int>(type: "integer", nullable: false),
+                    VerificationToken = table.Column<string>(type: "text", nullable: false),
+                    VerifiedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_CustomDomains", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_CustomDomains_UserAccounts_UserAccountId",
+                        column: x => x.UserAccountId,
+                        principalTable: "UserAccounts",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "MagicLinkTokens",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    UserAccountId = table.Column<Guid>(type: "uuid", nullable: false),
+                    TokenHash = table.Column<string>(type: "text", nullable: false),
+                    CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    ExpiresAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    UsedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_MagicLinkTokens", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_MagicLinkTokens_UserAccounts_UserAccountId",
+                        column: x => x.UserAccountId,
+                        principalTable: "UserAccounts",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
@@ -108,14 +176,14 @@ namespace ShortLynx.Data.PostgreSql.Migrations
                     HashedIp = table.Column<string>(type: "text", nullable: false),
                     Referrer = table.Column<string>(type: "text", nullable: true),
                     UserAgent = table.Column<string>(type: "text", nullable: true),
-                    LinkId = table.Column<Guid>(type: "uuid", nullable: true)
+                    LinkEntityId = table.Column<Guid>(type: "uuid", nullable: true)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Visits", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_Visits_Links_LinkId",
-                        column: x => x.LinkId,
+                        name: "FK_Visits_Links_LinkEntityId",
+                        column: x => x.LinkEntityId,
                         principalTable: "Links",
                         principalColumn: "Id");
                     table.ForeignKey(
@@ -125,7 +193,6 @@ namespace ShortLynx.Data.PostgreSql.Migrations
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                 });
-            migrationBuilder.Sql("ALTER TABLE \"Visits\" SET UNLOGGED");
 
             migrationBuilder.CreateTable(
                 name: "UserVisits",
@@ -156,6 +223,22 @@ namespace ShortLynx.Data.PostgreSql.Migrations
                 column: "Prefix");
 
             migrationBuilder.CreateIndex(
+                name: "IX_ApiKeys_UserAccountId",
+                table: "ApiKeys",
+                column: "UserAccountId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_CustomDomains_Domain",
+                table: "CustomDomains",
+                column: "Domain",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_CustomDomains_UserAccountId",
+                table: "CustomDomains",
+                column: "UserAccountId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Links_ApiKeyId",
                 table: "Links",
                 column: "ApiKeyId");
@@ -164,6 +247,16 @@ namespace ShortLynx.Data.PostgreSql.Migrations
                 name: "IX_Links_UserLinkCodeId",
                 table: "Links",
                 column: "UserLinkCodeId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_MagicLinkTokens_TokenHash",
+                table: "MagicLinkTokens",
+                column: "TokenHash");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_MagicLinkTokens_UserAccountId",
+                table: "MagicLinkTokens",
+                column: "UserAccountId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_ShortCodes_Code",
@@ -178,12 +271,16 @@ namespace ShortLynx.Data.PostgreSql.Migrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
+                name: "IX_UserAccounts_Email",
+                table: "UserAccounts",
+                column: "Email",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
                 name: "IX_UserLinkCodes_Code",
                 table: "UserLinkCodes",
                 column: "Code",
                 unique: true);
-
-            migrationBuilder.Sql("CREATE INDEX \"ix_shortCodes_active\" ON \"ShortCodes\" (\"Code\") WHERE \"IsActive\" = true");
 
             migrationBuilder.CreateIndex(
                 name: "IX_UserLinkCodes_LinkId_UserId",
@@ -197,9 +294,9 @@ namespace ShortLynx.Data.PostgreSql.Migrations
                 column: "UserLinkCodeId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_Visits_LinkId",
+                name: "IX_Visits_LinkEntityId",
                 table: "Visits",
-                column: "LinkId");
+                column: "LinkEntityId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Visits_ShortCodeId",
@@ -218,12 +315,22 @@ namespace ShortLynx.Data.PostgreSql.Migrations
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropForeignKey(
+                name: "FK_ApiKeys_UserAccounts_UserAccountId",
+                table: "ApiKeys");
+
+            migrationBuilder.DropForeignKey(
                 name: "FK_Links_ApiKeys_ApiKeyId",
                 table: "Links");
 
             migrationBuilder.DropForeignKey(
                 name: "FK_Links_UserLinkCodes_UserLinkCodeId",
                 table: "Links");
+
+            migrationBuilder.DropTable(
+                name: "CustomDomains");
+
+            migrationBuilder.DropTable(
+                name: "MagicLinkTokens");
 
             migrationBuilder.DropTable(
                 name: "UserVisits");
@@ -233,6 +340,9 @@ namespace ShortLynx.Data.PostgreSql.Migrations
 
             migrationBuilder.DropTable(
                 name: "ShortCodes");
+
+            migrationBuilder.DropTable(
+                name: "UserAccounts");
 
             migrationBuilder.DropTable(
                 name: "ApiKeys");

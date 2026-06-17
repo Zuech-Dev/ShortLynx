@@ -1,0 +1,15 @@
+/* Tailwind v4 — compiled by the standalone CLI into wwwroot/css/tailwind.css.
+
+   Utilities only: preflight (Tailwind's base reset) is intentionally omitted so Tailwind
+   coexists with the existing Bootstrap styles without clobbering them. When you remove
+   Bootstrap, uncomment the preflight import below to enable Tailwind's reset. */
+
+@layer theme, base, components, utilities;
+
+@import "tailwindcss/theme.css" layer(theme);
+/* @import "tailwindcss/preflight.css" layer(base); */
+@import "tailwindcss/utilities.css" layer(utilities);
+
+/* Files scanned for class names (paths are relative to this stylesheet). */
+@source "../Components";
+@source "../Pages";

@@ -1,16 +1,21 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
         <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
-    </PropertyGroup>
+      <UserSecretsId>dc1f8561-d0ce-4fac-9c62-2a6a8f5c5ea0</UserSecretsId>
+  </PropertyGroup>
 
     <ItemGroup>
         <PackageReference Include="Microsoft.AspNetCore.App.Internal.Assets" Version="10.0.7" />
         <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.7" />
         <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.18.0" />
+        <PackageReference Include="Microsoft.TypeScript.MSBuild" Version="7.0.0-beta">
+          <PrivateAssets>all</PrivateAssets>
+          <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
         <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.1" />
     </ItemGroup>
 
@@ -19,5 +24,24 @@
         <ProjectReference Include="..\ShortLynx.Repository\ShortLynx.Repository.csproj" />
         <ProjectReference Include="..\ShortLynx.Services\ShortLynx.Services.csproj" />
     </ItemGroup>
+
+    <!-- Tailwind CSS via the standalone CLI. tools/tailwindcss is git-ignored and platform-specific
+         (download per machine). wwwroot/css/tailwind.css is generated from Styles/app.tailwind.css
+         on every build when the CLI is present; output is minified for Release builds. -->
+    <PropertyGroup>
+        <TailwindCli>$(MSBuildProjectDirectory)/tools/tailwindcss</TailwindCli>
+        <TailwindInput>$(MSBuildProjectDirectory)/Styles/app.tailwind.css</TailwindInput>
+        <TailwindOutput>$(MSBuildProjectDirectory)/wwwroot/css/tailwind.css</TailwindOutput>
+        <TailwindMinify Condition="'$(Configuration)' == 'Release'">--minify</TailwindMinify>
+    </PropertyGroup>
+
+    <Target Name="BuildTailwind" BeforeTargets="Build" Condition="Exists('$(TailwindCli)')">
+        <Message Importance="high" Text="Tailwind: generating $(TailwindOutput)" />
+        <Exec Command="&quot;$(TailwindCli)&quot; -i &quot;$(TailwindInput)&quot; -o &quot;$(TailwindOutput)&quot; $(TailwindMinify)" />
+    </Target>
+
+    <Target Name="WarnTailwindMissing" BeforeTargets="Build" Condition="!Exists('$(TailwindCli)')">
+        <Warning Text="Tailwind CLI not found at $(TailwindCli); wwwroot/css/tailwind.css was not regenerated. Download it: curl -sL -o &quot;$(TailwindCli)&quot; https://github.com/tailwindlabs/tailwindcss/releases/latest/download/tailwindcss-macos-arm64 &amp;&amp; chmod +x &quot;$(TailwindCli)&quot;" />
+    </Target>
 
 </Project>

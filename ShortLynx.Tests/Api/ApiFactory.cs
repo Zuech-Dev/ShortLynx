@@ -22,12 +22,23 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncDisposabl
 
     public ApiFactory()
     {
+        // Force the SQLite provider for the test host regardless of the developer's appsettings /
+        // user-secrets. Env vars outrank user-secrets and are read eagerly by AddShortLynxDatabase,
+        // so the Postgres provider is never registered alongside the test SQLite one. (The actual
+        // DbContext is replaced below with the shared in-memory connection.)
+        Environment.SetEnvironmentVariable("Database__Provider", "sqlite");
+        Environment.SetEnvironmentVariable("Database__ConnectionString", "DataSource=:memory:");
+
         _connection = new SqliteConnection("DataSource=:memory:");
         _connection.Open();
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
+        // Run as a non-Development environment so the developer's local user-secrets (e.g.
+        // Database:Provider=postgresql) don't leak in and clash with the test SQLite provider.
+        builder.UseEnvironment("Testing");
+
         builder.ConfigureAppConfiguration((_, cfg) =>
         {
             cfg.AddInMemoryCollection(new Dictionary<string, string?>

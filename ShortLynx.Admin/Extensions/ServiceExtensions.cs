@@ -52,8 +52,9 @@ public static class ServiceExtensions
         services.Configure<MagicLinkOptions>(configuration.GetSection("MagicLink"));
         services.Configure<SmtpEmailOptions>(configuration.GetSection("Email"));
         services.Configure<AdminOptions>(configuration.GetSection("Admin"));
+        services.Configure<ResendOptions>(configuration.GetSection("Resend"));
 
-        services.AddScoped<IEmailSender, SmtpEmailSender>();
+        services.AddHttpClient<IEmailSender, ResendEmailSender>();
         services.AddScoped<IApiKeyService, ApiKeyService>();
         services.AddScoped<IMagicLinkService, MagicLinkService>();
 

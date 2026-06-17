@@ -4,6 +4,10 @@ obj/
 riderModule.iml
 /_ReSharper.Caches/
 
+# IDE per-user settings (Rider/ReSharper, Visual Studio) — never shared
+*.DotSettings.user
+*.user
+
 # Secrets / environment-specific config — keep DB credentials, SMTP passwords, and the
 # ApiKey:HmacSecret out of source control. Use `dotnet user-secrets` or environment variables.
 # NOTE: appsettings.Development.json is currently tracked; run `git rm --cached <file>` to untrack

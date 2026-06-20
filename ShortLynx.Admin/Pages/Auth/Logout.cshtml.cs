@@ -7,7 +7,8 @@ namespace ShortLynx.Admin.Pages.Auth;
 
 public class LogoutModel : PageModel
 {
-    public async Task<IActionResult> OnGetAsync()
+    // POST-only + antiforgery so a forged GET (CSRF/link prefetch) can't sign the user out.
+    public async Task<IActionResult> OnPostAsync()
     {
         await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
         return RedirectToPage("/Auth/Login");

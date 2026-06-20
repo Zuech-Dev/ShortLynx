@@ -7,7 +7,7 @@ using ShortLynx.Services.MagicLinks;
 namespace ShortLynx.Admin.Pages.Auth;
 
 [AllowAnonymous]
-public class LoginModel(IMagicLinkService magicLinkService) : PageModel
+public class LoginModel(IMagicLinkService magicLinkService, ILogger<LoginModel> logger) : PageModel
 {
     [BindProperty, Required, EmailAddress]
     public string Email { get; set; } = string.Empty;
@@ -27,7 +27,10 @@ public class LoginModel(IMagicLinkService magicLinkService) : PageModel
         }
         catch (Exception ex)
         {
-            ModelState.AddModelError(string.Empty, $"Could not send sign-in email: {ex.Message}");
+            // Don't surface the raw exception (it can leak provider/config details). Log server-side,
+            // show a generic message.
+            logger.LogError(ex, "Failed to send sign-in email");
+            ModelState.AddModelError(string.Empty, "Couldn't send the sign-in email — please try again.");
             return Page();
         }
 

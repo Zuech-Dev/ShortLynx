@@ -31,6 +31,15 @@ public class LinkServiceTests
         return link;
     }
 
+    private static async Task<UserAccountEntity> SeedUserAsync(TestDatabase db)
+    {
+        var user = EntityFactory.UserAccount();
+        await using var ctx = db.CreateContext();
+        ctx.UserAccountEntities.Add(user);
+        await ctx.SaveChangesAsync();
+        return user;
+    }
+
     // ── CreateAnonymousLinkAsync ──────────────────────────────────────────────
 
     [Fact]
@@ -96,6 +105,35 @@ public class LinkServiceTests
 
         Assert.True(result.Link.IsActive);
         Assert.True(result.ShortCode.IsActive);
+    }
+
+    // ── CreateAnonymousLinkAsync (user-owned / dashboard) ─────────────────────
+
+    [Fact]
+    public async Task CreateUserOwnedLink_SetsUserAccountId_AndNullApiKey()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+        var user = await SeedUserAsync(db);
+
+        var result = await MakeSvc(db.CreateContext()).CreateAnonymousLinkAsync("https://example.com", user.Id);
+
+        await using var ctx = db.CreateContext();
+        var link = await ctx.LinkEntities.FindAsync(result.Link.Id);
+        Assert.NotNull(link);
+        Assert.Equal(user.Id, link.UserAccountId);
+        Assert.Null(link.ApiKeyId);
+        Assert.Equal(8, result.ShortCode.Code.Length);
+    }
+
+    [Fact]
+    public async Task CreateUserOwnedLink_InvalidUrl_ThrowsArgumentException()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+        var user = await SeedUserAsync(db);
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            MakeSvc(db.CreateContext(), urlValid: false, invalidReason: "blocked URL")
+                .CreateAnonymousLinkAsync("https://bad.example.com", user.Id));
     }
 
     // ── CreateUserLinkCodesAsync ──────────────────────────────────────────────

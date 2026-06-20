@@ -60,6 +60,15 @@ public sealed class ApiKeyService(ShortLynxDbContext db, IOptions<ApiKeyOptions>
         return candidate;
     }
 
+    public async Task<bool> RevokeAsync(Guid keyId, Guid userAccountId, CancellationToken ct = default)
+    {
+        // Ownership-scoped, atomic revoke. No DateTimeOffset in the predicate (SQLite-safe).
+        var affected = await db.ApiKeyEntities
+            .Where(k => k.Id == keyId && k.UserAccountId == userAccountId && k.IsActive)
+            .ExecuteUpdateAsync(s => s.SetProperty(k => k.IsActive, false), ct);
+        return affected > 0;
+    }
+
     private string ComputeHmac(string input)
     {
         var secret = Encoding.UTF8.GetBytes(options.Value.HmacSecret);

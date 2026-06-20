@@ -14,8 +14,18 @@ public sealed class LinkService(
 {
     private const int MaxCodeAttempts = 5;
 
-    public async Task<AnonymousLinkResult> CreateAnonymousLinkAsync(
+    /// <summary>Creates an API-key-owned link (REST API path).</summary>
+    public Task<AnonymousLinkResult> CreateAnonymousLinkAsync(
         string url, ApiKeyEntity owner, CancellationToken ct = default)
+        => CreateLinkAsync(url, link => link.ApiKeyId = owner.Id, ct);
+
+    /// <summary>Creates a user-owned link (admin dashboard path); leaves ApiKeyId null.</summary>
+    public Task<AnonymousLinkResult> CreateAnonymousLinkAsync(
+        string url, Guid userAccountId, CancellationToken ct = default)
+        => CreateLinkAsync(url, link => link.UserAccountId = userAccountId, ct);
+
+    private async Task<AnonymousLinkResult> CreateLinkAsync(
+        string url, Action<LinkEntity> assignOwner, CancellationToken ct)
     {
         var validation = await urlValidator.ValidateAsync(url);
         if (!validation.IsValid)
@@ -25,15 +35,20 @@ public sealed class LinkService(
         {
             Id = Guid.CreateVersion7(),
             OriginalUrl = url,
-            ApiKeyId = owner.Id,
             Mode = LinkMode.Anonymous,
             CreatedAt = DateTimeOffset.UtcNow,
             IsActive = true,
         };
+        assignOwner(link);
         db.LinkEntities.Add(link);
         await db.SaveChangesAsync(ct);
 
-        // Retry on code collision (extremely rare for Mode 1, but handled for safety).
+        return await MintShortCodeAsync(link, ct);
+    }
+
+    // Mints a unique short code for a freshly-created link, retrying on the (rare) code collision.
+    private async Task<AnonymousLinkResult> MintShortCodeAsync(LinkEntity link, CancellationToken ct)
+    {
         for (var attempt = 0; attempt <= MaxCodeAttempts; attempt++)
         {
             var code = codeGenerator.Generate(link.Id, userId: null, attempt);

@@ -178,4 +178,61 @@ public class ApiKeyServiceTests
         await Assert.ThrowsAsync<ArgumentException>(
             () => svc.CreateAsync("Orphan Key", [], Guid.CreateVersion7()));
     }
+
+    // ── RevokeAsync ───────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Revoke_OwnActiveKey_DeactivatesAndBlocksAuth()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+        var user = EntityFactory.UserAccount("owner@example.com");
+        await using (var seed = db.CreateContext())
+        {
+            seed.UserAccountEntities.Add(user);
+            await seed.SaveChangesAsync();
+        }
+
+        var (record, plaintext) = await MakeSvc(db.CreateContext()).CreateAsync("k", ["links:read"], user.Id);
+
+        var revoked = await MakeSvc(db.CreateContext()).RevokeAsync(record.Id, user.Id);
+        Assert.True(revoked);
+
+        await using var ctx = db.CreateContext();
+        var stored = await ctx.ApiKeyEntities.FindAsync(record.Id);
+        Assert.False(stored!.IsActive);
+
+        // A revoked key can no longer authenticate.
+        var validated = await MakeSvc(db.CreateContext()).ValidateAsync(plaintext);
+        Assert.Null(validated);
+    }
+
+    [Fact]
+    public async Task Revoke_AnotherUsersKey_ReturnsFalse_LeavesActive()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+        var owner = EntityFactory.UserAccount("owner@example.com");
+        var other = EntityFactory.UserAccount("other@example.com");
+        await using (var seed = db.CreateContext())
+        {
+            seed.UserAccountEntities.AddRange(owner, other);
+            await seed.SaveChangesAsync();
+        }
+
+        var (record, _) = await MakeSvc(db.CreateContext()).CreateAsync("k", [], owner.Id);
+
+        var revoked = await MakeSvc(db.CreateContext()).RevokeAsync(record.Id, other.Id);
+        Assert.False(revoked);
+
+        await using var ctx = db.CreateContext();
+        var stored = await ctx.ApiKeyEntities.FindAsync(record.Id);
+        Assert.True(stored!.IsActive);
+    }
+
+    [Fact]
+    public async Task Revoke_UnknownKey_ReturnsFalse()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+        var revoked = await MakeSvc(db.CreateContext()).RevokeAsync(Guid.CreateVersion7(), Guid.CreateVersion7());
+        Assert.False(revoked);
+    }
 }

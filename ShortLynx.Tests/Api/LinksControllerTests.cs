@@ -1,7 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
 using Microsoft.Extensions.DependencyInjection;
-using ShortLynx.Core.Auth;
 using ShortLynx.Core.Models.Requests;
 using ShortLynx.Core.Models.Responses;
 using ShortLynx.Services.ApiKeys;

@@ -150,6 +150,48 @@ public class ApiKeyServiceTests
         Assert.Null(result);
     }
 
+    [Fact]
+    public async Task Validate_TwoActiveKeysShareAPrefix_EachValidatesToItsOwnKey()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+        const string secret = "test-secret-at-least-32-chars-long!";
+
+        // Two distinct plaintext keys that happen to share the same 8-char prefix (a collision).
+        const string plaintextA = "COLLIDE0" + "AAAAAAAAAAAAAAAA";
+        const string plaintextB = "COLLIDE0" + "BBBBBBBBBBBBBBBB";
+
+        await using (var seed = db.CreateContext())
+        {
+            seed.ApiKeyEntities.Add(MakeKey("Key A", "COLLIDE0", Hmac(secret, plaintextA)));
+            seed.ApiKeyEntities.Add(MakeKey("Key B", "COLLIDE0", Hmac(secret, plaintextB)));
+            await seed.SaveChangesAsync();
+        }
+
+        var resultA = await MakeSvc(db.CreateContext(), secret).ValidateAsync(plaintextA);
+        var resultB = await MakeSvc(db.CreateContext(), secret).ValidateAsync(plaintextB);
+
+        Assert.NotNull(resultA);
+        Assert.Equal("Key A", resultA.Name);
+        Assert.NotNull(resultB);
+        Assert.Equal("Key B", resultB.Name);
+    }
+
+    private static ShortLynx.Data.Entities.ApiKeyEntity MakeKey(string name, string prefix, string keyHash) => new()
+    {
+        Id = Guid.CreateVersion7(),
+        Prefix = prefix,
+        KeyHash = keyHash,
+        Name = name,
+        Scopes = "links:read",
+        CreatedAt = DateTimeOffset.UtcNow,
+        IsActive = true,
+    };
+
+    private static string Hmac(string secret, string input) => Convert.ToHexString(
+        System.Security.Cryptography.HMACSHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(secret),
+            System.Text.Encoding.UTF8.GetBytes(input)));
+
     // ── User-account association (C1 multi-tenant scoping prerequisite) ─────────
 
     [Fact]

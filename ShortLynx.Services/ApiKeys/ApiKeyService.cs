@@ -43,21 +43,27 @@ public sealed class ApiKeyService(ShortLynxDbContext db, IOptions<ApiKeyOptions>
         if (plaintextKey.Length < 8) return null;
 
         var prefix = plaintextKey[..8];
-        var candidate = await db.ApiKeyEntities
+        // A prefix is not unique, so two active keys can share one. Check every candidate rather than
+        // FirstOrDefault, otherwise a colliding key could be silently unusable. The set is ~1 in practice.
+        var candidates = await db.ApiKeyEntities
             .Where(k => k.Prefix == prefix && k.IsActive)
-            .FirstOrDefaultAsync(ct);
+            .ToListAsync(ct);
 
-        if (candidate is null) return null;
-        if (candidate.ExpiresAt.HasValue && candidate.ExpiresAt.Value < DateTimeOffset.UtcNow) return null;
+        var expectedHash = Convert.FromHexString(ComputeHmac(plaintextKey));
+        var now = DateTimeOffset.UtcNow;
 
-        var expectedHash = ComputeHmac(plaintextKey);
-        // Constant-time comparison to prevent timing attacks.
-        if (!CryptographicOperations.FixedTimeEquals(
-                Convert.FromHexString(candidate.KeyHash),
-                Convert.FromHexString(expectedHash)))
-            return null;
+        foreach (var candidate in candidates)
+        {
+            if (candidate.ExpiresAt.HasValue && candidate.ExpiresAt.Value < now) continue;
 
-        return candidate;
+            // Constant-time comparison to prevent timing attacks.
+            if (CryptographicOperations.FixedTimeEquals(
+                    Convert.FromHexString(candidate.KeyHash),
+                    expectedHash))
+                return candidate;
+        }
+
+        return null;
     }
 
     public async Task<bool> RevokeAsync(Guid keyId, Guid userAccountId, CancellationToken ct = default)

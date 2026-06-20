@@ -1,9 +1,66 @@
 @page "/api-keys"
 @attribute [Authorize]
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.Extensions.DependencyInjection
+@using ShortLynx.Services.ApiKeys
 @inject IDbContextFactory<ShortLynxDbContext> DbFactory
+@inject IServiceScopeFactory ScopeFactory
+@inject IJSRuntime JS
 
 <PageTitle>API Keys — ShortLynx Admin</PageTitle>
-<h1 class="mb-4">API Keys</h1>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="mb-0">API Keys</h1>
+    <button class="btn btn-primary btn-sm" @onclick="() => _showCreate = !_showCreate">
+        @(_showCreate ? "Cancel" : "+ New key")
+    </button>
+</div>
+
+@if (_newPlaintextKey is not null)
+{
+    <div class="alert alert-success" role="alert" data-testid="new-key">
+        <div class="fw-semibold mb-1">API key created — copy it now, you won't see it again.</div>
+        <div class="d-flex gap-2 align-items-center">
+            <code class="flex-grow-1 text-break">@_newPlaintextKey</code>
+            <button class="btn btn-sm btn-outline-success" @onclick="CopyNewKey">Copy</button>
+            <button type="button" class="btn-close" aria-label="Dismiss" @onclick="() => _newPlaintextKey = null"></button>
+        </div>
+    </div>
+}
+
+@if (_showCreate)
+{
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body">
+            <h5 class="card-title">Create a key</h5>
+            <EditForm Model="_form" OnValidSubmit="CreateKey">
+                <DataAnnotationsValidator/>
+                <div class="mb-3">
+                    <label class="form-label">Name</label>
+                    <InputText class="form-control" @bind-Value="_form.Name" placeholder="e.g. Marketing site"/>
+                    <ValidationMessage For="() => _form.Name"/>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label d-block">Scopes</label>
+                    @foreach (var scope in Scopes.All)
+                    {
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="checkbox" id="scope-@scope"
+                                   checked="@_form.SelectedScopes.Contains(scope)"
+                                   @onchange="e => ToggleScope(scope, (bool)e.Value!)"/>
+                            <label class="form-check-label" for="scope-@scope"><code>@scope</code></label>
+                        </div>
+                    }
+                    @if (_scopeError is not null)
+                    {
+                        <div class="text-danger small mt-1" data-testid="scope-error">@_scopeError</div>
+                    }
+                </div>
+                <button type="submit" class="btn btn-primary btn-sm">Create key</button>
+            </EditForm>
+        </div>
+    </div>
+}
 
 @if (!_loaded)
 {
@@ -24,6 +81,7 @@ else
                 <th>Scopes</th>
                 <th>Status</th>
                 <th>Created</th>
+                <th></th>
             </tr>
             </thead>
             <tbody>
@@ -44,6 +102,12 @@ else
                         }
                     </td>
                     <td class="text-muted small text-nowrap">@r.CreatedAt.ToString("yyyy-MM-dd")</td>
+                    <td class="text-end">
+                        @if (r.IsActive)
+                        {
+                            <button class="btn btn-sm btn-outline-danger" @onclick="() => RevokeKey(r.Id, r.Name)">Revoke</button>
+                        }
+                    </td>
                 </tr>
             }
             </tbody>
@@ -55,21 +119,33 @@ else
     [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
 
     bool _loaded;
+    bool _showCreate;
+    bool _resolved;
+    Guid _uid;
     List<ApiKeyRow> _rows = [];
+    CreateKeyForm _form = new();
+    string? _scopeError;
+    string? _newPlaintextKey;
 
     protected override async Task OnInitializedAsync()
     {
         var userId = (await AuthState).User.GetUserId();
         if (userId is null) { _loaded = true; return; }
-        var uid = userId.Value;
+        _uid = userId.Value;
+        _resolved = true;
+        await LoadAsync();
+    }
 
+    async Task LoadAsync()
+    {
         await using var db = await DbFactory.CreateDbContextAsync();
         var keys = await db.ApiKeyEntities
-            .Where(k => k.UserAccountId == uid)
+            .Where(k => k.UserAccountId == _uid)
             .OrderByDescending(k => k.Id)
             .ToListAsync();
 
         _rows = keys.Select(k => new ApiKeyRow(
+            k.Id,
             k.Name,
             k.Prefix,
             k.Scopes.Split(',', StringSplitOptions.RemoveEmptyEntries),
@@ -79,5 +155,58 @@ else
         _loaded = true;
     }
 
-    sealed record ApiKeyRow(string Name, string Prefix, string[] Scopes, bool IsActive, DateTimeOffset CreatedAt);
+    void ToggleScope(string scope, bool selected)
+    {
+        if (selected) _form.SelectedScopes.Add(scope);
+        else _form.SelectedScopes.Remove(scope);
+        _scopeError = null;
+    }
+
+    async Task CreateKey()
+    {
+        if (!_resolved) return;
+        if (_form.SelectedScopes.Count == 0)
+        {
+            _scopeError = "Select at least one scope.";
+            return;
+        }
+
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        var svc = scope.ServiceProvider.GetRequiredService<IApiKeyService>();
+        var (_, plaintext) = await svc.CreateAsync(_form.Name!, _form.SelectedScopes.ToArray(), _uid);
+
+        _newPlaintextKey = plaintext;
+        _form = new();
+        _scopeError = null;
+        _showCreate = false;
+        await LoadAsync();
+    }
+
+    async Task RevokeKey(Guid keyId, string name)
+    {
+        if (!_resolved) return;
+        if (!await JS.InvokeAsync<bool>("confirm", $"Revoke '{name}'? Apps using this key will stop working."))
+            return;
+
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        var svc = scope.ServiceProvider.GetRequiredService<IApiKeyService>();
+        await svc.RevokeAsync(keyId, _uid);
+        await LoadAsync();
+    }
+
+    async Task CopyNewKey()
+    {
+        if (_newPlaintextKey is not null)
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", _newPlaintextKey);
+    }
+
+    sealed record ApiKeyRow(Guid Id, string Name, string Prefix, string[] Scopes, bool IsActive, DateTimeOffset CreatedAt);
+
+    sealed class CreateKeyForm
+    {
+        [Required(ErrorMessage = "Name is required."), MaxLength(100)]
+        public string? Name { get; set; }
+
+        public HashSet<string> SelectedScopes { get; set; } = [];
+    }
 }

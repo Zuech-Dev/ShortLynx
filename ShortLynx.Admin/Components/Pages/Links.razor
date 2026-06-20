@@ -1,13 +1,54 @@
 @page "/links"
 @attribute [Authorize]
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.Extensions.DependencyInjection
+@using ShortLynx.Services.Links
 @inject IDbContextFactory<ShortLynxDbContext> DbFactory
-@inject NavigationManager Nav
+@inject IServiceScopeFactory ScopeFactory
+@inject IJSRuntime JS
 
 <PageTitle>Links — ShortLynx Admin</PageTitle>
 
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h1 class="mb-0">Links</h1>
+    <button class="btn btn-primary btn-sm" @onclick="() => _showCreate = !_showCreate">
+        @(_showCreate ? "Cancel" : "+ New link")
+    </button>
 </div>
+
+@if (_newShortCode is not null)
+{
+    <div class="alert alert-success" role="alert" data-testid="new-link">
+        <div class="fw-semibold mb-1">Link created.</div>
+        <div class="d-flex gap-2 align-items-center">
+            <span>Short code: <code>@_newShortCode</code></span>
+            <button class="btn btn-sm btn-outline-success" @onclick="CopyNewCode">Copy</button>
+            <button type="button" class="btn-close ms-auto" aria-label="Dismiss" @onclick="() => _newShortCode = null"></button>
+        </div>
+    </div>
+}
+
+@if (_showCreate)
+{
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body">
+            <h5 class="card-title">Create a link</h5>
+            <EditForm Model="_form" OnValidSubmit="CreateLink">
+                <DataAnnotationsValidator/>
+                <div class="mb-3">
+                    <label class="form-label">Destination URL</label>
+                    <InputText class="form-control" @bind-Value="_form.Url" placeholder="https://example.com/page"/>
+                    <ValidationMessage For="() => _form.Url"/>
+                    @if (_createError is not null)
+                    {
+                        <div class="text-danger small mt-1" data-testid="create-error">@_createError</div>
+                    }
+                </div>
+                <button type="submit" class="btn btn-primary btn-sm">Create link</button>
+            </EditForm>
+        </div>
+    </div>
+}
 
 @if (!_loaded)
 {
@@ -25,7 +66,7 @@ else
             <tr>
                 <th>Code</th>
                 <th>URL</th>
-                <th>API Key</th>
+                <th>Owner</th>
                 <th>Mode</th>
                 <th class="text-end">Clicks</th>
                 <th>Created</th>
@@ -83,7 +124,7 @@ else
 
         var links = await db.LinkEntities
             .Include(l => l.ApiKey)
-            .Where(l => l.ApiKey.UserAccountId == _uid)
+            .Where(l => l.UserAccountId == _uid || l.ApiKey!.UserAccountId == _uid)
             .OrderByDescending(l => l.Id)
             .Skip((_page - 1) * PageSize)
             .Take(PageSize)
@@ -111,7 +152,7 @@ else
             var sc = codeMap.GetValueOrDefault(l.Id);
             var clicks = sc is not null ? clickMap.GetValueOrDefault(sc.Id, 0) : 0;
             return new LinkRow(l.Id, l.OriginalUrl, l.Mode.ToString(),
-                sc?.Code ?? string.Empty, l.ApiKey?.Name ?? "—",
+                sc?.Code ?? string.Empty, l.ApiKey?.Name ?? "Dashboard",
                 l.CreatedAt, clicks);
         }).ToList();
 
@@ -121,6 +162,44 @@ else
     async Task PrevPage() { if (_page > 1) { _page--; await LoadAsync(); } }
     async Task NextPage() { _page++; await LoadAsync(); }
 
+    bool _showCreate;
+    string? _newShortCode;
+    string? _createError;
+    CreateLinkForm _form = new();
+
+    async Task CreateLink()
+    {
+        if (!_resolved) return;
+        _createError = null;
+        try
+        {
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var svc = scope.ServiceProvider.GetRequiredService<ILinkService>();
+            var result = await svc.CreateAnonymousLinkAsync(_form.Url!, _uid);
+            _newShortCode = result.ShortCode.Code;
+            _form = new();
+            _showCreate = false;
+            await LoadAsync();
+        }
+        catch (ArgumentException ex)
+        {
+            // URL validation / SSRF rejection.
+            _createError = ex.Message;
+        }
+    }
+
+    async Task CopyNewCode()
+    {
+        if (_newShortCode is not null)
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", _newShortCode);
+    }
+
     sealed record LinkRow(Guid Id, string Url, string Mode, string ShortCode,
         string ApiKeyName, DateTimeOffset CreatedAt, int Clicks);
+
+    sealed class CreateLinkForm
+    {
+        [Required(ErrorMessage = "URL is required."), Url(ErrorMessage = "Enter a valid URL.")]
+        public string? Url { get; set; }
+    }
 }

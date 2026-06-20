@@ -15,7 +15,7 @@ namespace ShortLynx.Tests.Api;
 // Custom factory that replaces the database with an in-memory SQLite instance.
 // A single SqliteConnection is held open for the lifetime of the factory so that
 // all DbContext instances within a test share the same in-process database.
-public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncDisposable
+public sealed class ApiFactory : WebApplicationFactory<ShortLynx.Core.CoreApiEntryPoint>, IAsyncDisposable
 {
     private readonly SqliteConnection _connection;
     public readonly InMemoryEmailSender EmailSender = new();

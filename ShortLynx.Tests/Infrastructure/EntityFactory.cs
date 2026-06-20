@@ -26,6 +26,17 @@ internal static class EntityFactory
         IsActive = true,
     };
 
+    // A dashboard-created link: owned directly by a user, no API key.
+    internal static LinkEntity UserOwnedLink(Guid userAccountId) => new()
+    {
+        Id = Guid.CreateVersion7(),
+        OriginalUrl = "https://example.com",
+        UserAccountId = userAccountId,
+        Mode = LinkMode.Anonymous,
+        CreatedAt = DateTimeOffset.UtcNow,
+        IsActive = true,
+    };
+
     internal static ShortCodeEntity ShortCode(Guid linkId, string code) => new()
     {
         Id = Guid.CreateVersion7(),

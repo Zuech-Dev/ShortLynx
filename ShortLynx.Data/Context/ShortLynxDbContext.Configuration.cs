@@ -17,7 +17,14 @@ public partial class ShortLynxDbContext
            .Entity<LinkEntity>(entity =>
                 {
                     entity.HasKey(e => e.Id);
+                    // Nullable ApiKeyId makes this relationship optional (API-key-owned links).
                     entity.HasOne<ApiKeyEntity>(e => e.ApiKey).WithMany(l => l.Links);
+                    // User-owned links (dashboard-created). No cascade — deleting a user is handled
+                    // in application logic, consistent with the ApiKey → UserAccount relationship.
+                    entity.HasOne(e => e.UserAccount)
+                          .WithMany()
+                          .HasForeignKey(e => e.UserAccountId)
+                          .OnDelete(DeleteBehavior.NoAction);
                     entity.Property(e => e.Id).ValueGeneratedNever();
                     entity.Property(e => e.Mode).HasConversion<int>();
                     entity.Property(e => e.OriginalUrl).IsRequired();

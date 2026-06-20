@@ -13,9 +13,16 @@ public class LinkEntity
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? ExpiresAt { get; set; }
     public bool IsActive { get; set; }
-    public Guid ApiKeyId { get; set; }
     public LinkMode Mode { get; set; }
+
+    // A link has exactly one owner (enforced in the service layer):
+    //  - ApiKeyId set    → created programmatically via the REST API
+    //  - UserAccountId set → created by a signed-in user in the admin dashboard
+    public Guid? ApiKeyId { get; set; }
+    public Guid? UserAccountId { get; set; }
+
     public ICollection<VisitEntity> Visits { get; set; } = [];
     public UserLinkCodeEntity? UserLinkCode { get; set; } = null;
-    public virtual ApiKeyEntity ApiKey { get; set; } = null!;
+    public virtual ApiKeyEntity? ApiKey { get; set; }
+    public virtual UserAccountEntity? UserAccount { get; set; }
 }

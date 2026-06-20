@@ -75,13 +75,13 @@ else
 
         await using var db = await DbFactory.CreateDbContextAsync();
 
-        // All counts scoped to links/keys owned by the signed-in user via ApiKey.UserAccountId.
+        // All counts scoped to the signed-in user — links they own directly (UserAccountId) or via an API key.
         _totalLinks = await db.LinkEntities
-            .CountAsync(l => l.ApiKey.UserAccountId == uid);
+            .CountAsync(l => l.UserAccountId == uid || l.ApiKey!.UserAccountId == uid);
         _totalClicks = await db.VisitEntities
-            .CountAsync(v => v.ShortCode.Link.ApiKey.UserAccountId == uid);
+            .CountAsync(v => v.ShortCode.Link.UserAccountId == uid || v.ShortCode.Link.ApiKey!.UserAccountId == uid);
         _totalUserClicks = await db.UserVisitEntities
-            .CountAsync(v => v.UserLinkCode.Link.ApiKey.UserAccountId == uid);
+            .CountAsync(v => v.UserLinkCode.Link.UserAccountId == uid || v.UserLinkCode.Link.ApiKey!.UserAccountId == uid);
         _totalApiKeys = await db.ApiKeyEntities
             .CountAsync(k => k.UserAccountId == uid && k.IsActive);
 

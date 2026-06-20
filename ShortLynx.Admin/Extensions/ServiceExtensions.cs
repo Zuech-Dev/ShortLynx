@@ -6,7 +6,10 @@ using ShortLynx.Data.Operations;
 using ShortLynx.Repository;
 using ShortLynx.Services.ApiKeys;
 using ShortLynx.Services.Email;
+using ShortLynx.Services.Links;
 using ShortLynx.Services.MagicLinks;
+using ShortLynx.Services.ShortCodes;
+using ShortLynx.Services.UrlValidation;
 
 namespace ShortLynx.Admin.Extensions;
 
@@ -53,10 +56,16 @@ public static class ServiceExtensions
         services.Configure<SmtpEmailOptions>(configuration.GetSection("Email"));
         services.Configure<AdminOptions>(configuration.GetSection("Admin"));
         services.Configure<ResendOptions>(configuration.GetSection("Resend"));
+        services.Configure<ShortCodeOptions>(configuration.GetSection("ShortCode"));
+        services.Configure<UrlValidationOptions>(configuration.GetSection("UrlValidation"));
 
         services.AddHttpClient<IEmailSender, ResendEmailSender>();
         services.AddScoped<IApiKeyService, ApiKeyService>();
         services.AddScoped<IMagicLinkService, MagicLinkService>();
+        // Link creation from the dashboard (user-owned links).
+        services.AddScoped<ILinkService, LinkService>();
+        services.AddScoped<IShortCodeGenerator, HashBase62Generator>();
+        services.AddSingleton<IUrlValidationService, UrlValidationService>();
 
         return services;
     }

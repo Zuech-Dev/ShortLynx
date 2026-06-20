@@ -137,9 +137,9 @@ else
 
         if (_link is null) { _notFound = true; _loaded = true; return; }
 
-        // Ownership: tenants may only view their own links; super-admins may view any.
-        // Report "not found" (not "forbidden") so existence isn't leaked across tenants.
-        if (!_isSuperAdmin && _link.ApiKey?.UserAccountId != _uid)
+        // Ownership: tenants may only view their own links (owned directly or via an API key);
+        // super-admins may view any. Report "not found" (not "forbidden") so existence isn't leaked.
+        if (!_isSuperAdmin && _link.UserAccountId != _uid && _link.ApiKey?.UserAccountId != _uid)
         {
             _link = null;
             _notFound = true;

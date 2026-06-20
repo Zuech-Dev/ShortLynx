@@ -40,7 +40,10 @@ public static class ServiceExtensions
     public static IServiceCollection AddShortLynxRedirect(this IServiceCollection services, IConfiguration configuration)
     {
         services.Configure<RedirectOptions>(configuration.GetSection("Redirect"));
-        services.AddMemoryCache();
+
+        // Cap the cache so a flood of distinct codes can't grow it without bound (each entry has Size 1).
+        var redirectOpts = configuration.GetSection("Redirect").Get<RedirectOptions>() ?? new RedirectOptions();
+        services.AddMemoryCache(o => o.SizeLimit = redirectOpts.CacheSizeLimit);
         services.AddScoped<IRedirectService, RedirectService>();
 
         // Visit event pipeline: singleton sink shared between request handlers and the background writer.

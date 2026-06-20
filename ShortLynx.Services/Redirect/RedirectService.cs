@@ -10,14 +10,25 @@ public sealed class RedirectService(
     IMemoryCache cache,
     IOptions<RedirectOptions> options) : IRedirectService
 {
+    private readonly RedirectOptions _options = options.Value;
+
+    // Sentinel cached for unknown codes so a flood of random codes can't hit the DB on every request.
+    // Compared by reference; never returned to callers.
+    private static readonly RedirectCacheEntry NegativeSentinel = new(string.Empty, null, null, null);
+
     private readonly MemoryCacheEntryOptions _cacheOpts = new MemoryCacheEntryOptions()
-        .SetSlidingExpiration(TimeSpan.FromSeconds(options.Value.CacheSlidingExpirationSeconds));
+        .SetSlidingExpiration(TimeSpan.FromSeconds(options.Value.CacheSlidingExpirationSeconds))
+        .SetSize(1);
+
+    private readonly MemoryCacheEntryOptions _negativeCacheOpts = new MemoryCacheEntryOptions()
+        .SetAbsoluteExpiration(TimeSpan.FromSeconds(options.Value.CacheNegativeSeconds))
+        .SetSize(1);
 
     public async Task<RedirectCacheEntry?> LookupAsync(string code, CancellationToken ct = default)
     {
         var key = $"redirect:{code}";
         if (cache.TryGetValue(key, out RedirectCacheEntry? hit))
-            return hit;
+            return ReferenceEquals(hit, NegativeSentinel) ? null : hit;
 
         // Mode 1 — anonymous short code
         var sc = await db.ShortCodeEntities
@@ -38,7 +49,12 @@ public sealed class RedirectService(
             .Where(x => x.Code == code && x.IsActive && x.Link.IsActive)
             .FirstOrDefaultAsync(ct);
 
-        if (ulc is null) return null;
+        if (ulc is null)
+        {
+            // Unknown code — remember the miss briefly to absorb random-code floods.
+            cache.Set(key, NegativeSentinel, _negativeCacheOpts);
+            return null;
+        }
 
         // One-time-use codes that have been redeemed must not redirect again.
         if (ulc.IsOneTimeUse)

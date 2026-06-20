@@ -285,4 +285,61 @@ public class RedirectServiceTests
         var second = await MakeSvc(db.CreateContext(), sharedCache).LookupAsync("notcache");
         Assert.Null(second);
     }
+
+    [Fact]
+    public async Task LookupAsync_UnknownCode_NegativeResultIsCached()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+        var (_, link) = await SeedLinkAsync(db);
+
+        var sharedCache = new MemoryCache(new MemoryCacheOptions());
+
+        // First lookup misses and caches the negative sentinel.
+        var first = await MakeSvc(db.CreateContext(), sharedCache).LookupAsync("ghostcode");
+        Assert.Null(first);
+
+        // Now create a matching code in the DB.
+        await using (var ctx = db.CreateContext())
+        {
+            ctx.ShortCodeEntities.Add(EntityFactory.ShortCode(link.Id, "ghostcode"));
+            await ctx.SaveChangesAsync();
+        }
+
+        // The second lookup still returns null because the miss was cached (didn't re-hit the DB).
+        var second = await MakeSvc(db.CreateContext(), sharedCache).LookupAsync("ghostcode");
+        Assert.Null(second);
+    }
+
+    [Fact]
+    public async Task LookupAsync_WithSizeLimitedCache_CachesFoundEntry()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+        var (_, link) = await SeedLinkAsync(db);
+
+        Guid scId;
+        await using (var ctx = db.CreateContext())
+        {
+            var sc = EntityFactory.ShortCode(link.Id, "sizecap0");
+            ctx.ShortCodeEntities.Add(sc);
+            await ctx.SaveChangesAsync();
+            scId = sc.Id;
+        }
+
+        // A size-limited cache requires every entry to declare a Size — the service sets Size 1.
+        var sizedCache = new MemoryCache(new MemoryCacheOptions { SizeLimit = 100 });
+
+        var first = await MakeSvc(db.CreateContext(), sizedCache).LookupAsync("sizecap0");
+        Assert.NotNull(first);
+
+        // Delete the row; the entry must still be served from cache (proving it was stored with a Size).
+        await using (var ctx = db.CreateContext())
+        {
+            var sc = await ctx.ShortCodeEntities.FindAsync(scId);
+            ctx.ShortCodeEntities.Remove(sc!);
+            await ctx.SaveChangesAsync();
+        }
+
+        var second = await MakeSvc(db.CreateContext(), sizedCache).LookupAsync("sizecap0");
+        Assert.NotNull(second);
+    }
 }

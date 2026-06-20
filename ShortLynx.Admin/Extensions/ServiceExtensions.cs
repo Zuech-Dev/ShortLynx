@@ -80,6 +80,9 @@ public static class ServiceExtensions
                 opts.Cookie.Name = ".shortlynx.admin";
                 opts.Cookie.HttpOnly = true;
                 opts.Cookie.SameSite = SameSiteMode.Lax;
+                // Always require HTTPS for the session cookie (works in dev over localhost HTTPS, and
+                // in prod once UseForwardedHeaders surfaces the original scheme behind TLS termination).
+                opts.Cookie.SecurePolicy = CookieSecurePolicy.Always;
                 opts.LoginPath = "/auth/login";
                 opts.LogoutPath = "/auth/logout";
                 opts.SlidingExpiration = true;

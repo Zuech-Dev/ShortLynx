@@ -1,8 +1,18 @@
+using Microsoft.AspNetCore.HttpOverrides;
 using ShortLynx.Services.Visits;
 using ShortLynx.Services.Redirect;
 using ShortLynx.Web.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Honour X-Forwarded-* from the hosting proxy (Railway) — without this, every redirect's client IP
+// collapses to the proxy IP (breaking per-IP rate limiting and visit analytics).
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 
 builder.Services.AddRazorPages();
 builder.Services.AddShortLynxDatabase(builder.Configuration);
@@ -10,6 +20,8 @@ builder.Services.AddShortLynxRedirect(builder.Configuration);
 builder.Services.AddShortLynxRateLimiter(builder.Configuration);
 
 var app = builder.Build();
+
+app.UseForwardedHeaders();
 
 if (!app.Environment.IsDevelopment())
 {

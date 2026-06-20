@@ -1,7 +1,17 @@
+using Microsoft.AspNetCore.HttpOverrides;
 using ShortLynx.Admin.Components;
 using ShortLynx.Admin.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Honour X-Forwarded-* from the hosting proxy (Railway) so the app sees the original HTTPS scheme
+// (required for the Secure cookie + HTTPS redirect to work behind TLS termination).
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
@@ -13,6 +23,8 @@ builder.Services.AddShortLynxServices(builder.Configuration);
 builder.Services.AddShortLynxAuth();
 
 var app = builder.Build();
+
+app.UseForwardedHeaders();
 
 if (!app.Environment.IsDevelopment())
 {

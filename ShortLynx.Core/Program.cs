@@ -26,18 +26,29 @@ builder.Services.AddAuthorization();
 
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
+builder.Services.AddProblemDetails();
+builder.Services.AddHealthChecks();
 
 var app = builder.Build();
 
-if (app.Environment.IsDevelopment())
-    app.MapOpenApi();
-
 app.UseForwardedHeaders();
+
+if (app.Environment.IsDevelopment())
+{
+    app.MapOpenApi();
+}
+else
+{
+    app.UseExceptionHandler();   // RFC 7807 ProblemDetails responses
+    app.UseHsts();
+}
+
 app.UseHttpsRedirection();
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapHealthChecks("/health");
 
 app.Run();
 

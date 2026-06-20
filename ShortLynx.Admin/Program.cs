@@ -21,6 +21,7 @@ builder.Services.AddRazorPages();
 builder.Services.AddShortLynxDatabase(builder.Configuration);
 builder.Services.AddShortLynxServices(builder.Configuration);
 builder.Services.AddShortLynxAuth();
+builder.Services.AddHealthChecks();
 
 var app = builder.Build();
 
@@ -41,6 +42,7 @@ app.UseAntiforgery();
 
 app.MapStaticAssets();
 app.MapRazorPages();
+app.MapHealthChecks("/health");
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 

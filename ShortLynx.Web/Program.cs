@@ -18,6 +18,7 @@ builder.Services.AddRazorPages();
 builder.Services.AddShortLynxDatabase(builder.Configuration);
 builder.Services.AddShortLynxRedirect(builder.Configuration);
 builder.Services.AddShortLynxRateLimiter(builder.Configuration);
+builder.Services.AddHealthChecks();
 
 var app = builder.Build();
 
@@ -33,6 +34,7 @@ app.UseHttpsRedirection();
 app.UseRateLimiter();
 app.MapStaticAssets();
 app.MapRazorPages().WithStaticAssets();
+app.MapHealthChecks("/health");
 
 // Short-link redirect endpoint — must come after Razor Pages so literal routes (/Privacy, /Error)
 // take precedence over the /{code} parameter route.

@@ -41,7 +41,18 @@ public sealed class RedirectService(
         if (ulc is null) return null;
 
         // One-time-use codes that have been redeemed must not redirect again.
-        if (ulc.IsOneTimeUse && ulc.IsUsed) return null;
+        if (ulc.IsOneTimeUse)
+        {
+            if (ulc.IsUsed) return null;
+
+            // Atomically claim the code: only the request that flips IsUsed from false wins, so two
+            // concurrent hits can't both redirect. No DateTimeOffset in the predicate (SQLite-safe).
+            var claimed = await db.UserLinkCodeEntities
+                .Where(x => x.Id == ulc.Id && !x.IsUsed)
+                .ExecuteUpdateAsync(s => s.SetProperty(x => x.IsUsed, true), ct);
+
+            if (claimed == 0) return null;
+        }
 
         var mode2Entry = new RedirectCacheEntry(ulc.Link.OriginalUrl, null, ulc.Id, ulc.UserId);
 

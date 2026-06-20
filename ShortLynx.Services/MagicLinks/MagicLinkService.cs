@@ -89,8 +89,14 @@ public sealed class MagicLinkService(
         if (tokenEntity.UsedAt.HasValue) return null;
         if (tokenEntity.ExpiresAt < DateTimeOffset.UtcNow) return null;
 
-        tokenEntity.UsedAt = DateTimeOffset.UtcNow;
-        await db.SaveChangesAsync(ct);
+        // Atomically claim the token: only the request that flips UsedAt from null wins, so two
+        // concurrent redemptions can't both succeed. No DateTimeOffset in the predicate (SQLite-safe);
+        // the expiry check above runs in C# since SQLite can't translate it in SQL.
+        var claimed = await db.MagicLinkTokenEntities
+            .Where(t => t.Id == tokenEntity.Id && t.UsedAt == null)
+            .ExecuteUpdateAsync(s => s.SetProperty(t => t.UsedAt, DateTimeOffset.UtcNow), ct);
+
+        if (claimed == 0) return null;
         return tokenEntity.UserAccount;
     }
 

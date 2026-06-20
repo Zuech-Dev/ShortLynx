@@ -163,6 +163,60 @@ public class RedirectServiceTests
         Assert.NotNull(result);
     }
 
+    [Fact]
+    public async Task LookupAsync_Mode2_OneTimeCode_ResolvesOnceThenNull_AndMarksUsed()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+        var (_, link) = await SeedLinkAsync(db);
+
+        Guid ulcId;
+        await using (var ctx = db.CreateContext())
+        {
+            var ulc = EntityFactory.UserLinkCode(link.Id, Guid.CreateVersion7(), "claimme1");
+            ulc.IsOneTimeUse = true;
+            ctx.UserLinkCodeEntities.Add(ulc);
+            await ctx.SaveChangesAsync();
+            ulcId = ulc.Id;
+        }
+
+        // Shared cache so we exercise the same path a real request would (one-time codes aren't cached).
+        var sharedCache = new MemoryCache(new MemoryCacheOptions());
+
+        var first = await MakeSvc(db.CreateContext(), sharedCache).LookupAsync("claimme1");
+        Assert.NotNull(first);
+
+        // The first lookup itself must have claimed the code.
+        await using (var ctx = db.CreateContext())
+        {
+            var ulc = await ctx.UserLinkCodeEntities.FindAsync(ulcId);
+            Assert.True(ulc!.IsUsed);
+        }
+
+        var second = await MakeSvc(db.CreateContext(), sharedCache).LookupAsync("claimme1");
+        Assert.Null(second);
+    }
+
+    [Fact]
+    public async Task LookupAsync_Mode2_MultiUseCode_ResolvesRepeatedly()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+        var (_, link) = await SeedLinkAsync(db);
+
+        await using (var ctx = db.CreateContext())
+        {
+            // EntityFactory.UserLinkCode sets IsOneTimeUse = false.
+            ctx.UserLinkCodeEntities.Add(EntityFactory.UserLinkCode(link.Id, Guid.CreateVersion7(), "multiuse"));
+            await ctx.SaveChangesAsync();
+        }
+
+        var sharedCache = new MemoryCache(new MemoryCacheOptions());
+        var first = await MakeSvc(db.CreateContext(), sharedCache).LookupAsync("multiuse");
+        var second = await MakeSvc(db.CreateContext(), sharedCache).LookupAsync("multiuse");
+
+        Assert.NotNull(first);
+        Assert.NotNull(second);
+    }
+
     // ── Cache behaviour ───────────────────────────────────────────────────────
 
     [Fact]

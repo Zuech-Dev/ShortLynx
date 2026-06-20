@@ -185,18 +185,28 @@ public class BackgroundVisitWriterTests
     }
 
     [Fact]
-    public void HashIp_IsConsistent()
+    public void HashIp_SameIpAndPepper_IsConsistent()
     {
-        var h1 = BackgroundVisitWriter.HashIp("10.0.0.1");
-        var h2 = BackgroundVisitWriter.HashIp("10.0.0.1");
+        var h1 = BackgroundVisitWriter.HashIp("10.0.0.1", "pepper");
+        var h2 = BackgroundVisitWriter.HashIp("10.0.0.1", "pepper");
         Assert.Equal(h1, h2);
     }
 
     [Fact]
     public void HashIp_DifferentInputs_DifferentHashes()
     {
-        var h1 = BackgroundVisitWriter.HashIp("1.1.1.1");
-        var h2 = BackgroundVisitWriter.HashIp("2.2.2.2");
+        var h1 = BackgroundVisitWriter.HashIp("1.1.1.1", "pepper");
+        var h2 = BackgroundVisitWriter.HashIp("2.2.2.2", "pepper");
+        Assert.NotEqual(h1, h2);
+    }
+
+    [Fact]
+    public void HashIp_DifferentPepper_ProducesDifferentHash()
+    {
+        // The secret pepper is what makes the hash non-reversible: the same IP under two different
+        // peppers must not be linkable.
+        var h1 = BackgroundVisitWriter.HashIp("203.0.113.7", "pepper-A");
+        var h2 = BackgroundVisitWriter.HashIp("203.0.113.7", "pepper-B");
         Assert.NotEqual(h1, h2);
     }
 }

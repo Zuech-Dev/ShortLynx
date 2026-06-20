@@ -24,7 +24,7 @@ public sealed class BackgroundVisitWriter(
             {
                 await using var scope = scopeFactory.CreateAsyncScope();
                 var dbOps = scope.ServiceProvider.GetRequiredService<IDbOperations>();
-                await FlushAsync(batch, dbOps, stoppingToken);
+                await FlushAsync(batch, dbOps, _opts.IpHashPepper, stoppingToken);
             }
         }
     }
@@ -54,7 +54,7 @@ public sealed class BackgroundVisitWriter(
         return batch;
     }
 
-    private static async Task FlushAsync(List<VisitEvent> batch, IDbOperations dbOps, CancellationToken ct)
+    private static async Task FlushAsync(List<VisitEvent> batch, IDbOperations dbOps, string pepper, CancellationToken ct)
     {
         var mode1 = batch
             .Where(e => e.ShortCodeId.HasValue)
@@ -63,7 +63,7 @@ public sealed class BackgroundVisitWriter(
                 Id = Guid.CreateVersion7(),
                 ShortCodeId = e.ShortCodeId!.Value,
                 ClickedAt = e.ClickedAt,
-                HashedIp = HashIp(e.RawIp),
+                HashedIp = HashIp(e.RawIp, pepper),
                 Referrer = e.Referrer,
                 UserAgent = e.UserAgent,
             })
@@ -77,7 +77,7 @@ public sealed class BackgroundVisitWriter(
                 UserLinkCodeId = e.UserLinkCodeId!.Value,
                 UserId = e.UserId,
                 ClickedAt = e.ClickedAt,
-                HashedIp = HashIp(e.RawIp),
+                HashedIp = HashIp(e.RawIp, pepper),
                 Referrer = e.Referrer,
                 UserAgent = e.UserAgent,
             })
@@ -87,12 +87,13 @@ public sealed class BackgroundVisitWriter(
         if (mode2.Count > 0) await dbOps.BulkInsertUserVisitsAsync(mode2, ct);
     }
 
-    // IP hashing uses a rotating hourly salt to limit the window in which two
-    // records from the same IP can be linked across days.
-    internal static string HashIp(string rawIp)
+    // IP hashing is keyed with a secret pepper (HMAC) so the small IPv4 space can't be brute-forced
+    // back to the original address, plus a rotating hourly component to limit cross-day linkage.
+    internal static string HashIp(string rawIp, string pepper)
     {
-        var salt = $"salt-{DateTimeOffset.UtcNow:yyyyMMddHH}";
-        var input = Encoding.UTF8.GetBytes($"{rawIp}:{salt}");
-        return Convert.ToHexString(SHA256.HashData(input));
+        var hourly = $"{rawIp}:{DateTimeOffset.UtcNow:yyyyMMddHH}";
+        var key = Encoding.UTF8.GetBytes(pepper);
+        var data = Encoding.UTF8.GetBytes(hourly);
+        return Convert.ToHexString(HMACSHA256.HashData(key, data));
     }
 }

@@ -1,7 +1,7 @@
 # ShortLynx — Deploy Checklist
 
-**Stack:** .NET 10 · PostgreSQL · three deployable apps + external SMTP
-**Target:** Railway (recommended — see platform notes) · 178 tests green at time of writing
+**Stack:** .NET 10 · PostgreSQL · three deployable apps + Resend (email) · DNS (custom domains)
+**Target:** Railway (recommended — see platform notes) · 245 tests green at time of writing
 
 ---
 
@@ -9,11 +9,11 @@
 
 | App | Role | Public? | Needs |
 |---|---|---|---|
-| `ShortLynx.Web` | Public redirect site (`/{code}` → 302) | **Yes** (your short domain) | DB |
-| `ShortLynx.Core` | REST API (link/api-key/magic-link, analytics) | Yes (api subdomain) | DB, HmacSecret, AdminSecret, SMTP |
-| `ShortLynx.Admin` | Blazor admin dashboard (magic-link auth) | Yes (admin subdomain) | DB, HmacSecret, allowlist, SMTP |
+| `ShortLynx.Web` | Public redirect site (`/{code}` → 302) | **Yes** (your short domain + any custom domains) | DB, IpHashPepper |
+| `ShortLynx.Core` | REST API (links/api-keys/magic-links/domains, analytics) | Yes (api subdomain) | DB, HmacSecret, AdminSecret, Resend, IpHashPepper, DNS egress |
+| `ShortLynx.Admin` | Blazor admin dashboard (magic-link auth) | Yes (admin subdomain) | DB, HmacSecret, allowlist, Resend, PublicBaseUrl, DNS egress |
 | PostgreSQL | Shared database | No | — |
-| SMTP provider | Magic-link emails (Resend / Postmark / SES…) | — | Railway has none built in |
+| Resend | Magic-link emails (HTTP API) | — | `Resend:ApiKey` (user-secret / env) |
 
 → On Railway: **3 services + 1 Postgres**, all services referencing the same DB.
 
@@ -32,15 +32,22 @@
 
 ---
 
-## 🚧 Blocking code/config changes (do before first prod deploy)
+## ✅ Already addressed in code (no longer blocking)
 
-- [ ] **Forwarded headers** — none of the apps call `UseForwardedHeaders`. Behind Railway's TLS-terminating proxy this breaks: rate-limiting + visit IPs collapse to the proxy IP, and `UseHttpsRedirection` can loop. Add `UseForwardedHeaders` (honor `X-Forwarded-For`/`X-Forwarded-Proto`) early in each pipeline. *(This is the M3 follow-up — now deploy-blocking.)*
-- [ ] **Admin cookie `SecurePolicy = Always`** — set it in `AddShortLynxAuth` so the session cookie isn't sent cleartext behind the proxy. *(M4 follow-up.)*
-- [ ] **Migrations strategy** (see below) — apps do **not** auto-migrate, and Core/Web/Admin don't reference the migrations assembly, so runtime `Migrate()` won't work without a project reference.
-- [ ] **Admin CSS in the container** — the Linux build can't run the macOS Tailwind binary. Either commit the generated `ShortLynx.Admin/wwwroot/css/tailwind.css`, **or** have the Admin Dockerfile download `tailwindcss-linux-x64` and run it. (The build won't fail without it — you'll just ship unstyled Tailwind utilities.)
-- [ ] **Dockerfiles for Admin + Web** — only `ShortLynx.Core/Dockerfile` exists. Clone it for the other two (swap the project name + `ENTRYPOINT`). Each Railway service points at its own Dockerfile.
-- [ ] **Port binding** — the `aspnet:10.0` image listens on `8080` (matches `EXPOSE 8080`). Set each Railway service's target port to **8080**, or set `ASPNETCORE_HTTP_PORTS=${{PORT}}`.
-- [ ] **Health checks (nice-to-have)** — add `/health` (`AddHealthChecks().MapHealthChecks("/health")`) and point Railway's healthcheck at it. Note: Core has no `/` route (would 404 a root healthcheck).
+- **Forwarded headers** — all three apps call `UseForwardedHeaders` (X-Forwarded-For/Proto) so client IPs and HTTPS scheme survive the proxy. *(D1 / M3.)*
+- **Admin cookie `SecurePolicy = Always`** — set in `AddShortLynxAuth`. *(D2 / M4.)*
+- **Dockerfiles** — `ShortLynx.Core`, `ShortLynx.Admin`, and `ShortLynx.Web` each ship a Dockerfile. *(D3.)*
+- **Prod hardening + health checks** — Core has HSTS, RFC-7807 ProblemDetails, and `/health`; Admin and Web expose `/health` too. *(D4.)*
+- **Email** — uses the Resend HTTP API (`ResendEmailSender`), not SMTP. Set `Resend__ApiKey` (and a verified `Resend__FromAddress`).
+
+## 🚧 Still to do before first prod deploy
+
+- [ ] **Migrations** — apps do **not** auto-migrate; apply the SQL script (see Migrations below). Current migrations: `Initial`, `AddLinkUserOwnership`, `AddUserLinkCodeRecipient`, `AddLinkCustomDomainPin`.
+- [ ] **Set the new secrets/config** — `VisitSink__IpHashPepper` (Core + Web), `ShortLynx__PublicBaseUrl` (Admin). See env vars below. Without the pepper, stored IP hashes are *unkeyed* (brute-forceable) in prod.
+- [ ] **Tailwind CSS in the containers** — the Linux build can't run the committed macOS Tailwind binary, so the build uses the committed (unminified) `wwwroot/css/tailwind.css` for **both** Admin and Web. That's fine functionally; for minified CSS, fetch `tailwindcss-linux-x64` in each Dockerfile and let the build regenerate. (Bootstrap has been fully removed — Tailwind is the only stylesheet now.)
+- [ ] **Custom-domain DNS + TLS** — for each custom domain a user verifies: they create the TXT record the dashboard/API shows, then point the host at `ShortLynx.Web`. Issuing TLS certs for arbitrary customer hostnames is a **platform concern** (Railway/Fly custom-domain support or a proxy in front) — not handled in app code.
+- [ ] **Outbound DNS egress** — Admin (verify button) and Core (verify endpoint + re-verification job) perform outbound DNS TXT lookups; ensure egress is allowed.
+- [ ] **Port binding** — the `aspnet:10.0` image listens on `8080`. Set each Railway service's target port to **8080**, or set `ASPNETCORE_HTTP_PORTS=${{PORT}}`.
 
 ---
 
@@ -60,30 +67,42 @@ ASPNETCORE_ENVIRONMENT = Production
 ApiKey__HmacSecret = <32+ random chars>      # apps fail-fast on empty/default/<32
 ```
 
+**Core + Web — IP-hash pepper (identical value in both; keeps visit IP hashes non-reversible):**
+```
+VisitSink__IpHashPepper = <random secret>    # empty = unkeyed hashing (dev only)
+```
+
 **Core only:**
 ```
-ApiKey__AdminSecret      = <16+ random chars>   # gates POST /api-keys
+ApiKey__AdminSecret            = <16+ random chars>   # gates POST /api-keys
 MagicLink__ConfirmationUrlBase = https://<admin-domain>/auth/confirm
-Email__Host = ...   Email__Port = 587   Email__UseSsl = true
-Email__Username = ...   Email__Password = ...
-Email__FromAddress = noreply@<domain>   Email__FromName = ShortLynx
+Resend__ApiKey                 = <resend api key>
+Resend__FromAddress            = noreply@<verified-domain>   Resend__FromName = ShortLynx
+# Custom-domain re-verification cadence (optional; default 1440 = 24h)
+CustomDomain__ReverifyIntervalMinutes = 1440
 ```
 
-**Admin only (fail-closed — no login without these):**
+**Admin only (fail-closed — no login without the allowlist):**
 ```
-Admin__AllowedEmails__0   = you@example.com
-Admin__SuperAdminEmails__0 = you@example.com
+Admin__AllowedEmails__0        = you@example.com
+Admin__SuperAdminEmails__0     = you@example.com
 MagicLink__ConfirmationUrlBase = https://<admin-domain>/auth/confirm
-Email__* = (same SMTP block as Core)
+Resend__ApiKey                 = <resend api key>
+Resend__FromAddress            = noreply@<verified-domain>   Resend__FromName = ShortLynx
+ShortLynx__PublicBaseUrl       = https://<short-domain>      # builds full short URLs in the UI
 ```
 
-**Web only:** database block only (no secrets/SMTP).
+**Web only:** database block **plus** `VisitSink__IpHashPepper` (above). No email/admin secrets.
+
+> Optional `CustomDomain__VerificationHostLabel` / `CustomDomain__TxtValuePrefix` override the TXT record host/value shown to users; defaults (`_shortlynx-verify` / `shortlynx-verify=`) are fine.
 
 ---
 
 ## Migrations
 
-Apps don't migrate on startup. Pick one:
+Apps don't migrate on startup. Current migrations (PostgreSQL):
+`Initial` → `AddLinkUserOwnership` → `AddUserLinkCodeRecipient` → `AddLinkCustomDomainPin`.
+Pick one:
 
 - **Recommended — idempotent SQL script** applied to Railway Postgres on each migration change:
   ```bash
@@ -97,7 +116,7 @@ Apps don't migrate on startup. Pick one:
 ---
 
 ## Pre-Deploy
-- [ ] `dotnet test ShortLynx.slnx` green (currently 178)
+- [ ] `dotnet test ShortLynx.slnx` green (currently 245)
 - [ ] Working tree committed on `implementation`; pushed to origin
 - [ ] **DB password rotated** (the old one was leaked — see git-scrub history) and set only in Railway variables
 - [ ] All secrets above set in Railway; **no** secrets in any committed `appsettings*.json`
@@ -118,6 +137,8 @@ Apps don't migrate on startup. Pick one:
 - [ ] Admin: non-allowlisted email cannot sign in
 - [ ] Click a link, then confirm the visit appears in analytics (background writer flushed)
 - [ ] Verify client IP is real (not the proxy) in a new visit row → confirms forwarded headers
+- [ ] Custom domain: add one (Admin or `POST /domains`), create the shown TXT record, verify → status `Verified`; point the host at Web; pin a link to it and confirm it resolves on that host but not others
+- [ ] Confirm `tailwind.css` is present and the Admin/Web pages are styled (Tailwind, no Bootstrap)
 
 ## Rollback triggers
 - Redirect endpoint 5xx rate > 1%, or any redirect returning 500
@@ -131,5 +152,7 @@ Apps don't migrate on startup. Pick one:
 1. **App won't start** → almost always `ApiKey__HmacSecret` missing/placeholder/<32 chars (fail-fast by design).
 2. **Can't log into Admin** → `Admin__AllowedEmails__0` not set (fail-closed by design).
 3. **Magic-link URL points at localhost** → set `MagicLink__ConfirmationUrlBase` to the real Admin domain.
-4. **All redirects share one rate-limit bucket / analytics show one IP** → forwarded headers not configured.
-5. **Admin looks unstyled** → `tailwind.css` not generated for the container (commit it or fetch the Linux binary in the Dockerfile).
+4. **All redirects share one rate-limit bucket / analytics show one IP** → forwarded headers (now configured) or check the proxy is actually forwarding.
+5. **Admin/Web looks unstyled** → committed `tailwind.css` missing from the image, or a stale copy (regenerate by fetching the Linux Tailwind binary in the Dockerfile).
+6. **Pinned link 404s on its custom domain** → the domain isn't `Verified` (TXT missing), DNS isn't pointed at Web yet, or the re-verification job demoted it after the TXT changed.
+7. **Stored visit IPs look reversible / differ from dev** → `VisitSink__IpHashPepper` not set (or differs between Core and Web); set the same secret in both.

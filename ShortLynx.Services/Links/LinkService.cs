@@ -99,6 +99,27 @@ public sealed class LinkService(
         throw new InvalidOperationException("Failed to generate a unique short code after maximum attempts.");
     }
 
+    public async Task<bool> SetLinkDomainAsync(
+        Guid linkId, Guid? customDomainId, Guid userAccountId, CancellationToken ct = default)
+    {
+        var link = await db.LinkEntities
+            .FirstOrDefaultAsync(l => l.Id == linkId && l.UserAccountId == userAccountId, ct);
+        if (link is null) return false;
+
+        if (customDomainId is { } domainId)
+        {
+            var ownsVerified = await db.CustomDomainEntities.AnyAsync(
+                d => d.Id == domainId
+                  && d.UserAccountId == userAccountId
+                  && d.VerificationStatus == DomainVerificationStatus.Verified, ct);
+            if (!ownsVerified) return false;
+        }
+
+        link.CustomDomainId = customDomainId;
+        await db.SaveChangesAsync(ct);
+        return true;
+    }
+
     public Task<IReadOnlyList<UserLinkCodeEntity>> CreateUserLinkCodesAsync(
         Guid linkId, IEnumerable<Guid> userIds, CancellationToken ct = default)
         => CreateUserLinkCodesAsync(

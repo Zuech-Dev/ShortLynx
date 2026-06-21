@@ -108,4 +108,40 @@ public class LinkDetailComponentTests : BunitContext
         Assert.Empty(_links.Provisioned);
         Assert.NotNull(cut.Find("[data-testid=provision-error]"));
     }
+
+    [Fact]
+    public void Pin_SelectingVerifiedDomain_CallsSetLinkDomain()
+    {
+        var id = SeedUserAttributedLink();
+        var domainId = SeedVerifiedDomain();
+        var cut = Render<LinkDetail>(p => p.Add(c => c.Id, id));
+
+        cut.Find("[data-testid=pin-select]").Change(domainId.ToString());
+        cut.Find("[data-testid=pin-save]").Click();
+
+        Assert.Single(_links.DomainSet);
+        Assert.Equal(id, _links.DomainSet[0].LinkId);
+        Assert.Equal(domainId, _links.DomainSet[0].DomainId);
+        Assert.Equal(_uid, _links.DomainSet[0].Uid);
+    }
+
+    private Guid SeedVerifiedDomain(string domain = "go.example.com")
+    {
+        var factory = Services.GetRequiredService<IDbContextFactory<ShortLynxDbContext>>();
+        using var db = factory.CreateDbContext();
+        var d = new CustomDomainEntity
+        {
+            Id = Guid.CreateVersion7(),
+            UserAccountId = _uid,
+            Domain = domain,
+            CreatedAt = DateTimeOffset.UtcNow,
+            IsActive = true,
+            VerificationStatus = DomainVerificationStatus.Verified,
+            VerificationToken = "tok",
+            VerifiedAt = DateTimeOffset.UtcNow,
+        };
+        db.CustomDomainEntities.Add(d);
+        db.SaveChanges();
+        return d.Id;
+    }
 }

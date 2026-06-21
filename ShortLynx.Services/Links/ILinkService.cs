@@ -35,4 +35,10 @@ public interface ILinkService
     /// </summary>
     Task<IReadOnlyList<UserLinkCodeEntity>> CreateUserLinkCodesAsync(
         Guid linkId, IReadOnlyCollection<CodeRecipient> recipients, bool isOneTimeUse, CancellationToken ct = default);
+
+    /// <summary>
+    /// Pins (or, with null, unpins) a user-owned link to one of the user's verified custom domains.
+    /// Returns false if the link isn't the user's, or the domain isn't the user's and verified.
+    /// </summary>
+    Task<bool> SetLinkDomainAsync(Guid linkId, Guid? customDomainId, Guid userAccountId, CancellationToken ct = default);
 }

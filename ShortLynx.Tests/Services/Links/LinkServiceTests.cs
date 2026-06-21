@@ -298,4 +298,90 @@ public class LinkServiceTests
         Assert.Null(results[0].Recipient);
         Assert.False(results[0].IsOneTimeUse);
     }
+
+    // ── SetLinkDomainAsync (custom-domain pinning) ────────────────────────────
+
+    private static async Task<Guid> SeedVerifiedDomainAsync(TestDatabase db, Guid userId, string domain = "go.example.com")
+    {
+        var d = EntityFactory.CustomDomain(userId, domain);
+        d.VerificationStatus = DomainVerificationStatus.Verified;
+        d.IsActive = true;
+        await using var ctx = db.CreateContext();
+        ctx.CustomDomainEntities.Add(d);
+        await ctx.SaveChangesAsync();
+        return d.Id;
+    }
+
+    [Fact]
+    public async Task SetLinkDomain_PinsToOwnVerifiedDomain_ReturnsTrue()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+        var user = await SeedUserAsync(db);
+        var link = await MakeSvc(db.CreateContext()).CreateAnonymousLinkAsync("https://example.com", user.Id);
+        var domainId = await SeedVerifiedDomainAsync(db, user.Id);
+
+        var ok = await MakeSvc(db.CreateContext()).SetLinkDomainAsync(link.Link.Id, domainId, user.Id);
+        Assert.True(ok);
+
+        await using var ctx = db.CreateContext();
+        var stored = await ctx.LinkEntities.FindAsync(link.Link.Id);
+        Assert.Equal(domainId, stored!.CustomDomainId);
+    }
+
+    [Fact]
+    public async Task SetLinkDomain_Null_Unpins()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+        var user = await SeedUserAsync(db);
+        var link = await MakeSvc(db.CreateContext()).CreateAnonymousLinkAsync("https://example.com", user.Id);
+        var domainId = await SeedVerifiedDomainAsync(db, user.Id);
+        await MakeSvc(db.CreateContext()).SetLinkDomainAsync(link.Link.Id, domainId, user.Id);
+
+        var ok = await MakeSvc(db.CreateContext()).SetLinkDomainAsync(link.Link.Id, null, user.Id);
+        Assert.True(ok);
+
+        await using var ctx = db.CreateContext();
+        var stored = await ctx.LinkEntities.FindAsync(link.Link.Id);
+        Assert.Null(stored!.CustomDomainId);
+    }
+
+    [Fact]
+    public async Task SetLinkDomain_UnverifiedDomain_ReturnsFalse()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+        var user = await SeedUserAsync(db);
+        var link = await MakeSvc(db.CreateContext()).CreateAnonymousLinkAsync("https://example.com", user.Id);
+
+        // Pending (unverified) domain.
+        Guid pendingId;
+        await using (var ctx = db.CreateContext())
+        {
+            var d = EntityFactory.CustomDomain(user.Id, "pending.example.com");
+            ctx.CustomDomainEntities.Add(d);
+            await ctx.SaveChangesAsync();
+            pendingId = d.Id;
+        }
+
+        var ok = await MakeSvc(db.CreateContext()).SetLinkDomainAsync(link.Link.Id, pendingId, user.Id);
+        Assert.False(ok);
+    }
+
+    [Fact]
+    public async Task SetLinkDomain_AnotherUsersLink_ReturnsFalse()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+        var owner = await SeedUserAsync(db);
+        var link = await MakeSvc(db.CreateContext()).CreateAnonymousLinkAsync("https://example.com", owner.Id);
+
+        var otherUser = EntityFactory.UserAccount("other@example.com");
+        await using (var ctx = db.CreateContext())
+        {
+            ctx.UserAccountEntities.Add(otherUser);
+            await ctx.SaveChangesAsync();
+        }
+        var otherDomain = await SeedVerifiedDomainAsync(db, otherUser.Id, "other.example.com");
+
+        var ok = await MakeSvc(db.CreateContext()).SetLinkDomainAsync(link.Link.Id, otherDomain, otherUser.Id);
+        Assert.False(ok);
+    }
 }

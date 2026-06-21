@@ -48,6 +48,34 @@ else
         </div>
     </div>
 
+    @if (_canPin)
+    {
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body">
+                <h5 class="card-title">Custom domain</h5>
+                <p class="text-muted small">Pin this link to one of your verified domains, or leave it on any host.</p>
+                <div class="d-flex gap-2 align-items-center" style="max-width:520px">
+                    <select class="form-select form-select-sm" @bind="_selectedDomainKey" data-testid="pin-select">
+                        <option value="">Any host (no pin)</option>
+                        @foreach (var d in _verifiedDomains)
+                        {
+                            <option value="@d.Id">@d.Domain</option>
+                        }
+                    </select>
+                    <button class="btn btn-sm btn-primary" data-testid="pin-save" @onclick="SavePin">Save</button>
+                </div>
+                @if (_verifiedDomains.Count == 0)
+                {
+                    <div class="small text-muted mt-1">No verified domains yet — add one under <a href="/domains">Domains</a>.</div>
+                }
+                @if (_pinSaved)
+                {
+                    <div class="text-success small mt-1" data-testid="pin-saved">Saved.</div>
+                }
+            </div>
+        </div>
+    }
+
     @if (_link.Mode == LinkMode.Anonymous)
     {
         <h5>Click Analytics</h5>
@@ -154,6 +182,11 @@ else
     List<VisitEntity> _recentVisits = [];
     List<UserCodeRow> _userRows = [];
 
+    // Custom-domain pinning (user-owned links only).
+    bool _canPin, _pinSaved;
+    List<DomainOption> _verifiedDomains = [];
+    string _selectedDomainKey = string.Empty;
+
     protected override async Task OnParametersSetAsync()
     {
         if (!_authResolved)
@@ -225,8 +258,37 @@ else
                 clickMap.GetValueOrDefault(c.Id, 0))).ToList();
         }
 
+        // Pinning is only offered for links the user owns directly (not API-key-owned ones).
+        _canPin = _link.UserAccountId == _uid;
+        if (_canPin)
+        {
+            _verifiedDomains = await db.CustomDomainEntities
+                .Where(d => d.UserAccountId == _uid && d.VerificationStatus == DomainVerificationStatus.Verified)
+                .OrderBy(d => d.Domain)
+                .Select(d => new DomainOption(d.Id, d.Domain))
+                .ToListAsync();
+            _selectedDomainKey = _link.CustomDomainId?.ToString() ?? string.Empty;
+        }
+
         _loaded = true;
     }
+
+    async Task SavePin()
+    {
+        if (!_canPin) return;
+        _pinSaved = false;
+        Guid? domainId = Guid.TryParse(_selectedDomainKey, out var id) ? id : null;
+
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        var svc = scope.ServiceProvider.GetRequiredService<ILinkService>();
+        if (await svc.SetLinkDomainAsync(Id, domainId, _uid))
+        {
+            _pinSaved = true;
+            await LoadAsync();
+        }
+    }
+
+    sealed record DomainOption(Guid Id, string Domain);
 
     // ── Code provisioning (Mode 2) ────────────────────────────────────────────
 

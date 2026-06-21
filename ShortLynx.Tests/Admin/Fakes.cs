@@ -123,6 +123,14 @@ internal sealed class FakeLinkService : ILinkService
         Guid linkId, IEnumerable<Guid> userIds, CancellationToken ct = default)
         => CreateUserLinkCodesAsync(linkId, userIds.Select(id => new CodeRecipient(id)).ToList(), false, ct);
 
+    public readonly List<(Guid LinkId, Guid? DomainId, Guid Uid)> DomainSet = [];
+
+    public Task<bool> SetLinkDomainAsync(Guid linkId, Guid? customDomainId, Guid userAccountId, CancellationToken ct = default)
+    {
+        DomainSet.Add((linkId, customDomainId, userAccountId));
+        return Task.FromResult(true);
+    }
+
     public Task<IReadOnlyList<UserLinkCodeEntity>> CreateUserLinkCodesAsync(
         Guid linkId, IReadOnlyCollection<CodeRecipient> recipients, bool isOneTimeUse, CancellationToken ct = default)
     {

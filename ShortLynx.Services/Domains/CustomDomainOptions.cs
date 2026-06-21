@@ -12,6 +12,12 @@ public sealed class CustomDomainOptions
     /// <summary>Prefix prepended to the token in the published TXT value (e.g. <c>shortlynx-verify=</c>).</summary>
     public string TxtValuePrefix { get; set; } = "shortlynx-verify=";
 
+    /// <summary>
+    /// How often the background job re-checks already-verified domains' TXT records and demotes any
+    /// that no longer match. Defaults to once a day.
+    /// </summary>
+    public int ReverifyIntervalMinutes { get; set; } = 1440;
+
     /// <summary>The exact TXT host the user must create the record at, for a given domain.</summary>
     public string VerificationHost(string domain) => $"{VerificationHostLabel}.{domain}";
 

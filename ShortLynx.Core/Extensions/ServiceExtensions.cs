@@ -43,6 +43,7 @@ public static class ServiceExtensions
         services.AddScoped<IMagicLinkService, MagicLinkService>();
         services.AddScoped<ICustomDomainService, CustomDomainService>();
         services.AddSingleton<IDnsResolver, DnsClientResolver>();
+        services.AddHostedService<DomainReverificationService>();
 
         services.AddSingleton<InMemoryVisitEventSink>();
         services.AddSingleton<IVisitEventSink>(sp => sp.GetRequiredService<InMemoryVisitEventSink>());

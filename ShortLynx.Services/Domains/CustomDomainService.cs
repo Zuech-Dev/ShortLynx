@@ -72,6 +72,31 @@ public sealed class CustomDomainService(
         return affected > 0;
     }
 
+    public async Task<int> RecheckVerifiedAsync(CancellationToken ct = default)
+    {
+        var verified = await db.CustomDomainEntities
+            .Where(d => d.VerificationStatus == DomainVerificationStatus.Verified)
+            .ToListAsync(ct);
+
+        var demoted = 0;
+        foreach (var domain in verified)
+        {
+            var expected = _opts.ExpectedTxtValue(domain.VerificationToken);
+            var records = await dns.GetTxtRecordsAsync(_opts.VerificationHost(domain.Domain), ct);
+            if (records.Any(r => string.Equals(r.Trim(), expected, StringComparison.Ordinal)))
+                continue;
+
+            // TXT record gone/changed — the user may no longer control the domain.
+            domain.VerificationStatus = DomainVerificationStatus.Failed;
+            domain.IsActive = false;
+            domain.VerifiedAt = null;
+            demoted++;
+        }
+
+        if (demoted > 0) await db.SaveChangesAsync(ct);
+        return demoted;
+    }
+
     // Lowercases, trims, and strips any scheme/path the user may have pasted, leaving a bare host.
     private static string Normalise(string domain)
     {

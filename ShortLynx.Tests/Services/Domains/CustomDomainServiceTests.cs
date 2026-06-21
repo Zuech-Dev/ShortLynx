@@ -171,4 +171,71 @@ public class CustomDomainServiceTests
         var removed = await MakeSvc(db.CreateContext(), new FakeDnsResolver()).RemoveAsync(domain.Id, other);
         Assert.False(removed);
     }
+
+    // ── RecheckVerifiedAsync (background re-verification) ──────────────────────
+
+    private static async Task<ShortLynx.Data.Entities.CustomDomainEntity> SeedVerifiedAsync(
+        TestDatabase db, IDnsResolver dns, Guid uid, string domain)
+    {
+        var added = await MakeSvc(db.CreateContext(), dns).AddAsync(domain, uid);
+        await using var ctx = db.CreateContext();
+        var stored = await ctx.CustomDomainEntities.FindAsync(added.Id);
+        stored!.VerificationStatus = DomainVerificationStatus.Verified;
+        stored.IsActive = true;
+        stored.VerifiedAt = DateTimeOffset.UtcNow;
+        await ctx.SaveChangesAsync();
+        return stored;
+    }
+
+    [Fact]
+    public async Task Recheck_VerifiedDomainWithMissingTxt_DemotesToFailedAndInactive()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+        var uid = await SeedUserAsync(db);
+        var dns = new FakeDnsResolver(); // publishes nothing
+        var domain = await SeedVerifiedAsync(db, dns, uid, "go.example.com");
+
+        var demoted = await MakeSvc(db.CreateContext(), dns).RecheckVerifiedAsync();
+        Assert.Equal(1, demoted);
+
+        await using var ctx = db.CreateContext();
+        var stored = await ctx.CustomDomainEntities.FindAsync(domain.Id);
+        Assert.Equal(DomainVerificationStatus.Failed, stored!.VerificationStatus);
+        Assert.False(stored.IsActive);
+        Assert.Null(stored.VerifiedAt);
+    }
+
+    [Fact]
+    public async Task Recheck_VerifiedDomainStillPublishingTxt_StaysVerified()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+        var uid = await SeedUserAsync(db);
+        var dns = new FakeDnsResolver();
+        var domain = await SeedVerifiedAsync(db, dns, uid, "go.example.com");
+        dns.Records[Opts.VerificationHost("go.example.com")] = [Opts.ExpectedTxtValue(domain.VerificationToken)];
+
+        var demoted = await MakeSvc(db.CreateContext(), dns).RecheckVerifiedAsync();
+        Assert.Equal(0, demoted);
+
+        await using var ctx = db.CreateContext();
+        var stored = await ctx.CustomDomainEntities.FindAsync(domain.Id);
+        Assert.Equal(DomainVerificationStatus.Verified, stored!.VerificationStatus);
+        Assert.True(stored.IsActive);
+    }
+
+    [Fact]
+    public async Task Recheck_IgnoresPendingDomains()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+        var uid = await SeedUserAsync(db);
+        var dns = new FakeDnsResolver();
+        var added = await MakeSvc(db.CreateContext(), dns).AddAsync("pending.example.com", uid); // Pending
+
+        var demoted = await MakeSvc(db.CreateContext(), dns).RecheckVerifiedAsync();
+        Assert.Equal(0, demoted);
+
+        await using var ctx = db.CreateContext();
+        var stored = await ctx.CustomDomainEntities.FindAsync(added.Id);
+        Assert.Equal(DomainVerificationStatus.Pending, stored!.VerificationStatus);
+    }
 }

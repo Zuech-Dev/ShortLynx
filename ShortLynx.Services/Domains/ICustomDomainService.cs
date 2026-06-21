@@ -21,4 +21,10 @@ public interface ICustomDomainService
 
     /// <summary>Removes a user's domain. Returns false if it doesn't exist or isn't theirs.</summary>
     Task<bool> RemoveAsync(Guid domainId, Guid userAccountId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Re-checks every currently-Verified domain's TXT record and demotes any that no longer match to
+    /// Failed + inactive (so pinned links stop resolving). System-wide; returns the number demoted.
+    /// </summary>
+    Task<int> RecheckVerifiedAsync(CancellationToken ct = default);
 }

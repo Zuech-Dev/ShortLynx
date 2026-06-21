@@ -77,6 +77,8 @@ internal sealed class FakeCustomDomainService : ICustomDomainService
         Removed.Add((domainId, userAccountId));
         return Task.FromResult(Domains.RemoveAll(d => d.Id == domainId) > 0);
     }
+
+    public Task<int> RecheckVerifiedAsync(CancellationToken ct = default) => Task.FromResult(0);
 }
 
 internal sealed class FakeLinkService : ILinkService

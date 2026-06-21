@@ -111,6 +111,30 @@ public partial class ShortLynxDbContext
                     entity.Property(e => e.Id).ValueGeneratedNever();
                     entity.Property(e => e.VerificationStatus).HasConversion<int>();
                 }
+            )
+           .Entity<AccountEntity>(entity =>
+                {
+                    entity.HasKey(e => e.Id);
+                    entity.Property(e => e.Id).ValueGeneratedNever();
+                    entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
+                }
+            )
+           .Entity<MembershipEntity>(entity =>
+                {
+                    entity.HasKey(e => e.Id);
+                    entity.Property(e => e.Id).ValueGeneratedNever();
+                    // A user has at most one membership per account.
+                    entity.HasIndex(e => new { e.AccountId, e.UserAccountId }).IsUnique();
+                    entity.Property(e => e.Role).HasConversion<int>();
+                    entity.HasOne(e => e.Account)
+                          .WithMany(a => a.Memberships)
+                          .HasForeignKey(e => e.AccountId)
+                          .OnDelete(DeleteBehavior.Cascade);
+                    entity.HasOne(e => e.UserAccount)
+                          .WithMany(u => u.Memberships)
+                          .HasForeignKey(e => e.UserAccountId)
+                          .OnDelete(DeleteBehavior.Cascade);
+                }
             );
 
         OnModelCreatingPartial(modelBuilder);

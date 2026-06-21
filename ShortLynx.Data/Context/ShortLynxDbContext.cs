@@ -5,9 +5,11 @@ namespace ShortLynx.Data.Context;
 
 public partial class ShortLynxDbContext(DbContextOptions<ShortLynxDbContext> options) : DbContext(options)
 {
+    public DbSet<AccountEntity> AccountEntities { get; set; }
     public DbSet<ApiKeyEntity> ApiKeyEntities { get; set; }
     public DbSet<CustomDomainEntity> CustomDomainEntities { get; set; }
     public DbSet<LinkEntity> LinkEntities { get; set; }
+    public DbSet<MembershipEntity> MembershipEntities { get; set; }
     public DbSet<MagicLinkTokenEntity> MagicLinkTokenEntities { get; set; }
     public DbSet<ShortCodeEntity> ShortCodeEntities { get; set; }
     public DbSet<UserAccountEntity> UserAccountEntities { get; set; }

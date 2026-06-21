@@ -109,4 +109,21 @@ internal static class EntityFactory
         VerificationToken = "verify-me-txt-value",
         VerifiedAt = null,
     };
+
+    internal static AccountEntity Account(string name = "Test Account") => new()
+    {
+        Id = Guid.CreateVersion7(),
+        Name = name,
+        CreatedAt = DateTimeOffset.UtcNow,
+        IsActive = true,
+    };
+
+    internal static MembershipEntity Membership(Guid accountId, Guid userAccountId, AccountRole role = AccountRole.Owner) => new()
+    {
+        Id = Guid.CreateVersion7(),
+        AccountId = accountId,
+        UserAccountId = userAccountId,
+        Role = role,
+        CreatedAt = DateTimeOffset.UtcNow,
+    };
 }

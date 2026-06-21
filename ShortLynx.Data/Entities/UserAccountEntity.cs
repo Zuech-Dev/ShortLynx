@@ -19,4 +19,5 @@ public class UserAccountEntity
 
     public virtual ICollection<MagicLinkTokenEntity> MagicLinkTokens { get; set; } = [];
     public virtual ICollection<CustomDomainEntity> CustomDomains { get; set; } = [];
+    public virtual ICollection<MembershipEntity> Memberships { get; set; } = [];
 }

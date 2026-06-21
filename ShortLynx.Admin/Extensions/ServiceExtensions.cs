@@ -55,6 +55,7 @@ public static class ServiceExtensions
         services.Configure<MagicLinkOptions>(configuration.GetSection("MagicLink"));
         services.Configure<SmtpEmailOptions>(configuration.GetSection("Email"));
         services.Configure<AdminOptions>(configuration.GetSection("Admin"));
+        services.Configure<DashboardOptions>(configuration.GetSection("Dashboard"));
         services.Configure<ResendOptions>(configuration.GetSection("Resend"));
         services.Configure<ShortCodeOptions>(configuration.GetSection("ShortCode"));
         services.Configure<UrlValidationOptions>(configuration.GetSection("UrlValidation"));

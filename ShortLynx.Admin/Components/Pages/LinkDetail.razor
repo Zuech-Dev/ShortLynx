@@ -1,6 +1,12 @@
 @page "/links/{Id:guid}"
 @attribute [Authorize]
+@using Microsoft.Extensions.DependencyInjection
+@using Microsoft.Extensions.Options
+@using ShortLynx.Services.Links
 @inject IDbContextFactory<ShortLynxDbContext> DbFactory
+@inject IServiceScopeFactory ScopeFactory
+@inject IOptions<DashboardOptions> DashboardOpts
+@inject IJSRuntime JS
 @inject NavigationManager Nav
 
 <PageTitle>Link Detail — ShortLynx Admin</PageTitle>
@@ -71,6 +77,44 @@ else
     }
     else
     {
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body">
+                <h5 class="card-title">Provision codes</h5>
+                <p class="text-muted small">One recipient per line (e.g. an email or campaign tag). A unique short code is minted for each.</p>
+                <EditForm Model="_provision" OnValidSubmit="ProvisionCodes">
+                    <div class="mb-2">
+                        <InputTextArea class="form-control font-monospace" rows="4" @bind-Value="_provision.Recipients"
+                                       placeholder="alice@example.com&#10;bob@example.com" data-testid="provision-input"/>
+                    </div>
+                    <div class="form-check mb-2">
+                        <InputCheckbox class="form-check-input" id="one-time" @bind-Value="_provision.IsOneTimeUse"/>
+                        <label class="form-check-label" for="one-time">One-time use <span class="text-muted small">— each code redirects only once</span></label>
+                    </div>
+                    @if (_provisionError is not null)
+                    {
+                        <div class="text-danger small mb-2" data-testid="provision-error">@_provisionError</div>
+                    }
+                    <button type="submit" class="btn btn-primary btn-sm" data-testid="provision-submit">Provision codes</button>
+                </EditForm>
+
+                @if (_minted.Count > 0)
+                {
+                    <div class="alert alert-success mt-3 mb-0" data-testid="minted">
+                        <div class="d-flex align-items-center mb-2">
+                            <span class="fw-semibold">@_minted.Count code(s) ready.</span>
+                            <button class="btn btn-sm btn-outline-success ms-auto" @onclick="CopyAllMinted">Copy all</button>
+                        </div>
+                        <ul class="list-unstyled mb-0 small font-monospace">
+                            @foreach (var m in _minted)
+                            {
+                                <li>@(m.Recipient ?? "—") → <a href="@m.Url" target="_blank" rel="noopener">@m.Url</a></li>
+                            }
+                        </ul>
+                    </div>
+                }
+            </div>
+        </div>
+
         <h5>User Code Analytics</h5>
         @if (_userRows.Count == 0)
         {
@@ -80,14 +124,14 @@ else
         {
             <table class="table table-sm table-hover">
                 <thead class="table-light">
-                <tr><th>Code</th><th>User ID</th><th class="text-end">Clicks</th></tr>
+                <tr><th>Recipient</th><th>Code</th><th class="text-end">Clicks</th></tr>
                 </thead>
                 <tbody>
                 @foreach (var r in _userRows)
                 {
                     <tr>
+                        <td>@(r.Recipient ?? "—") @if (r.IsOneTimeUse) { <span class="badge bg-warning text-dark">one-time</span> }</td>
                         <td><code>@r.Code</code></td>
-                        <td class="text-muted small font-monospace">@r.UserId</td>
                         <td class="text-end">@r.Clicks</td>
                     </tr>
                 }
@@ -177,12 +221,57 @@ else
                 .ToListAsync();
 
             var clickMap = clicks.ToDictionary(x => x.Id, x => x.Count);
-            _userRows = codes.Select(c => new UserCodeRow(c.Code, c.UserId,
+            _userRows = codes.Select(c => new UserCodeRow(c.Code, c.Recipient, c.IsOneTimeUse,
                 clickMap.GetValueOrDefault(c.Id, 0))).ToList();
         }
 
         _loaded = true;
     }
 
-    sealed record UserCodeRow(string Code, Guid UserId, int Clicks);
+    // ── Code provisioning (Mode 2) ────────────────────────────────────────────
+
+    readonly ProvisionForm _provision = new();
+    string? _provisionError;
+    List<MintedCode> _minted = [];
+
+    async Task ProvisionCodes()
+    {
+        _provisionError = null;
+
+        var recipients = (_provision.Recipients ?? string.Empty)
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(label => new CodeRecipient(Guid.CreateVersion7(), label))
+            .ToList();
+
+        if (recipients.Count == 0)
+        {
+            _provisionError = "Enter at least one recipient.";
+            return;
+        }
+
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        var svc = scope.ServiceProvider.GetRequiredService<ILinkService>();
+        var codes = await svc.CreateUserLinkCodesAsync(Id, recipients, _provision.IsOneTimeUse);
+
+        var baseUrl = DashboardOpts.Value;
+        _minted = codes.Select(c => new MintedCode(c.Recipient, baseUrl.BuildShortUrl(c.Code))).ToList();
+        _provision.Recipients = string.Empty;
+        await LoadAsync();
+    }
+
+    async Task CopyAllMinted()
+    {
+        var text = string.Join('\n', _minted.Select(m => m.Url));
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", text);
+    }
+
+    sealed class ProvisionForm
+    {
+        public string? Recipients { get; set; }
+        public bool IsOneTimeUse { get; set; }
+    }
+
+    sealed record MintedCode(string? Recipient, string Url);
+
+    sealed record UserCodeRow(string Code, string? Recipient, bool IsOneTimeUse, int Clicks);
 }

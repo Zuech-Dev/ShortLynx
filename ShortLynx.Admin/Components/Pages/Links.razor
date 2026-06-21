@@ -5,6 +5,7 @@
 @using ShortLynx.Services.Links
 @inject IDbContextFactory<ShortLynxDbContext> DbFactory
 @inject IServiceScopeFactory ScopeFactory
+@inject NavigationManager Nav
 @inject IJSRuntime JS
 
 <PageTitle>Links — ShortLynx Admin</PageTitle>
@@ -44,7 +45,22 @@
                         <div class="text-danger small mt-1" data-testid="create-error">@_createError</div>
                     }
                 </div>
-                <button type="submit" class="btn btn-primary btn-sm">Create link</button>
+                <div class="mb-3">
+                    <label class="form-label d-block">Link type</label>
+                    <InputRadioGroup @bind-Value="_form.Mode">
+                        <div class="form-check form-check-inline">
+                            <InputRadio class="form-check-input" id="mode-anon" Value="LinkMode.Anonymous"/>
+                            <label class="form-check-label" for="mode-anon">Anonymous <span class="text-muted small">— one shared short code, aggregate clicks</span></label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <InputRadio class="form-check-input" id="mode-user" Value="LinkMode.UserAttributed"/>
+                            <label class="form-check-label" for="mode-user">User-attributed <span class="text-muted small">— a code per recipient, per-recipient clicks</span></label>
+                        </div>
+                    </InputRadioGroup>
+                </div>
+                <button type="submit" class="btn btn-primary btn-sm" data-testid="create-submit">
+                    @(_form.Mode == LinkMode.UserAttributed ? "Create & add recipients" : "Create link")
+                </button>
             </EditForm>
         </div>
     </div>
@@ -175,6 +191,17 @@ else
         {
             await using var scope = ScopeFactory.CreateAsyncScope();
             var svc = scope.ServiceProvider.GetRequiredService<ILinkService>();
+
+            if (_form.Mode == LinkMode.UserAttributed)
+            {
+                // Mode-2 links have no shared code — go straight to the detail page to add recipients.
+                var link = await svc.CreateUserAttributedLinkAsync(_form.Url!, _uid);
+                _form = new();
+                _showCreate = false;
+                Nav.NavigateTo($"/links/{link.Id}");
+                return;
+            }
+
             var result = await svc.CreateAnonymousLinkAsync(_form.Url!, _uid);
             _newShortCode = result.ShortCode.Code;
             _form = new();
@@ -201,5 +228,7 @@ else
     {
         [Required(ErrorMessage = "URL is required."), Url(ErrorMessage = "Enter a valid URL.")]
         public string? Url { get; set; }
+
+        public LinkMode Mode { get; set; } = LinkMode.Anonymous;
     }
 }

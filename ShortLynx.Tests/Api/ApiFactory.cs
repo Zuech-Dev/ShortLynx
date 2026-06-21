@@ -19,6 +19,7 @@ public sealed class ApiFactory : WebApplicationFactory<ShortLynx.Core.CoreApiEnt
 {
     private readonly SqliteConnection _connection;
     public readonly InMemoryEmailSender EmailSender = new();
+    public readonly InMemoryDnsResolver Dns = new();
 
     public ApiFactory()
     {
@@ -69,6 +70,11 @@ public sealed class ApiFactory : WebApplicationFactory<ShortLynx.Core.CoreApiEnt
             var emailDescriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IEmailSender));
             if (emailDescriptor is not null) services.Remove(emailDescriptor);
             services.AddSingleton<IEmailSender>(EmailSender);
+
+            // Replace the real DNS resolver so domain verification is deterministic in tests.
+            var dnsDescriptor = services.FirstOrDefault(d => d.ServiceType == typeof(ShortLynx.Services.Domains.IDnsResolver));
+            if (dnsDescriptor is not null) services.Remove(dnsDescriptor);
+            services.AddSingleton<ShortLynx.Services.Domains.IDnsResolver>(Dns);
 
             // Ensure the schema is created before tests run.
             using var scope = services.BuildServiceProvider().CreateScope();

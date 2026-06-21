@@ -117,6 +117,38 @@ public class LinksController(ILinkService linkService, ShortLynxDbContext db) : 
         return Ok(response);
     }
 
+    // PUT /links/{id}/domain — pin (or unpin) the link to a verified custom domain.
+    [HttpPut("{id:guid}/domain")]
+    [RequireScope(Scopes.LinksWrite)]
+    public async Task<IActionResult> SetLinkDomain(
+        Guid id,
+        [FromBody] SetLinkDomainRequest request,
+        CancellationToken ct)
+    {
+        var link = await db.LinkEntities
+            .Where(l => l.Id == id && l.ApiKeyId == CurrentKey.Id)
+            .FirstOrDefaultAsync(ct);
+
+        if (link is null) return NotFound();
+
+        if (request.CustomDomainId is { } domainId)
+        {
+            if (CurrentKey.UserAccountId is not { } userId)
+                return BadRequest(new { error = "This API key is not associated with a user account; pinning requires an owned, verified domain." });
+
+            var ownsVerified = await db.CustomDomainEntities.AnyAsync(
+                d => d.Id == domainId
+                  && d.UserAccountId == userId
+                  && d.VerificationStatus == DomainVerificationStatus.Verified, ct);
+            if (!ownsVerified)
+                return BadRequest(new { error = "Domain not found, not owned by this key's user, or not verified." });
+        }
+
+        link.CustomDomainId = request.CustomDomainId;
+        await db.SaveChangesAsync(ct);
+        return NoContent();
+    }
+
     // GET /links/{id}/analytics
     [HttpGet("{id:guid}/analytics")]
     [RequireScope(Scopes.AnalyticsRead)]

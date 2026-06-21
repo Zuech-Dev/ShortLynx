@@ -2,6 +2,7 @@ using System.Threading.RateLimiting;
 using Microsoft.Extensions.Options;
 using ShortLynx.Core.RateLimit;
 using ShortLynx.Services.ApiKeys;
+using ShortLynx.Services.Domains;
 using ShortLynx.Services.Email;
 using ShortLynx.Services.Links;
 using ShortLynx.Services.MagicLinks;
@@ -32,6 +33,7 @@ public static class ServiceExtensions
         services.Configure<VisitSinkOptions>(configuration.GetSection("VisitSink"));
         services.Configure<SmtpEmailOptions>(configuration.GetSection("Email"));
         services.Configure<ResendOptions>(configuration.GetSection("Resend"));
+        services.Configure<CustomDomainOptions>(configuration.GetSection("CustomDomain"));
 
         services.AddHttpClient<IEmailSender, ResendEmailSender>();
         services.AddScoped<IApiKeyService, ApiKeyService>();
@@ -39,6 +41,8 @@ public static class ServiceExtensions
         services.AddSingleton<IUrlValidationService, UrlValidationService>();
         services.AddScoped<ILinkService, LinkService>();
         services.AddScoped<IMagicLinkService, MagicLinkService>();
+        services.AddScoped<ICustomDomainService, CustomDomainService>();
+        services.AddSingleton<IDnsResolver, DnsClientResolver>();
 
         services.AddSingleton<InMemoryVisitEventSink>();
         services.AddSingleton<IVisitEventSink>(sp => sp.GetRequiredService<InMemoryVisitEventSink>());

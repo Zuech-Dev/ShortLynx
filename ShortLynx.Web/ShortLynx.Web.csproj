@@ -19,4 +19,23 @@
         <ProjectReference Include="..\ShortLynx.Services\ShortLynx.Services.csproj" />
     </ItemGroup>
 
+    <!-- Tailwind CSS via the standalone CLI. tools/tailwindcss is git-ignored and platform-specific
+         (download per machine). wwwroot/css/tailwind.css is generated from Styles/app.tailwind.css
+         on every build when the CLI is present; output is minified for Release builds. -->
+    <PropertyGroup>
+        <TailwindCli>$(MSBuildProjectDirectory)/tools/tailwindcss</TailwindCli>
+        <TailwindInput>$(MSBuildProjectDirectory)/Styles/app.tailwind.css</TailwindInput>
+        <TailwindOutput>$(MSBuildProjectDirectory)/wwwroot/css/tailwind.css</TailwindOutput>
+        <TailwindMinify Condition="'$(Configuration)' == 'Release'">--minify</TailwindMinify>
+    </PropertyGroup>
+
+    <Target Name="BuildTailwind" BeforeTargets="Build" Condition="Exists('$(TailwindCli)')">
+        <Message Importance="high" Text="Tailwind: generating $(TailwindOutput)" />
+        <Exec Command="&quot;$(TailwindCli)&quot; -i &quot;$(TailwindInput)&quot; -o &quot;$(TailwindOutput)&quot; $(TailwindMinify)" />
+    </Target>
+
+    <Target Name="WarnTailwindMissing" BeforeTargets="Build" Condition="!Exists('$(TailwindCli)')">
+        <Warning Text="Tailwind CLI not found at $(TailwindCli); wwwroot/css/tailwind.css was not regenerated. Download it: curl -sL -o &quot;$(TailwindCli)&quot; https://github.com/tailwindlabs/tailwindcss/releases/latest/download/tailwindcss-macos-arm64 &amp;&amp; chmod +x &quot;$(TailwindCli)&quot;" />
+    </Target>
+
 </Project>

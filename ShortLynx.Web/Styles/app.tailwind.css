@@ -1,0 +1,19 @@
+/* Tailwind v4 — compiled by the standalone CLI into wwwroot/css/tailwind.css.
+   Bootstrap has been removed; preflight (Tailwind's reset) is enabled. */
+
+@layer theme, base, components, utilities;
+
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/preflight.css" layer(base);
+@import "tailwindcss/utilities.css" layer(utilities);
+
+/* Files scanned for class names (paths are relative to this stylesheet). */
+@source "../Pages";
+
+@layer components {
+    .btn {
+        @apply inline-flex items-center justify-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium
+               transition-colors cursor-pointer;
+    }
+    .btn-primary { @apply bg-blue-600 text-white hover:bg-blue-700; }
+}

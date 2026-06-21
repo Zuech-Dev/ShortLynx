@@ -20,6 +20,7 @@ secrets.json
 
 # Tailwind standalone CLI binary (platform-specific, large) — fetch per machine
 ShortLynx.Admin/tools/tailwindcss
+ShortLynx.Web/tools/tailwindcss
 
 ## A streamlined .gitignore for modern .NET projects
 ## including temporary files, build results, and

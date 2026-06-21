@@ -226,7 +226,7 @@ public class EntityConstraintTests
         {
             var key = EntityFactory.ApiKey();
             var link = EntityFactory.AnonymousLink(key.Id);
-            link.Mode = LinkMode.UserAtrributed;
+            link.Mode = LinkMode.UserAttributed;
             ctx.AddRange(key, link);
             await ctx.SaveChangesAsync();
             linkId = link.Id;
@@ -235,7 +235,7 @@ public class EntityConstraintTests
         await using (var ctx = db.CreateContext())
         {
             var link = await ctx.LinkEntities.FindAsync(linkId);
-            Assert.Equal(LinkMode.UserAtrributed, link!.Mode);
+            Assert.Equal(LinkMode.UserAttributed, link!.Mode);
         }
     }
 

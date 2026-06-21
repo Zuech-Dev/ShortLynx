@@ -1,6 +1,7 @@
 using ShortLynx.Data.Entities;
 using ShortLynx.Data.Enums;
 using ShortLynx.Services.ApiKeys;
+using ShortLynx.Services.Domains;
 using ShortLynx.Services.Links;
 
 namespace ShortLynx.Tests.Admin;
@@ -31,6 +32,50 @@ internal sealed class FakeApiKeyService : IApiKeyService
     {
         Revoked.Add((keyId, userAccountId));
         return Task.FromResult(true);
+    }
+}
+
+internal sealed class FakeCustomDomainService : ICustomDomainService
+{
+    public readonly List<CustomDomainEntity> Domains = [];
+    public readonly List<(Guid Id, Guid Uid)> Verified = [];
+    public readonly List<(Guid Id, Guid Uid)> Removed = [];
+    public bool ThrowOnAdd;
+
+    public Task<CustomDomainEntity> AddAsync(string domain, Guid userAccountId, CancellationToken ct = default)
+    {
+        if (ThrowOnAdd) throw new InvalidOperationException($"The domain '{domain}' is already registered.");
+        var entity = new CustomDomainEntity
+        {
+            Id = Guid.CreateVersion7(), UserAccountId = userAccountId, Domain = domain,
+            CreatedAt = DateTimeOffset.UtcNow, IsActive = false,
+            VerificationStatus = DomainVerificationStatus.Pending, VerificationToken = "tok-123",
+        };
+        Domains.Add(entity);
+        return Task.FromResult(entity);
+    }
+
+    public Task<IReadOnlyList<CustomDomainEntity>> ListAsync(Guid userAccountId, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<CustomDomainEntity>>(
+            Domains.Where(d => d.UserAccountId == userAccountId).ToList());
+
+    public Task<CustomDomainEntity?> VerifyAsync(Guid domainId, Guid userAccountId, CancellationToken ct = default)
+    {
+        Verified.Add((domainId, userAccountId));
+        var d = Domains.FirstOrDefault(x => x.Id == domainId);
+        if (d is not null)
+        {
+            d.VerificationStatus = DomainVerificationStatus.Verified;
+            d.IsActive = true;
+            d.VerifiedAt = DateTimeOffset.UtcNow;
+        }
+        return Task.FromResult(d);
+    }
+
+    public Task<bool> RemoveAsync(Guid domainId, Guid userAccountId, CancellationToken ct = default)
+    {
+        Removed.Add((domainId, userAccountId));
+        return Task.FromResult(Domains.RemoveAll(d => d.Id == domainId) > 0);
     }
 }
 

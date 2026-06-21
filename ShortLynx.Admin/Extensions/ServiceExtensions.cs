@@ -5,6 +5,7 @@ using ShortLynx.Data.Context;
 using ShortLynx.Data.Operations;
 using ShortLynx.Repository;
 using ShortLynx.Services.ApiKeys;
+using ShortLynx.Services.Domains;
 using ShortLynx.Services.Email;
 using ShortLynx.Services.Links;
 using ShortLynx.Services.MagicLinks;
@@ -59,6 +60,7 @@ public static class ServiceExtensions
         services.Configure<ResendOptions>(configuration.GetSection("Resend"));
         services.Configure<ShortCodeOptions>(configuration.GetSection("ShortCode"));
         services.Configure<UrlValidationOptions>(configuration.GetSection("UrlValidation"));
+        services.Configure<CustomDomainOptions>(configuration.GetSection("CustomDomain"));
 
         services.AddHttpClient<IEmailSender, ResendEmailSender>();
         services.AddScoped<IApiKeyService, ApiKeyService>();
@@ -67,6 +69,9 @@ public static class ServiceExtensions
         services.AddScoped<ILinkService, LinkService>();
         services.AddScoped<IShortCodeGenerator, HashBase62Generator>();
         services.AddSingleton<IUrlValidationService, UrlValidationService>();
+        // Custom domains: management + DNS-TXT verification.
+        services.AddScoped<ICustomDomainService, CustomDomainService>();
+        services.AddSingleton<IDnsResolver, DnsClientResolver>();
 
         return services;
     }

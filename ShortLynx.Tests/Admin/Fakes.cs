@@ -37,6 +37,8 @@ internal sealed class FakeApiKeyService : IApiKeyService
 internal sealed class FakeLinkService : ILinkService
 {
     public readonly List<(string Url, Guid Uid)> Created = [];
+    public readonly List<(string Url, Guid Uid)> CreatedUserAttributed = [];
+    public readonly List<(Guid LinkId, IReadOnlyCollection<CodeRecipient> Recipients, bool OneTime)> Provisioned = [];
     public bool ThrowOnCreate;
     public string CodeToReturn = "abc12345";
 
@@ -60,7 +62,33 @@ internal sealed class FakeLinkService : ILinkService
         return Task.FromResult(new AnonymousLinkResult(link, sc));
     }
 
+    public Task<LinkEntity> CreateUserAttributedLinkAsync(string url, Guid userAccountId, CancellationToken ct = default)
+    {
+        if (ThrowOnCreate) throw new ArgumentException("blocked URL", nameof(url));
+        CreatedUserAttributed.Add((url, userAccountId));
+        var link = new LinkEntity
+        {
+            Id = Guid.CreateVersion7(), OriginalUrl = url, UserAccountId = userAccountId,
+            Mode = LinkMode.UserAttributed, CreatedAt = DateTimeOffset.UtcNow, IsActive = true,
+        };
+        return Task.FromResult(link);
+    }
+
     public Task<IReadOnlyList<UserLinkCodeEntity>> CreateUserLinkCodesAsync(
         Guid linkId, IEnumerable<Guid> userIds, CancellationToken ct = default)
-        => throw new NotSupportedException();
+        => CreateUserLinkCodesAsync(linkId, userIds.Select(id => new CodeRecipient(id)).ToList(), false, ct);
+
+    public Task<IReadOnlyList<UserLinkCodeEntity>> CreateUserLinkCodesAsync(
+        Guid linkId, IReadOnlyCollection<CodeRecipient> recipients, bool isOneTimeUse, CancellationToken ct = default)
+    {
+        Provisioned.Add((linkId, recipients, isOneTimeUse));
+        var i = 0;
+        IReadOnlyList<UserLinkCodeEntity> codes = recipients.Select(r => new UserLinkCodeEntity
+        {
+            Id = Guid.CreateVersion7(), LinkId = linkId, UserId = r.UserId,
+            Code = $"{CodeToReturn}{i++}", CreatedAt = DateTimeOffset.UtcNow, IsActive = true,
+            IsOneTimeUse = isOneTimeUse, Recipient = r.Recipient,
+        }).ToList();
+        return Task.FromResult(codes);
+    }
 }

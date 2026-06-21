@@ -24,6 +24,28 @@ public sealed class LinkService(
         string url, Guid userAccountId, CancellationToken ct = default)
         => CreateLinkAsync(url, link => link.UserAccountId = userAccountId, ct);
 
+    /// <summary>Creates a user-owned, user-attributed (Mode 2) link with no anonymous short code.</summary>
+    public async Task<LinkEntity> CreateUserAttributedLinkAsync(
+        string url, Guid userAccountId, CancellationToken ct = default)
+    {
+        var validation = await urlValidator.ValidateAsync(url);
+        if (!validation.IsValid)
+            throw new ArgumentException(validation.Reason, nameof(url));
+
+        var link = new LinkEntity
+        {
+            Id = Guid.CreateVersion7(),
+            OriginalUrl = url,
+            Mode = LinkMode.UserAttributed,
+            CreatedAt = DateTimeOffset.UtcNow,
+            IsActive = true,
+            UserAccountId = userAccountId,
+        };
+        db.LinkEntities.Add(link);
+        await db.SaveChangesAsync(ct);
+        return link;
+    }
+
     private async Task<AnonymousLinkResult> CreateLinkAsync(
         string url, Action<LinkEntity> assignOwner, CancellationToken ct)
     {
@@ -77,16 +99,40 @@ public sealed class LinkService(
         throw new InvalidOperationException("Failed to generate a unique short code after maximum attempts.");
     }
 
-    public async Task<IReadOnlyList<UserLinkCodeEntity>> CreateUserLinkCodesAsync(
+    public Task<IReadOnlyList<UserLinkCodeEntity>> CreateUserLinkCodesAsync(
         Guid linkId, IEnumerable<Guid> userIds, CancellationToken ct = default)
+        => CreateUserLinkCodesAsync(
+            linkId, userIds.Select(id => new CodeRecipient(id)).ToList(), isOneTimeUse: false, ct);
+
+    public async Task<IReadOnlyList<UserLinkCodeEntity>> CreateUserLinkCodesAsync(
+        Guid linkId, IReadOnlyCollection<CodeRecipient> recipients, bool isOneTimeUse, CancellationToken ct = default)
     {
         var results = new List<UserLinkCodeEntity>();
 
-        foreach (var userId in userIds)
+        // Pre-load existing labels for this link so re-submitting the same dashboard list is idempotent
+        // even though each pasted recipient gets a fresh UserId.
+        var labels = recipients
+            .Select(r => r.Recipient)
+            .Where(l => l is not null)
+            .ToHashSet();
+        var existingByLabel = labels.Count == 0
+            ? new Dictionary<string, UserLinkCodeEntity>()
+            : await db.UserLinkCodeEntities
+                .Where(c => c.LinkId == linkId && c.Recipient != null && labels.Contains(c.Recipient))
+                .ToDictionaryAsync(c => c.Recipient!, ct);
+
+        foreach (var recipient in recipients)
         {
-            // Idempotency: return existing code rather than inserting a duplicate.
+            // Dedupe by label (dashboard path) …
+            if (recipient.Recipient is { } label && existingByLabel.TryGetValue(label, out var byLabel))
+            {
+                results.Add(byLabel);
+                continue;
+            }
+
+            // … and by (linkId, userId) (API idempotency).
             var existing = await db.UserLinkCodeEntities
-                .FirstOrDefaultAsync(c => c.LinkId == linkId && c.UserId == userId, ct);
+                .FirstOrDefaultAsync(c => c.LinkId == linkId && c.UserId == recipient.UserId, ct);
             if (existing is not null)
             {
                 results.Add(existing);
@@ -95,21 +141,25 @@ public sealed class LinkService(
 
             for (var attempt = 0; attempt <= MaxCodeAttempts; attempt++)
             {
-                var code = codeGenerator.Generate(linkId, userId, attempt);
+                var code = codeGenerator.Generate(linkId, recipient.UserId, attempt);
                 var entity = new UserLinkCodeEntity
                 {
                     Id = Guid.CreateVersion7(),
                     LinkId = linkId,
-                    UserId = userId,
+                    UserId = recipient.UserId,
                     Code = code,
                     CreatedAt = DateTimeOffset.UtcNow,
                     IsActive = true,
+                    IsOneTimeUse = isOneTimeUse,
+                    Recipient = recipient.Recipient,
                 };
                 db.UserLinkCodeEntities.Add(entity);
                 try
                 {
                     await db.SaveChangesAsync(ct);
                     results.Add(entity);
+                    if (recipient.Recipient is { } addedLabel)
+                        existingByLabel[addedLabel] = entity;
                     break;
                 }
                 catch (DbUpdateException) when (attempt < MaxCodeAttempts)

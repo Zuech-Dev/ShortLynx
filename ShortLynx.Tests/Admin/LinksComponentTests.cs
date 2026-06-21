@@ -61,4 +61,19 @@ public class LinksComponentTests : BunitContext
         Assert.Empty(_links.Created);
         Assert.Contains("blocked URL", cut.Markup);
     }
+
+    [Fact]
+    public void CreateLink_UserAttributedMode_CallsMode2Path()
+    {
+        var cut = Render<Links>();
+        cut.Find("button.btn-primary").Click();                       // + New link
+        cut.Find("input.form-control").Change("https://example.com"); // URL
+        cut.Find("#mode-user").Change("UserAttributed");              // switch to user-attributed
+        cut.Find("form").Submit();
+
+        // Routed through the Mode-2 creation path, not the anonymous one.
+        Assert.Empty(_links.Created);
+        Assert.Single(_links.CreatedUserAttributed);
+        Assert.Equal(_uid, _links.CreatedUserAttributed[0].Uid);
+    }
 }

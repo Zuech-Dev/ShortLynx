@@ -25,6 +25,12 @@ public partial class ShortLynxDbContext
                           .WithMany()
                           .HasForeignKey(e => e.UserAccountId)
                           .OnDelete(DeleteBehavior.NoAction);
+                    // Optional pin to a verified custom domain. Removing the domain unpins the link
+                    // (SetNull) rather than blocking the delete.
+                    entity.HasOne(e => e.CustomDomain)
+                          .WithMany()
+                          .HasForeignKey(e => e.CustomDomainId)
+                          .OnDelete(DeleteBehavior.SetNull);
                     entity.Property(e => e.Id).ValueGeneratedNever();
                     entity.Property(e => e.Mode).HasConversion<int>();
                     entity.Property(e => e.OriginalUrl).IsRequired();

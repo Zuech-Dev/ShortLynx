@@ -21,8 +21,13 @@ public class LinkEntity
     public Guid? ApiKeyId { get; set; }
     public Guid? UserAccountId { get; set; }
 
+    // Optional: pin this link to a specific verified custom domain. When set, the redirect only
+    // resolves the link's codes under that host; when null, the link resolves on any host.
+    public Guid? CustomDomainId { get; set; }
+
     public ICollection<VisitEntity> Visits { get; set; } = [];
     public UserLinkCodeEntity? UserLinkCode { get; set; } = null;
     public virtual ApiKeyEntity? ApiKey { get; set; }
     public virtual UserAccountEntity? UserAccount { get; set; }
+    public virtual CustomDomainEntity? CustomDomain { get; set; }
 }

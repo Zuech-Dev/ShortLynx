@@ -44,7 +44,7 @@ app.MapGet("/{code}", async (
     IRedirectService redirectSvc,
     IVisitEventSink sink) =>
 {
-    var entry = await redirectSvc.LookupAsync(code, ctx.RequestAborted);
+    var entry = await redirectSvc.LookupAsync(code, ctx.Request.Host.Host, ctx.RequestAborted);
     if (entry is null) return Results.NotFound();
 
     var ip = ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown";

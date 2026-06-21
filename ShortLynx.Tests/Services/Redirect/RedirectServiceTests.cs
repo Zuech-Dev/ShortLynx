@@ -23,6 +23,21 @@ public class RedirectServiceTests
         return (key, link);
     }
 
+    // Seeds a user + verified custom domain + a link pinned to that domain. Returns the link and host.
+    private static async Task<(ShortLynx.Data.Entities.LinkEntity Link, string Host)>
+        SeedPinnedLinkAsync(TestDatabase db, string host = "go.example.com")
+    {
+        var user = EntityFactory.UserAccount($"{Guid.NewGuid():N}@example.com");
+        var domain = EntityFactory.CustomDomain(user.Id, host);
+        var link = EntityFactory.UserOwnedLink(user.Id);
+        link.CustomDomainId = domain.Id;
+
+        await using var ctx = db.CreateContext();
+        ctx.AddRange(user, domain, link);
+        await ctx.SaveChangesAsync();
+        return (link, host);
+    }
+
     // ── Unknown code ──────────────────────────────────────────────────────────
 
     [Fact]
@@ -308,6 +323,75 @@ public class RedirectServiceTests
         // The second lookup still returns null because the miss was cached (didn't re-hit the DB).
         var second = await MakeSvc(db.CreateContext(), sharedCache).LookupAsync("ghostcode");
         Assert.Null(second);
+    }
+
+    // ── Custom-domain pinning ─────────────────────────────────────────────────
+
+    [Fact]
+    public async Task LookupAsync_PinnedLink_ResolvesOnlyOnMatchingHost()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+        var (link, host) = await SeedPinnedLinkAsync(db);
+
+        await using (var ctx = db.CreateContext())
+        {
+            ctx.ShortCodeEntities.Add(EntityFactory.ShortCode(link.Id, "pinned01"));
+            await ctx.SaveChangesAsync();
+        }
+
+        var match = await MakeSvc(db.CreateContext()).LookupAsync("pinned01", host);
+        Assert.NotNull(match);
+
+        var wrongHost = await MakeSvc(db.CreateContext()).LookupAsync("pinned01", "evil.example.com");
+        Assert.Null(wrongHost);
+
+        var noHost = await MakeSvc(db.CreateContext()).LookupAsync("pinned01");
+        Assert.Null(noHost);
+    }
+
+    [Fact]
+    public async Task LookupAsync_PinnedLink_WrongHostFromCache_StillRejected()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+        var (link, host) = await SeedPinnedLinkAsync(db);
+
+        await using (var ctx = db.CreateContext())
+        {
+            ctx.ShortCodeEntities.Add(EntityFactory.ShortCode(link.Id, "pinned02"));
+            await ctx.SaveChangesAsync();
+        }
+
+        var sharedCache = new MemoryCache(new MemoryCacheOptions());
+        // Prime the cache with a matching-host lookup, then a wrong-host lookup must still be rejected.
+        Assert.NotNull(await MakeSvc(db.CreateContext(), sharedCache).LookupAsync("pinned02", host));
+        Assert.Null(await MakeSvc(db.CreateContext(), sharedCache).LookupAsync("pinned02", "evil.example.com"));
+    }
+
+    [Fact]
+    public async Task LookupAsync_PinnedOneTimeCode_WrongHost_DoesNotConsume()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+        var (link, host) = await SeedPinnedLinkAsync(db);
+
+        Guid ulcId;
+        await using (var ctx = db.CreateContext())
+        {
+            var ulc = EntityFactory.UserLinkCode(link.Id, Guid.CreateVersion7(), "pin1time");
+            ulc.IsOneTimeUse = true;
+            ctx.UserLinkCodeEntities.Add(ulc);
+            await ctx.SaveChangesAsync();
+            ulcId = ulc.Id;
+        }
+
+        // Wrong host is rejected and must NOT burn the one-time code.
+        Assert.Null(await MakeSvc(db.CreateContext()).LookupAsync("pin1time", "evil.example.com"));
+        await using (var ctx = db.CreateContext())
+            Assert.False((await ctx.UserLinkCodeEntities.FindAsync(ulcId))!.IsUsed);
+
+        // Correct host resolves and consumes it.
+        Assert.NotNull(await MakeSvc(db.CreateContext()).LookupAsync("pin1time", host));
+        await using (var ctx = db.CreateContext())
+            Assert.True((await ctx.UserLinkCodeEntities.FindAsync(ulcId))!.IsUsed);
     }
 
     [Fact]

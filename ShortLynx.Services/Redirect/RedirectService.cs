@@ -24,28 +24,28 @@ public sealed class RedirectService(
         .SetAbsoluteExpiration(TimeSpan.FromSeconds(options.Value.CacheNegativeSeconds))
         .SetSize(1);
 
-    public async Task<RedirectCacheEntry?> LookupAsync(string code, CancellationToken ct = default)
+    public async Task<RedirectCacheEntry?> LookupAsync(string code, string? host = null, CancellationToken ct = default)
     {
         var key = $"redirect:{code}";
         if (cache.TryGetValue(key, out RedirectCacheEntry? hit))
-            return ReferenceEquals(hit, NegativeSentinel) ? null : hit;
+            return ReferenceEquals(hit, NegativeSentinel) ? null : EnforceHost(hit!, host);
 
         // Mode 1 — anonymous short code
         var sc = await db.ShortCodeEntities
-            .Include(x => x.Link)
+            .Include(x => x.Link).ThenInclude(l => l.CustomDomain)
             .Where(x => x.Code == code && x.IsActive && x.Link.IsActive)
             .FirstOrDefaultAsync(ct);
 
         if (sc is not null)
         {
-            var entry = new RedirectCacheEntry(sc.Link.OriginalUrl, sc.Id, null, null);
+            var entry = new RedirectCacheEntry(sc.Link.OriginalUrl, sc.Id, null, null, sc.Link.CustomDomain?.Domain);
             cache.Set(key, entry, _cacheOpts);
-            return entry;
+            return EnforceHost(entry, host);
         }
 
         // Mode 2 — user-attributed code
         var ulc = await db.UserLinkCodeEntities
-            .Include(x => x.Link)
+            .Include(x => x.Link).ThenInclude(l => l.CustomDomain)
             .Where(x => x.Code == code && x.IsActive && x.Link.IsActive)
             .FirstOrDefaultAsync(ct);
 
@@ -55,6 +55,11 @@ public sealed class RedirectService(
             cache.Set(key, NegativeSentinel, _negativeCacheOpts);
             return null;
         }
+
+        var pinnedHost = ulc.Link.CustomDomain?.Domain;
+
+        // Reject the wrong host *before* claiming a one-time code, so a mismatched request can't burn it.
+        if (!HostMatches(pinnedHost, host)) return null;
 
         // One-time-use codes that have been redeemed must not redirect again.
         if (ulc.IsOneTimeUse)
@@ -70,7 +75,7 @@ public sealed class RedirectService(
             if (claimed == 0) return null;
         }
 
-        var mode2Entry = new RedirectCacheEntry(ulc.Link.OriginalUrl, null, ulc.Id, ulc.UserId);
+        var mode2Entry = new RedirectCacheEntry(ulc.Link.OriginalUrl, null, ulc.Id, ulc.UserId, pinnedHost);
 
         // Don't cache one-time-use codes — the IsUsed flag changes after first use.
         if (!ulc.IsOneTimeUse)
@@ -78,4 +83,11 @@ public sealed class RedirectService(
 
         return mode2Entry;
     }
+
+    // Pinned links resolve only under their host; unpinned links (null PinnedHost) resolve anywhere.
+    private static RedirectCacheEntry? EnforceHost(RedirectCacheEntry entry, string? host)
+        => HostMatches(entry.PinnedHost, host) ? entry : null;
+
+    private static bool HostMatches(string? pinnedHost, string? requestHost)
+        => pinnedHost is null || string.Equals(pinnedHost, requestHost, StringComparison.OrdinalIgnoreCase);
 }

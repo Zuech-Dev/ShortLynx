@@ -13,64 +13,64 @@
 
 @if (_notFound)
 {
-    <p class="text-danger">Link not found.</p>
-    <a href="/links" class="btn btn-sm btn-outline-secondary">← Back to Links</a>
+    <p class="text-red-600">Link not found.</p>
+    <a href="/links" class="btn btn-outline">← Back to Links</a>
 }
 else if (!_loaded)
 {
-    <p class="text-muted">Loading…</p>
+    <p class="text-gray-500">Loading…</p>
 }
 else
 {
-    <div class="d-flex align-items-center gap-2 mb-3">
-        <a href="/links" class="btn btn-sm btn-outline-secondary">← Back</a>
-        <h1 class="mb-0 fs-4">Link Detail</h1>
+    <div class="flex items-center gap-2 mb-3">
+        <a href="/links" class="btn btn-outline">← Back</a>
+        <h1 class="text-xl font-bold">Link Detail</h1>
     </div>
 
-    <div class="card border-0 shadow-sm mb-4">
+    <div class="card mb-4">
         <div class="card-body">
-            <dl class="row mb-0">
-                <dt class="col-sm-3">URL</dt>
-                <dd class="col-sm-9"><a href="@_link!.OriginalUrl" target="_blank" rel="noopener">@_link.OriginalUrl</a></dd>
+            <dl class="grid grid-cols-1 sm:grid-cols-[8rem_1fr] gap-x-4 gap-y-2 mb-0">
+                <dt class="font-medium text-gray-500">URL</dt>
+                <dd><a class="text-blue-700 hover:underline" href="@_link!.OriginalUrl" target="_blank" rel="noopener">@_link.OriginalUrl</a></dd>
 
-                <dt class="col-sm-3">Short Code</dt>
-                <dd class="col-sm-9"><code>@_shortCode</code></dd>
+                <dt class="font-medium text-gray-500">Short Code</dt>
+                <dd><code>@_shortCode</code></dd>
 
-                <dt class="col-sm-3">Mode</dt>
-                <dd class="col-sm-9">@_link.Mode</dd>
+                <dt class="font-medium text-gray-500">Mode</dt>
+                <dd>@_link.Mode</dd>
 
-                <dt class="col-sm-3">API Key</dt>
-                <dd class="col-sm-9">@(_link.ApiKey?.Name ?? "—")</dd>
+                <dt class="font-medium text-gray-500">API Key</dt>
+                <dd>@(_link.ApiKey?.Name ?? "—")</dd>
 
-                <dt class="col-sm-3">Created</dt>
-                <dd class="col-sm-9">@_link.CreatedAt.ToString("yyyy-MM-dd HH:mm") UTC</dd>
+                <dt class="font-medium text-gray-500">Created</dt>
+                <dd>@_link.CreatedAt.ToString("yyyy-MM-dd HH:mm") UTC</dd>
             </dl>
         </div>
     </div>
 
     @if (_canPin)
     {
-        <div class="card border-0 shadow-sm mb-4">
+        <div class="card mb-4">
             <div class="card-body">
                 <h5 class="card-title">Custom domain</h5>
-                <p class="text-muted small">Pin this link to one of your verified domains, or leave it on any host.</p>
-                <div class="d-flex gap-2 align-items-center" style="max-width:520px">
-                    <select class="form-select form-select-sm" @bind="_selectedDomainKey" data-testid="pin-select">
+                <p class="text-gray-500 text-sm">Pin this link to one of your verified domains, or leave it on any host.</p>
+                <div class="flex gap-2 items-center max-w-[520px]">
+                    <select class="field-input" @bind="_selectedDomainKey" data-testid="pin-select">
                         <option value="">Any host (no pin)</option>
                         @foreach (var d in _verifiedDomains)
                         {
                             <option value="@d.Id">@d.Domain</option>
                         }
                     </select>
-                    <button class="btn btn-sm btn-primary" data-testid="pin-save" @onclick="SavePin">Save</button>
+                    <button class="btn btn-primary" data-testid="pin-save" @onclick="SavePin">Save</button>
                 </div>
                 @if (_verifiedDomains.Count == 0)
                 {
-                    <div class="small text-muted mt-1">No verified domains yet — add one under <a href="/domains">Domains</a>.</div>
+                    <div class="text-sm text-gray-500 mt-1">No verified domains yet — add one under <a class="text-blue-700 hover:underline" href="/domains">Domains</a>.</div>
                 }
                 @if (_pinSaved)
                 {
-                    <div class="text-success small mt-1" data-testid="pin-saved">Saved.</div>
+                    <div class="text-green-600 text-sm mt-1" data-testid="pin-saved">Saved.</div>
                 }
             </div>
         </div>
@@ -78,64 +78,66 @@ else
 
     @if (_link.Mode == LinkMode.Anonymous)
     {
-        <h5>Click Analytics</h5>
-        <p class="text-muted">Total clicks: <strong>@_totalClicks</strong></p>
+        <h5 class="text-base font-semibold mb-2">Click Analytics</h5>
+        <p class="text-gray-500">Total clicks: <strong>@_totalClicks</strong></p>
 
         @if (_recentVisits.Count > 0)
         {
-            <table class="table table-sm table-hover">
-                <thead class="table-light">
+            <table class="data-table">
+                <thead>
                 <tr><th>Clicked At</th><th>Referrer</th></tr>
                 </thead>
                 <tbody>
                 @foreach (var v in _recentVisits)
                 {
                     <tr>
-                        <td class="text-nowrap">@v.ClickedAt.ToString("yyyy-MM-dd HH:mm") UTC</td>
-                        <td class="text-muted small text-truncate" style="max-width:300px">@(v.Referrer ?? "—")</td>
+                        <td class="whitespace-nowrap">@v.ClickedAt.ToString("yyyy-MM-dd HH:mm") UTC</td>
+                        <td class="text-gray-500 text-sm truncate max-w-[300px]">@(v.Referrer ?? "—")</td>
                     </tr>
                 }
                 </tbody>
             </table>
             @if (_totalClicks > 50)
             {
-                <p class="text-muted small">Showing 50 most recent clicks.</p>
+                <p class="text-gray-500 text-sm mt-1">Showing 50 most recent clicks.</p>
             }
         }
     }
     else
     {
-        <div class="card border-0 shadow-sm mb-4">
+        <div class="card mb-4">
             <div class="card-body">
                 <h5 class="card-title">Provision codes</h5>
-                <p class="text-muted small">One recipient per line (e.g. an email or campaign tag). A unique short code is minted for each.</p>
+                <p class="text-gray-500 text-sm">One recipient per line (e.g. an email or campaign tag). A unique short code is minted for each.</p>
                 <EditForm Model="_provision" OnValidSubmit="ProvisionCodes">
                     <div class="mb-2">
-                        <InputTextArea class="form-control font-monospace" rows="4" @bind-Value="_provision.Recipients"
+                        <InputTextArea class="field-input font-mono" rows="4" @bind-Value="_provision.Recipients"
                                        placeholder="alice@example.com&#10;bob@example.com" data-testid="provision-input"/>
                     </div>
-                    <div class="form-check mb-2">
-                        <InputCheckbox class="form-check-input" id="one-time" @bind-Value="_provision.IsOneTimeUse"/>
-                        <label class="form-check-label" for="one-time">One-time use <span class="text-muted small">— each code redirects only once</span></label>
-                    </div>
+                    <label class="inline-flex items-center gap-2 mb-2" for="one-time">
+                        <InputCheckbox id="one-time" @bind-Value="_provision.IsOneTimeUse"/>
+                        <span>One-time use <span class="text-gray-500 text-sm">— each code redirects only once</span></span>
+                    </label>
                     @if (_provisionError is not null)
                     {
-                        <div class="text-danger small mb-2" data-testid="provision-error">@_provisionError</div>
+                        <div class="text-red-600 text-sm mb-2" data-testid="provision-error">@_provisionError</div>
                     }
-                    <button type="submit" class="btn btn-primary btn-sm" data-testid="provision-submit">Provision codes</button>
+                    <div>
+                        <button type="submit" class="btn btn-primary" data-testid="provision-submit">Provision codes</button>
+                    </div>
                 </EditForm>
 
                 @if (_minted.Count > 0)
                 {
-                    <div class="alert alert-success mt-3 mb-0" data-testid="minted">
-                        <div class="d-flex align-items-center mb-2">
-                            <span class="fw-semibold">@_minted.Count code(s) ready.</span>
-                            <button class="btn btn-sm btn-outline-success ms-auto" @onclick="CopyAllMinted">Copy all</button>
+                    <div class="alert alert-success mt-3" data-testid="minted">
+                        <div class="flex items-center mb-2">
+                            <span class="font-semibold">@_minted.Count code(s) ready.</span>
+                            <button class="btn btn-outline-success ml-auto" @onclick="CopyAllMinted">Copy all</button>
                         </div>
-                        <ul class="list-unstyled mb-0 small font-monospace">
+                        <ul class="text-sm font-mono space-y-0.5">
                             @foreach (var m in _minted)
                             {
-                                <li>@(m.Recipient ?? "—") → <a href="@m.Url" target="_blank" rel="noopener">@m.Url</a></li>
+                                <li>@(m.Recipient ?? "—") → <a class="text-blue-700 hover:underline" href="@m.Url" target="_blank" rel="noopener">@m.Url</a></li>
                             }
                         </ul>
                     </div>
@@ -143,24 +145,24 @@ else
             </div>
         </div>
 
-        <h5>User Code Analytics</h5>
+        <h5 class="text-base font-semibold mb-2">User Code Analytics</h5>
         @if (_userRows.Count == 0)
         {
-            <p class="text-muted">No user codes provisioned yet.</p>
+            <p class="text-gray-500">No user codes provisioned yet.</p>
         }
         else
         {
-            <table class="table table-sm table-hover">
-                <thead class="table-light">
-                <tr><th>Recipient</th><th>Code</th><th class="text-end">Clicks</th></tr>
+            <table class="data-table">
+                <thead>
+                <tr><th>Recipient</th><th>Code</th><th class="text-right">Clicks</th></tr>
                 </thead>
                 <tbody>
                 @foreach (var r in _userRows)
                 {
                     <tr>
-                        <td>@(r.Recipient ?? "—") @if (r.IsOneTimeUse) { <span class="badge bg-warning text-dark">one-time</span> }</td>
+                        <td>@(r.Recipient ?? "—") @if (r.IsOneTimeUse) { <span class="badge badge-yellow">one-time</span> }</td>
                         <td><code>@r.Code</code></td>
-                        <td class="text-end">@r.Clicks</td>
+                        <td class="text-right">@r.Clicks</td>
                     </tr>
                 }
                 </tbody>

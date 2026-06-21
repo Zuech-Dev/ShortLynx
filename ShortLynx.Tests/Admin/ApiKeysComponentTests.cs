@@ -58,8 +58,8 @@ public class ApiKeysComponentTests : BunitContext
     {
         var cut = Render<ApiKeys>();
         cut.Find("button.btn-primary").Click();                // + New key
-        cut.Find("input.form-control").Change("My Key");       // name
-        cut.FindAll("input.form-check-input")[0].Change(true); // first scope
+        cut.Find("input.field-input").Change("My Key");       // name
+        cut.FindAll("input[type=checkbox]")[0].Change(true); // first scope
         cut.Find("form").Submit();
 
         Assert.Single(_keys.Created);
@@ -73,7 +73,7 @@ public class ApiKeysComponentTests : BunitContext
     {
         var cut = Render<ApiKeys>();
         cut.Find("button.btn-primary").Click();
-        cut.FindAll("input.form-check-input")[0].Change(true); // scope but no name
+        cut.FindAll("input[type=checkbox]")[0].Change(true); // scope but no name
         cut.Find("form").Submit();
 
         Assert.Empty(_keys.Created);
@@ -85,7 +85,7 @@ public class ApiKeysComponentTests : BunitContext
     {
         var cut = Render<ApiKeys>();
         cut.Find("button.btn-primary").Click();
-        cut.Find("input.form-control").Change("My Key");       // name but no scope
+        cut.Find("input.field-input").Change("My Key");       // name but no scope
         cut.Find("form").Submit();
 
         Assert.Empty(_keys.Created);

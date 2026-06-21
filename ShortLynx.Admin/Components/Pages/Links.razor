@@ -10,55 +10,57 @@
 
 <PageTitle>Links — ShortLynx Admin</PageTitle>
 
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h1 class="mb-0">Links</h1>
-    <button class="btn btn-primary btn-sm" @onclick="() => _showCreate = !_showCreate">
+<div class="flex justify-between items-center mb-3">
+    <h1 class="text-2xl font-bold">Links</h1>
+    <button class="btn btn-primary" @onclick="() => _showCreate = !_showCreate">
         @(_showCreate ? "Cancel" : "+ New link")
     </button>
 </div>
 
 @if (_newShortCode is not null)
 {
-    <div class="alert alert-success" role="alert" data-testid="new-link">
-        <div class="fw-semibold mb-1">Link created.</div>
-        <div class="d-flex gap-2 align-items-center">
+    <div class="alert alert-success mb-4" role="alert" data-testid="new-link">
+        <div class="font-semibold mb-1">Link created.</div>
+        <div class="flex gap-2 items-center">
             <span>Short code: <code>@_newShortCode</code></span>
-            <button class="btn btn-sm btn-outline-success" @onclick="CopyNewCode">Copy</button>
-            <button type="button" class="btn-close ms-auto" aria-label="Dismiss" @onclick="() => _newShortCode = null"></button>
+            <button class="btn btn-outline-success" @onclick="CopyNewCode">Copy</button>
+            <button type="button" class="ml-auto text-gray-400 hover:text-gray-600" aria-label="Dismiss" @onclick="() => _newShortCode = null">✕</button>
         </div>
     </div>
 }
 
 @if (_showCreate)
 {
-    <div class="card border-0 shadow-sm mb-4">
+    <div class="card mb-4">
         <div class="card-body">
             <h5 class="card-title">Create a link</h5>
             <EditForm Model="_form" OnValidSubmit="CreateLink">
                 <DataAnnotationsValidator/>
                 <div class="mb-3">
-                    <label class="form-label">Destination URL</label>
-                    <InputText class="form-control" @bind-Value="_form.Url" placeholder="https://example.com/page"/>
+                    <label class="field-label">Destination URL</label>
+                    <InputText class="field-input" @bind-Value="_form.Url" placeholder="https://example.com/page"/>
                     <ValidationMessage For="() => _form.Url"/>
                     @if (_createError is not null)
                     {
-                        <div class="text-danger small mt-1" data-testid="create-error">@_createError</div>
+                        <div class="text-red-600 text-sm mt-1" data-testid="create-error">@_createError</div>
                     }
                 </div>
                 <div class="mb-3">
-                    <label class="form-label d-block">Link type</label>
+                    <label class="field-label">Link type</label>
                     <InputRadioGroup @bind-Value="_form.Mode">
-                        <div class="form-check form-check-inline">
-                            <InputRadio class="form-check-input" id="mode-anon" Value="LinkMode.Anonymous"/>
-                            <label class="form-check-label" for="mode-anon">Anonymous <span class="text-muted small">— one shared short code, aggregate clicks</span></label>
-                        </div>
-                        <div class="form-check form-check-inline">
-                            <InputRadio class="form-check-input" id="mode-user" Value="LinkMode.UserAttributed"/>
-                            <label class="form-check-label" for="mode-user">User-attributed <span class="text-muted small">— a code per recipient, per-recipient clicks</span></label>
+                        <div class="flex flex-col gap-1">
+                            <label class="inline-flex items-center gap-2" for="mode-anon">
+                                <InputRadio id="mode-anon" Value="LinkMode.Anonymous"/>
+                                <span>Anonymous <span class="text-gray-500 text-sm">— one shared short code, aggregate clicks</span></span>
+                            </label>
+                            <label class="inline-flex items-center gap-2" for="mode-user">
+                                <InputRadio id="mode-user" Value="LinkMode.UserAttributed"/>
+                                <span>User-attributed <span class="text-gray-500 text-sm">— a code per recipient, per-recipient clicks</span></span>
+                            </label>
                         </div>
                     </InputRadioGroup>
                 </div>
-                <button type="submit" class="btn btn-primary btn-sm" data-testid="create-submit">
+                <button type="submit" class="btn btn-primary" data-testid="create-submit">
                     @(_form.Mode == LinkMode.UserAttributed ? "Create & add recipients" : "Create link")
                 </button>
             </EditForm>
@@ -68,23 +70,23 @@
 
 @if (!_loaded)
 {
-    <p class="text-muted">Loading…</p>
+    <p class="text-gray-500">Loading…</p>
 }
 else if (_rows.Count == 0)
 {
-    <p class="text-muted">No links yet.</p>
+    <p class="text-gray-500">No links yet.</p>
 }
 else
 {
-    <div class="table-responsive">
-        <table class="table table-hover align-middle">
-            <thead class="table-light">
+    <div class="overflow-x-auto">
+        <table class="data-table">
+            <thead>
             <tr>
                 <th>Code</th>
                 <th>URL</th>
                 <th>Owner</th>
                 <th>Mode</th>
-                <th class="text-end">Clicks</th>
+                <th class="text-right">Clicks</th>
                 <th>Created</th>
                 <th></th>
             </tr>
@@ -94,22 +96,22 @@ else
             {
                 <tr>
                     <td><code>@r.ShortCode</code></td>
-                    <td class="text-truncate" style="max-width:280px" title="@r.Url">@r.Url</td>
-                    <td class="text-muted small">@r.ApiKeyName</td>
-                    <td><span class="badge @(r.Mode == "Anonymous" ? "bg-secondary" : "bg-primary")">@r.Mode</span></td>
-                    <td class="text-end">@r.Clicks</td>
-                    <td class="text-muted small text-nowrap">@r.CreatedAt.ToString("yyyy-MM-dd")</td>
-                    <td><a class="btn btn-sm btn-outline-primary" href="/links/@r.Id">View</a></td>
+                    <td class="truncate max-w-[280px]" title="@r.Url">@r.Url</td>
+                    <td class="text-gray-500 text-sm">@r.ApiKeyName</td>
+                    <td><span class="badge @(r.Mode == "Anonymous" ? "badge-gray" : "badge-blue")">@r.Mode</span></td>
+                    <td class="text-right">@r.Clicks</td>
+                    <td class="text-gray-500 text-sm whitespace-nowrap">@r.CreatedAt.ToString("yyyy-MM-dd")</td>
+                    <td><a class="btn btn-outline-primary" href="/links/@r.Id">View</a></td>
                 </tr>
             }
             </tbody>
         </table>
     </div>
 
-    <div class="d-flex gap-2">
-        <button class="btn btn-sm btn-outline-secondary" @onclick="PrevPage" disabled="@(_page == 1)">← Prev</button>
-        <span class="align-self-center text-muted small">Page @_page</span>
-        <button class="btn btn-sm btn-outline-secondary" @onclick="NextPage" disabled="@(_rows.Count < PageSize)">Next →</button>
+    <div class="flex gap-2 mt-3">
+        <button class="btn btn-outline" @onclick="PrevPage" disabled="@(_page == 1)">← Prev</button>
+        <span class="self-center text-gray-500 text-sm">Page @_page</span>
+        <button class="btn btn-outline" @onclick="NextPage" disabled="@(_rows.Count < PageSize)">Next →</button>
     </div>
 }
 

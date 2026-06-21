@@ -39,7 +39,7 @@ public class LinksComponentTests : BunitContext
     {
         var cut = Render<Links>();
         cut.Find("button.btn-primary").Click();                       // + New link
-        cut.Find("input.form-control").Change("https://example.com"); // URL
+        cut.Find("input.field-input").Change("https://example.com"); // URL
         cut.Find("form").Submit();
 
         Assert.Single(_links.Created);
@@ -55,7 +55,7 @@ public class LinksComponentTests : BunitContext
 
         var cut = Render<Links>();
         cut.Find("button.btn-primary").Click();
-        cut.Find("input.form-control").Change("https://blocked.example.com");
+        cut.Find("input.field-input").Change("https://blocked.example.com");
         cut.Find("form").Submit();
 
         Assert.Empty(_links.Created);
@@ -67,7 +67,7 @@ public class LinksComponentTests : BunitContext
     {
         var cut = Render<Links>();
         cut.Find("button.btn-primary").Click();                       // + New link
-        cut.Find("input.form-control").Change("https://example.com"); // URL
+        cut.Find("input.field-input").Change("https://example.com"); // URL
         cut.Find("#mode-user").Change("UserAttributed");              // switch to user-attributed
         cut.Find("form").Submit();
 

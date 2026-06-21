@@ -10,30 +10,30 @@
 
 <PageTitle>Custom Domains — ShortLynx Admin</PageTitle>
 
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h1 class="mb-0">Custom Domains</h1>
-    <button class="btn btn-primary btn-sm" @onclick="() => _showAdd = !_showAdd">
+<div class="flex justify-between items-center mb-3">
+    <h1 class="text-2xl font-bold">Custom Domains</h1>
+    <button class="btn btn-primary" @onclick="() => _showAdd = !_showAdd">
         @(_showAdd ? "Cancel" : "+ Add domain")
     </button>
 </div>
 
 @if (_showAdd)
 {
-    <div class="card border-0 shadow-sm mb-4">
+    <div class="card mb-4">
         <div class="card-body">
             <h5 class="card-title">Add a domain</h5>
             <EditForm Model="_form" OnValidSubmit="AddDomain">
                 <DataAnnotationsValidator/>
                 <div class="mb-3">
-                    <label class="form-label">Domain</label>
-                    <InputText class="form-control" @bind-Value="_form.Domain" placeholder="go.example.com" data-testid="domain-input"/>
+                    <label class="field-label">Domain</label>
+                    <InputText class="field-input" @bind-Value="_form.Domain" placeholder="go.example.com" data-testid="domain-input"/>
                     <ValidationMessage For="() => _form.Domain"/>
                     @if (_addError is not null)
                     {
-                        <div class="text-danger small mt-1" data-testid="add-error">@_addError</div>
+                        <div class="text-red-600 text-sm mt-1" data-testid="add-error">@_addError</div>
                     }
                 </div>
-                <button type="submit" class="btn btn-primary btn-sm" data-testid="add-submit">Add domain</button>
+                <button type="submit" class="btn btn-primary" data-testid="add-submit">Add domain</button>
             </EditForm>
         </div>
     </div>
@@ -41,49 +41,49 @@
 
 @if (!_loaded)
 {
-    <p class="text-muted">Loading…</p>
+    <p class="text-gray-500">Loading…</p>
 }
 else if (_domains.Count == 0)
 {
-    <p class="text-muted">No custom domains yet.</p>
+    <p class="text-gray-500">No custom domains yet.</p>
 }
 else
 {
-    <div class="vstack gap-3">
+    <div class="flex flex-col gap-3">
         @foreach (var d in _domains)
         {
-            <div class="card border-0 shadow-sm" data-testid="domain-row">
+            <div class="card" data-testid="domain-row">
                 <div class="card-body">
-                    <div class="d-flex align-items-center gap-2 mb-2">
-                        <span class="fw-semibold font-monospace">@d.Domain</span>
+                    <div class="flex items-center gap-2 mb-2">
+                        <span class="font-semibold font-mono">@d.Domain</span>
                         @switch (d.VerificationStatus)
                         {
                             case DomainVerificationStatus.Verified:
-                                <span class="badge bg-success">Verified</span>
+                                <span class="badge badge-green">Verified</span>
                                 break;
                             case DomainVerificationStatus.Failed:
-                                <span class="badge bg-danger">Verification failed</span>
+                                <span class="badge badge-red">Verification failed</span>
                                 break;
                             default:
-                                <span class="badge bg-secondary">Pending</span>
+                                <span class="badge badge-gray">Pending</span>
                                 break;
                         }
-                        <div class="ms-auto d-flex gap-2">
+                        <div class="ml-auto flex gap-2">
                             @if (d.VerificationStatus != DomainVerificationStatus.Verified)
                             {
-                                <button class="btn btn-sm btn-outline-primary" data-testid="verify-btn"
+                                <button class="btn btn-outline-primary" data-testid="verify-btn"
                                         disabled="@_busy" @onclick="() => Verify(d.Id)">Verify</button>
                             }
-                            <button class="btn btn-sm btn-outline-danger" data-testid="remove-btn"
+                            <button class="btn btn-outline-danger" data-testid="remove-btn"
                                     disabled="@_busy" @onclick="() => Remove(d.Id)">Remove</button>
                         </div>
                     </div>
 
                     @if (d.VerificationStatus != DomainVerificationStatus.Verified)
                     {
-                        <div class="small text-muted">
+                        <div class="text-sm text-gray-500">
                             Create this DNS <strong>TXT</strong> record, then click Verify:
-                            <div class="bg-light rounded p-2 mt-1 font-monospace">
+                            <div class="bg-gray-50 rounded p-2 mt-1 font-mono">
                                 <div>Host: <code>@DomainOpts.Value.VerificationHost(d.Domain)</code></div>
                                 <div>Value: <code>@DomainOpts.Value.ExpectedTxtValue(d.VerificationToken)</code></div>
                             </div>

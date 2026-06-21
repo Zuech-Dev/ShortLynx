@@ -3,55 +3,45 @@
 @inject IDbContextFactory<ShortLynxDbContext> DbFactory
 
 <PageTitle>Dashboard — ShortLynx Admin</PageTitle>
-<h1 class="mb-4">Dashboard</h1>
+<h1 class="text-2xl font-bold mb-4">Dashboard</h1>
 
 @if (!_loaded)
 {
-    <p class="text-muted">Loading…</p>
+    <p class="text-gray-500">Loading…</p>
 }
 else
 {
-    <div class="row g-3 mb-5">
-        <div class="col-sm-6 col-xl-3">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body">
-                    <div class="text-muted small text-uppercase fw-semibold mb-1">Links</div>
-                    <div class="fs-2 fw-bold">@_totalLinks</div>
-                </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 mb-8">
+        <div class="card h-full">
+            <div class="card-body">
+                <div class="text-gray-500 text-xs uppercase font-semibold mb-1">Links</div>
+                <div class="text-3xl font-bold">@_totalLinks</div>
             </div>
         </div>
-        <div class="col-sm-6 col-xl-3">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body">
-                    <div class="text-muted small text-uppercase fw-semibold mb-1">Anonymous Clicks</div>
-                    <div class="fs-2 fw-bold">@_totalClicks</div>
-                </div>
+        <div class="card h-full">
+            <div class="card-body">
+                <div class="text-gray-500 text-xs uppercase font-semibold mb-1">Anonymous Clicks</div>
+                <div class="text-3xl font-bold">@_totalClicks</div>
             </div>
         </div>
-        <div class="col-sm-6 col-xl-3">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body">
-                    <div class="text-muted small text-uppercase fw-semibold mb-1">User Clicks</div>
-                    <div class="fs-2 fw-bold">@_totalUserClicks</div>
-                </div>
+        <div class="card h-full">
+            <div class="card-body">
+                <div class="text-gray-500 text-xs uppercase font-semibold mb-1">User Clicks</div>
+                <div class="text-3xl font-bold">@_totalUserClicks</div>
             </div>
         </div>
-        <div class="col-sm-6 col-xl-3">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body">
-                    <div class="text-muted small text-uppercase fw-semibold mb-1">API Keys (active)</div>
-                    <div class="fs-2 fw-bold">@_totalApiKeys</div>
-                </div>
+        <div class="card h-full">
+            <div class="card-body">
+                <div class="text-gray-500 text-xs uppercase font-semibold mb-1">API Keys (active)</div>
+                <div class="text-3xl font-bold">@_totalApiKeys</div>
             </div>
         </div>
         @if (_isSuperAdmin)
         {
-            <div class="col-sm-6 col-xl-3">
-                <div class="card border-0 shadow-sm h-100 border-start border-4 border-warning">
-                    <div class="card-body">
-                        <div class="text-muted small text-uppercase fw-semibold mb-1">Users (all tenants)</div>
-                        <div class="fs-2 fw-bold">@_totalUsers</div>
-                    </div>
+            <div class="card h-full border-l-4 border-l-yellow-400">
+                <div class="card-body">
+                    <div class="text-gray-500 text-xs uppercase font-semibold mb-1">Users (all tenants)</div>
+                    <div class="text-3xl font-bold">@_totalUsers</div>
                 </div>
             </div>
         }

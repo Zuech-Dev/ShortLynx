@@ -18,10 +18,11 @@ public class LinksControllerTests : IClassFixture<ApiFactory>
     private async Task<(HttpClient Client, string PlaintextKey)> CreateAuthenticatedClientAsync(
         string[]? scopes = null)
     {
+        var accountId = await _factory.SeedAccountAsync();
         using var scope = _factory.Services.CreateScope();
         var svc = scope.ServiceProvider.GetRequiredService<IApiKeyService>();
         var grantedScopes = scopes ?? [Scopes.LinksWrite, Scopes.LinksRead, Scopes.CodesWrite, Scopes.AnalyticsRead];
-        var (_, plaintext) = await svc.CreateAsync("test-key", grantedScopes);
+        var (_, plaintext) = await svc.CreateAsync("test-key", grantedScopes, accountId);
 
         var client = _factory.CreateClient();
         client.DefaultRequestHeaders.Add("Authorization", $"Bearer {plaintext}");

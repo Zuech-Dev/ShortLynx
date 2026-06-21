@@ -16,9 +16,9 @@ public class EfCoreDbOperationsTests
         Guid linkId;
         await using (var ctx = db.CreateContext())
         {
-            var key = EntityFactory.ApiKey();
-            var link = EntityFactory.AnonymousLink(key.Id);
-            ctx.AddRange(key, link);
+            var account = EntityFactory.Account();
+            var link = EntityFactory.AnonymousLink(account.Id);
+            ctx.AddRange(account, link);
             await ctx.SaveChangesAsync();
             linkId = link.Id;
         }
@@ -58,9 +58,9 @@ public class EfCoreDbOperationsTests
         Guid linkId;
         await using (var ctx = db.CreateContext())
         {
-            var key = EntityFactory.ApiKey();
-            var link = EntityFactory.AnonymousLink(key.Id);
-            ctx.AddRange(key, link);
+            var account = EntityFactory.Account();
+            var link = EntityFactory.AnonymousLink(account.Id);
+            ctx.AddRange(account, link);
             await ctx.SaveChangesAsync();
             linkId = link.Id;
         }
@@ -94,10 +94,10 @@ public class EfCoreDbOperationsTests
         Guid shortCodeId;
         await using (var ctx = db.CreateContext())
         {
-            var key = EntityFactory.ApiKey();
-            var link = EntityFactory.AnonymousLink(key.Id);
+            var account = EntityFactory.Account();
+            var link = EntityFactory.AnonymousLink(account.Id);
             var sc = EntityFactory.ShortCode(link.Id, "vis000");
-            ctx.AddRange(key, link, sc);
+            ctx.AddRange(account, link, sc);
             await ctx.SaveChangesAsync();
             shortCodeId = sc.Id;
         }
@@ -138,10 +138,10 @@ public class EfCoreDbOperationsTests
         var userId = Guid.CreateVersion7();
         await using (var ctx = db.CreateContext())
         {
-            var key = EntityFactory.ApiKey();
-            var link = EntityFactory.AnonymousLink(key.Id);
+            var account = EntityFactory.Account();
+            var link = EntityFactory.AnonymousLink(account.Id);
             var ulc = EntityFactory.UserLinkCode(link.Id, userId, "uv0001");
-            ctx.AddRange(key, link, ulc);
+            ctx.AddRange(account, link, ulc);
             await ctx.SaveChangesAsync();
             userLinkCodeId = ulc.Id;
         }

@@ -14,7 +14,8 @@ public sealed class CustomDomainService(
 {
     private readonly CustomDomainOptions _opts = options.Value;
 
-    public async Task<CustomDomainEntity> AddAsync(string domain, Guid userAccountId, CancellationToken ct = default)
+    public async Task<CustomDomainEntity> AddAsync(
+        string domain, Guid accountId, Guid? addedByUserAccountId = null, CancellationToken ct = default)
     {
         var normalised = Normalise(domain);
         if (normalised.Length == 0)
@@ -26,7 +27,8 @@ public sealed class CustomDomainService(
         var entity = new CustomDomainEntity
         {
             Id = Guid.CreateVersion7(),
-            UserAccountId = userAccountId,
+            AccountId = accountId,
+            UserAccountId = addedByUserAccountId,
             Domain = normalised,
             CreatedAt = DateTimeOffset.UtcNow,
             IsActive = false,
@@ -39,16 +41,16 @@ public sealed class CustomDomainService(
         return entity;
     }
 
-    public async Task<IReadOnlyList<CustomDomainEntity>> ListAsync(Guid userAccountId, CancellationToken ct = default)
+    public async Task<IReadOnlyList<CustomDomainEntity>> ListAsync(Guid accountId, CancellationToken ct = default)
         => await db.CustomDomainEntities
-            .Where(d => d.UserAccountId == userAccountId)
+            .Where(d => d.AccountId == accountId)
             .OrderByDescending(d => d.Id)
             .ToListAsync(ct);
 
-    public async Task<CustomDomainEntity?> VerifyAsync(Guid domainId, Guid userAccountId, CancellationToken ct = default)
+    public async Task<CustomDomainEntity?> VerifyAsync(Guid domainId, Guid accountId, CancellationToken ct = default)
     {
         var domain = await db.CustomDomainEntities
-            .FirstOrDefaultAsync(d => d.Id == domainId && d.UserAccountId == userAccountId, ct);
+            .FirstOrDefaultAsync(d => d.Id == domainId && d.AccountId == accountId, ct);
         if (domain is null) return null;
 
         var host = _opts.VerificationHost(domain.Domain);
@@ -64,10 +66,10 @@ public sealed class CustomDomainService(
         return domain;
     }
 
-    public async Task<bool> RemoveAsync(Guid domainId, Guid userAccountId, CancellationToken ct = default)
+    public async Task<bool> RemoveAsync(Guid domainId, Guid accountId, CancellationToken ct = default)
     {
         var affected = await db.CustomDomainEntities
-            .Where(d => d.Id == domainId && d.UserAccountId == userAccountId)
+            .Where(d => d.Id == domainId && d.AccountId == accountId)
             .ExecuteDeleteAsync(ct);
         return affected > 0;
     }

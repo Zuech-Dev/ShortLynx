@@ -26,7 +26,7 @@ public static class ServiceExtensions
         {
             if (provider.Equals("postgresql", StringComparison.OrdinalIgnoreCase) ||
                 provider.Equals("postgres", StringComparison.OrdinalIgnoreCase))
-                opts.UseNpgsql(connStr);
+                opts.UseNpgsql(connStr, x => x.MigrationsAssembly("ShortLynx.Data.PostgreSql"));
             else
                 opts.UseSqlite(connStr);
         });

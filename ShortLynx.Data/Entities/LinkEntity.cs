@@ -15,8 +15,11 @@ public class LinkEntity
     public bool IsActive { get; set; }
     public LinkMode Mode { get; set; }
 
-    // A link has exactly one owner (enforced in the service layer):
-    //  - ApiKeyId set    → created programmatically via the REST API
+    /// <summary>The owning account. All ownership scoping is by AccountId.</summary>
+    public Guid AccountId { get; set; }
+
+    // Provenance only (who/what created the link); ownership is AccountId:
+    //  - ApiKeyId set     → created programmatically via the REST API
     //  - UserAccountId set → created by a signed-in user in the admin dashboard
     public Guid? ApiKeyId { get; set; }
     public Guid? UserAccountId { get; set; }
@@ -27,6 +30,7 @@ public class LinkEntity
 
     public ICollection<VisitEntity> Visits { get; set; } = [];
     public UserLinkCodeEntity? UserLinkCode { get; set; } = null;
+    public virtual AccountEntity Account { get; set; } = null!;
     public virtual ApiKeyEntity? ApiKey { get; set; }
     public virtual UserAccountEntity? UserAccount { get; set; }
     public virtual CustomDomainEntity? CustomDomain { get; set; }

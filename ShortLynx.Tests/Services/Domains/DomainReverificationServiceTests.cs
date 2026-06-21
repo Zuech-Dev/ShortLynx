@@ -34,19 +34,19 @@ public class DomainReverificationServiceTests
             var db = scope.ServiceProvider.GetRequiredService<ShortLynxDbContext>();
             await db.Database.EnsureCreatedAsync();
 
-            var user = new UserAccountEntity
+            var account = new AccountEntity
             {
-                Id = Guid.CreateVersion7(), Email = "u@example.com",
+                Id = Guid.CreateVersion7(), Name = "acct",
                 CreatedAt = DateTimeOffset.UtcNow, IsActive = true,
             };
             var domain = new CustomDomainEntity
             {
-                Id = Guid.CreateVersion7(), UserAccountId = user.Id, Domain = "go.example.com",
+                Id = Guid.CreateVersion7(), AccountId = account.Id, Domain = "go.example.com",
                 CreatedAt = DateTimeOffset.UtcNow, IsActive = true,
                 VerificationStatus = DomainVerificationStatus.Verified,
                 VerificationToken = "tok", VerifiedAt = DateTimeOffset.UtcNow,
             };
-            db.AddRange(user, domain);
+            db.AddRange(account, domain);
             await db.SaveChangesAsync();
             domainId = domain.Id;
         }

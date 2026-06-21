@@ -18,33 +18,16 @@ public class DomainsController(
     IOptions<CustomDomainOptions> domainOptions) : ControllerBase
 {
     private ApiKeyEntity CurrentKey => (ApiKeyEntity)HttpContext.Items["ApiKey"]!;
-
-    // Custom domains are scoped to a user account, so the API key must be associated with one.
-    private IActionResult? RequireUser(out Guid userId)
-    {
-        if (CurrentKey.UserAccountId is { } uid)
-        {
-            userId = uid;
-            return null;
-        }
-
-        userId = default;
-        return BadRequest(new
-        {
-            error = "This API key is not associated with a user account; custom domains are user-scoped."
-        });
-    }
+    private Guid AccountId => CurrentKey.AccountId;
 
     // POST /domains
     [HttpPost]
     [RequireScope(Scopes.DomainsWrite)]
     public async Task<IActionResult> Add([FromBody] AddDomainRequest request, CancellationToken ct)
     {
-        if (RequireUser(out var userId) is { } err) return err;
-
         try
         {
-            var domain = await domains.AddAsync(request.Domain, userId, ct);
+            var domain = await domains.AddAsync(request.Domain, AccountId, ct: ct);
             return CreatedAtAction(nameof(Get), new { id = domain.Id }, ToResponse(domain));
         }
         catch (ArgumentException ex)
@@ -62,8 +45,7 @@ public class DomainsController(
     [RequireScope(Scopes.DomainsRead)]
     public async Task<IActionResult> List(CancellationToken ct)
     {
-        if (RequireUser(out var userId) is { } err) return err;
-        var list = await domains.ListAsync(userId, ct);
+        var list = await domains.ListAsync(AccountId, ct);
         return Ok(list.Select(ToResponse));
     }
 
@@ -72,8 +54,7 @@ public class DomainsController(
     [RequireScope(Scopes.DomainsRead)]
     public async Task<IActionResult> Get(Guid id, CancellationToken ct)
     {
-        if (RequireUser(out var userId) is { } err) return err;
-        var domain = (await domains.ListAsync(userId, ct)).FirstOrDefault(d => d.Id == id);
+        var domain = (await domains.ListAsync(AccountId, ct)).FirstOrDefault(d => d.Id == id);
         return domain is null ? NotFound() : Ok(ToResponse(domain));
     }
 
@@ -82,8 +63,7 @@ public class DomainsController(
     [RequireScope(Scopes.DomainsWrite)]
     public async Task<IActionResult> Verify(Guid id, CancellationToken ct)
     {
-        if (RequireUser(out var userId) is { } err) return err;
-        var domain = await domains.VerifyAsync(id, userId, ct);
+        var domain = await domains.VerifyAsync(id, AccountId, ct);
         return domain is null ? NotFound() : Ok(ToResponse(domain));
     }
 
@@ -92,8 +72,7 @@ public class DomainsController(
     [RequireScope(Scopes.DomainsWrite)]
     public async Task<IActionResult> Remove(Guid id, CancellationToken ct)
     {
-        if (RequireUser(out var userId) is { } err) return err;
-        return await domains.RemoveAsync(id, userId, ct) ? NoContent() : NotFound();
+        return await domains.RemoveAsync(id, AccountId, ct) ? NoContent() : NotFound();
     }
 
     private DomainResponse ToResponse(CustomDomainEntity d) => new(

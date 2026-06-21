@@ -14,10 +14,10 @@ public class EntityConstraintTests
         await using var db = await TestDatabase.CreateAsync();
         await using var ctx = db.CreateContext();
 
-        var key = EntityFactory.ApiKey();
-        var link1 = EntityFactory.AnonymousLink(key.Id);
-        var link2 = EntityFactory.AnonymousLink(key.Id);
-        ctx.AddRange(key, link1, link2);
+        var account = EntityFactory.Account();
+        var link1 = EntityFactory.AnonymousLink(account.Id);
+        var link2 = EntityFactory.AnonymousLink(account.Id);
+        ctx.AddRange(account, link1, link2);
         await ctx.SaveChangesAsync();
 
         ctx.Add(EntityFactory.ShortCode(link1.Id, "abc123"));
@@ -35,9 +35,9 @@ public class EntityConstraintTests
         Guid linkId;
         await using (var ctx = db.CreateContext())
         {
-            var key = EntityFactory.ApiKey();
-            var link = EntityFactory.AnonymousLink(key.Id);
-            ctx.AddRange(key, link, EntityFactory.ShortCode(link.Id, "aaa111"));
+            var account = EntityFactory.Account();
+            var link = EntityFactory.AnonymousLink(account.Id);
+            ctx.AddRange(account, link, EntityFactory.ShortCode(link.Id, "aaa111"));
             await ctx.SaveChangesAsync();
             linkId = link.Id;
         }
@@ -56,9 +56,9 @@ public class EntityConstraintTests
         await using var db = await TestDatabase.CreateAsync();
         await using var ctx = db.CreateContext();
 
-        var key = EntityFactory.ApiKey();
-        var link = EntityFactory.AnonymousLink(key.Id);
-        ctx.AddRange(key, link);
+        var account = EntityFactory.Account();
+        var link = EntityFactory.AnonymousLink(account.Id);
+        ctx.AddRange(account, link);
         await ctx.SaveChangesAsync();
 
         var userId1 = Guid.CreateVersion7();
@@ -76,9 +76,9 @@ public class EntityConstraintTests
         await using var db = await TestDatabase.CreateAsync();
         await using var ctx = db.CreateContext();
 
-        var key = EntityFactory.ApiKey();
-        var link = EntityFactory.AnonymousLink(key.Id);
-        ctx.AddRange(key, link);
+        var account = EntityFactory.Account();
+        var link = EntityFactory.AnonymousLink(account.Id);
+        ctx.AddRange(account, link);
         await ctx.SaveChangesAsync();
 
         var userId = Guid.CreateVersion7();
@@ -138,27 +138,27 @@ public class EntityConstraintTests
     }
 
     [Fact]
-    public async Task UserAccount_Delete_CascadesTo_CustomDomains()
+    public async Task Account_Delete_CascadesTo_CustomDomains()
     {
         await using var db = await TestDatabase.CreateAsync();
 
-        Guid userId;
+        Guid accountId;
         Guid domainId;
 
         await using (var ctx = db.CreateContext())
         {
-            var user = EntityFactory.UserAccount();
-            var domain = EntityFactory.CustomDomain(user.Id);
-            ctx.AddRange(user, domain);
+            var account = EntityFactory.Account();
+            var domain = EntityFactory.CustomDomain(account.Id);
+            ctx.AddRange(account, domain);
             await ctx.SaveChangesAsync();
-            userId = user.Id;
+            accountId = account.Id;
             domainId = domain.Id;
         }
 
         await using (var ctx = db.CreateContext())
         {
-            var user = await ctx.UserAccountEntities.FindAsync(userId);
-            ctx.Remove(user!);
+            var account = await ctx.AccountEntities.FindAsync(accountId);
+            ctx.Remove(account!);
             await ctx.SaveChangesAsync();
         }
 
@@ -177,15 +177,15 @@ public class EntityConstraintTests
         await using var db = await TestDatabase.CreateAsync();
         await using var ctx = db.CreateContext();
 
-        var user1 = EntityFactory.UserAccount("u1@example.com");
-        var user2 = EntityFactory.UserAccount("u2@example.com");
-        ctx.AddRange(user1, user2);
+        var account1 = EntityFactory.Account("a1");
+        var account2 = EntityFactory.Account("a2");
+        ctx.AddRange(account1, account2);
         await ctx.SaveChangesAsync();
 
-        ctx.Add(EntityFactory.CustomDomain(user1.Id, "go.acme.com"));
+        ctx.Add(EntityFactory.CustomDomain(account1.Id, "go.acme.com"));
         await ctx.SaveChangesAsync();
 
-        ctx.Add(EntityFactory.CustomDomain(user2.Id, "go.acme.com")); // same domain
+        ctx.Add(EntityFactory.CustomDomain(account2.Id, "go.acme.com")); // same domain
         await Assert.ThrowsAsync<DbUpdateException>(() => ctx.SaveChangesAsync());
     }
 
@@ -199,11 +199,11 @@ public class EntityConstraintTests
         Guid domainId;
         await using (var ctx = db.CreateContext())
         {
-            var user = EntityFactory.UserAccount();
-            var domain = EntityFactory.CustomDomain(user.Id);
+            var account = EntityFactory.Account();
+            var domain = EntityFactory.CustomDomain(account.Id);
             domain.VerificationStatus = DomainVerificationStatus.Verified;
             domain.VerifiedAt = DateTimeOffset.UtcNow;
-            ctx.AddRange(user, domain);
+            ctx.AddRange(account, domain);
             await ctx.SaveChangesAsync();
             domainId = domain.Id;
         }
@@ -224,10 +224,10 @@ public class EntityConstraintTests
         Guid linkId;
         await using (var ctx = db.CreateContext())
         {
-            var key = EntityFactory.ApiKey();
-            var link = EntityFactory.AnonymousLink(key.Id);
+            var account = EntityFactory.Account();
+            var link = EntityFactory.AnonymousLink(account.Id);
             link.Mode = LinkMode.UserAttributed;
-            ctx.AddRange(key, link);
+            ctx.AddRange(account, link);
             await ctx.SaveChangesAsync();
             linkId = link.Id;
         }
@@ -247,9 +247,10 @@ public class EntityConstraintTests
         await using var db = await TestDatabase.CreateAsync();
         await using var ctx = db.CreateContext();
 
-        var key = EntityFactory.ApiKey();
-        // UserAccountId not set → remains null
-        ctx.Add(key);
+        var account = EntityFactory.Account();
+        var key = EntityFactory.ApiKey(account.Id);
+        // UserAccountId (created-by audit) not set → remains null
+        ctx.AddRange(account, key);
         await ctx.SaveChangesAsync(); // must not throw
 
         var saved = await ctx.ApiKeyEntities.FindAsync(key.Id);
@@ -257,15 +258,16 @@ public class EntityConstraintTests
     }
 
     [Fact]
-    public async Task ApiKey_CanReference_UserAccount()
+    public async Task ApiKey_CanReference_CreatedByUserAccount()
     {
         await using var db = await TestDatabase.CreateAsync();
         await using var ctx = db.CreateContext();
 
+        var account = EntityFactory.Account();
         var user = EntityFactory.UserAccount();
-        var key = EntityFactory.ApiKey();
+        var key = EntityFactory.ApiKey(account.Id);
         key.UserAccountId = user.Id;
-        ctx.AddRange(user, key);
+        ctx.AddRange(account, user, key);
         await ctx.SaveChangesAsync();
 
         var saved = await ctx.ApiKeyEntities.FindAsync(key.Id);

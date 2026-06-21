@@ -31,6 +31,11 @@ public partial class ShortLynxDbContext
                           .WithMany()
                           .HasForeignKey(e => e.CustomDomainId)
                           .OnDelete(DeleteBehavior.SetNull);
+                    // Owning account — deleting an account removes its links.
+                    entity.HasOne(e => e.Account)
+                          .WithMany()
+                          .HasForeignKey(e => e.AccountId)
+                          .OnDelete(DeleteBehavior.Cascade);
                     entity.Property(e => e.Id).ValueGeneratedNever();
                     entity.Property(e => e.Mode).HasConversion<int>();
                     entity.Property(e => e.OriginalUrl).IsRequired();
@@ -79,6 +84,11 @@ public partial class ShortLynxDbContext
                           .WithMany()
                           .HasForeignKey(e => e.UserAccountId)
                           .OnDelete(DeleteBehavior.NoAction);
+                    // Owning account — deleting an account removes its keys.
+                    entity.HasOne(e => e.Account)
+                          .WithMany()
+                          .HasForeignKey(e => e.AccountId)
+                          .OnDelete(DeleteBehavior.Cascade);
                 }
             )
            .Entity<UserAccountEntity>(entity =>
@@ -104,9 +114,15 @@ public partial class ShortLynxDbContext
                 {
                     entity.HasKey(e => e.Id);
                     entity.HasIndex(e => e.Domain).IsUnique();
-                    entity.HasOne<UserAccountEntity>(e => e.UserAccount)
+                    // UserAccountId is now audit-only (who added it); ownership is the account.
+                    entity.HasOne(e => e.UserAccount)
                           .WithMany(u => u.CustomDomains)
                           .HasForeignKey(e => e.UserAccountId)
+                          .OnDelete(DeleteBehavior.NoAction);
+                    // Owning account — deleting an account removes its domains.
+                    entity.HasOne(e => e.Account)
+                          .WithMany()
+                          .HasForeignKey(e => e.AccountId)
                           .OnDelete(DeleteBehavior.Cascade);
                     entity.Property(e => e.Id).ValueGeneratedNever();
                     entity.Property(e => e.VerificationStatus).HasConversion<int>();

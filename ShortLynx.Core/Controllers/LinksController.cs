@@ -52,7 +52,7 @@ public class LinksController(ILinkService linkService, ShortLynxDbContext db) : 
         // Order by Id: v7 GUIDs are time-monotonic, so this is equivalent to ordering by
         // CreatedAt but avoids SQLite's DateTimeOffset-in-ORDER-BY limitation.
         var links = await db.LinkEntities
-            .Where(l => l.ApiKeyId == CurrentKey.Id)
+            .Where(l => l.AccountId == CurrentKey.AccountId)
             .OrderByDescending(l => l.Id)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
@@ -84,7 +84,7 @@ public class LinksController(ILinkService linkService, ShortLynxDbContext db) : 
     public async Task<IActionResult> GetLink(Guid id, CancellationToken ct)
     {
         var link = await db.LinkEntities
-            .Where(l => l.Id == id && l.ApiKeyId == CurrentKey.Id)
+            .Where(l => l.Id == id && l.AccountId == CurrentKey.AccountId)
             .FirstOrDefaultAsync(ct);
 
         if (link is null) return NotFound();
@@ -106,7 +106,7 @@ public class LinksController(ILinkService linkService, ShortLynxDbContext db) : 
         CancellationToken ct)
     {
         var link = await db.LinkEntities
-            .Where(l => l.Id == id && l.ApiKeyId == CurrentKey.Id)
+            .Where(l => l.Id == id && l.AccountId == CurrentKey.AccountId)
             .FirstOrDefaultAsync(ct);
 
         if (link is null) return NotFound();
@@ -126,22 +126,19 @@ public class LinksController(ILinkService linkService, ShortLynxDbContext db) : 
         CancellationToken ct)
     {
         var link = await db.LinkEntities
-            .Where(l => l.Id == id && l.ApiKeyId == CurrentKey.Id)
+            .Where(l => l.Id == id && l.AccountId == CurrentKey.AccountId)
             .FirstOrDefaultAsync(ct);
 
         if (link is null) return NotFound();
 
         if (request.CustomDomainId is { } domainId)
         {
-            if (CurrentKey.UserAccountId is not { } userId)
-                return BadRequest(new { error = "This API key is not associated with a user account; pinning requires an owned, verified domain." });
-
             var ownsVerified = await db.CustomDomainEntities.AnyAsync(
                 d => d.Id == domainId
-                  && d.UserAccountId == userId
+                  && d.AccountId == CurrentKey.AccountId
                   && d.VerificationStatus == DomainVerificationStatus.Verified, ct);
             if (!ownsVerified)
-                return BadRequest(new { error = "Domain not found, not owned by this key's user, or not verified." });
+                return BadRequest(new { error = "Domain not found, not owned by this key's account, or not verified." });
         }
 
         link.CustomDomainId = request.CustomDomainId;
@@ -155,7 +152,7 @@ public class LinksController(ILinkService linkService, ShortLynxDbContext db) : 
     public async Task<IActionResult> GetAnalytics(Guid id, CancellationToken ct)
     {
         var link = await db.LinkEntities
-            .Where(l => l.Id == id && l.ApiKeyId == CurrentKey.Id)
+            .Where(l => l.Id == id && l.AccountId == CurrentKey.AccountId)
             .FirstOrDefaultAsync(ct);
 
         if (link is null) return NotFound();

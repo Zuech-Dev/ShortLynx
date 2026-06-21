@@ -5,7 +5,7 @@ namespace ShortLynx.Tests.Infrastructure;
 
 internal static class EntityFactory
 {
-    internal static ApiKeyEntity ApiKey(string name = "Test Key") => new()
+    internal static ApiKeyEntity ApiKey(Guid accountId, string name = "Test Key") => new()
     {
         Id = Guid.CreateVersion7(),
         Prefix = "TESTKEY1",
@@ -14,28 +14,21 @@ internal static class EntityFactory
         Scopes = "links:write",
         CreatedAt = DateTimeOffset.UtcNow,
         IsActive = true,
+        AccountId = accountId,
     };
 
-    internal static LinkEntity AnonymousLink(Guid apiKeyId) => new()
+    internal static LinkEntity AnonymousLink(Guid accountId) => new()
     {
         Id = Guid.CreateVersion7(),
         OriginalUrl = "https://example.com",
-        ApiKeyId = apiKeyId,
+        AccountId = accountId,
         Mode = LinkMode.Anonymous,
         CreatedAt = DateTimeOffset.UtcNow,
         IsActive = true,
     };
 
-    // A dashboard-created link: owned directly by a user, no API key.
-    internal static LinkEntity UserOwnedLink(Guid userAccountId) => new()
-    {
-        Id = Guid.CreateVersion7(),
-        OriginalUrl = "https://example.com",
-        UserAccountId = userAccountId,
-        Mode = LinkMode.Anonymous,
-        CreatedAt = DateTimeOffset.UtcNow,
-        IsActive = true,
-    };
+    // A dashboard-created link in an account (alias of AnonymousLink — both are account-owned now).
+    internal static LinkEntity UserOwnedLink(Guid accountId) => AnonymousLink(accountId);
 
     internal static ShortCodeEntity ShortCode(Guid linkId, string code) => new()
     {
@@ -98,10 +91,10 @@ internal static class EntityFactory
         UsedAt = null,
     };
 
-    internal static CustomDomainEntity CustomDomain(Guid userAccountId, string domain = "go.example.com") => new()
+    internal static CustomDomainEntity CustomDomain(Guid accountId, string domain = "go.example.com") => new()
     {
         Id = Guid.CreateVersion7(),
-        UserAccountId = userAccountId,
+        AccountId = accountId,
         Domain = domain,
         CreatedAt = DateTimeOffset.UtcNow,
         IsActive = false,

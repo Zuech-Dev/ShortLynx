@@ -19,6 +19,7 @@ public class LinkDetailComponentTests : BunitContext
     private readonly FakeLinkService _links = new();
     private readonly SqliteConnection _conn;
     private readonly Guid _uid = Guid.CreateVersion7();
+    private readonly Guid _accountId;
 
     public LinkDetailComponentTests()
     {
@@ -38,25 +39,19 @@ public class LinkDetailComponentTests : BunitContext
         var factory = Services.GetRequiredService<IDbContextFactory<ShortLynxDbContext>>();
         using var db = factory.CreateDbContext();
         db.Database.EnsureCreated();
+        _accountId = AccountTestSeed.SeedOwner(db, _uid);
     }
 
     private Guid SeedUserAttributedLink()
     {
         var factory = Services.GetRequiredService<IDbContextFactory<ShortLynxDbContext>>();
         using var db = factory.CreateDbContext();
-        db.UserAccountEntities.Add(new UserAccountEntity
-        {
-            Id = _uid,
-            Email = "user@example.com",
-            CreatedAt = DateTimeOffset.UtcNow,
-            IsActive = true,
-        });
         var link = new LinkEntity
         {
             Id = Guid.CreateVersion7(),
             OriginalUrl = "https://example.com",
             Mode = LinkMode.UserAttributed,
-            UserAccountId = _uid,
+            AccountId = _accountId,
             CreatedAt = DateTimeOffset.UtcNow,
             IsActive = true,
         };
@@ -122,7 +117,7 @@ public class LinkDetailComponentTests : BunitContext
         Assert.Single(_links.DomainSet);
         Assert.Equal(id, _links.DomainSet[0].LinkId);
         Assert.Equal(domainId, _links.DomainSet[0].DomainId);
-        Assert.Equal(_uid, _links.DomainSet[0].Uid);
+        Assert.Equal(_accountId, _links.DomainSet[0].AccountId);
     }
 
     private Guid SeedVerifiedDomain(string domain = "go.example.com")
@@ -132,7 +127,7 @@ public class LinkDetailComponentTests : BunitContext
         var d = new CustomDomainEntity
         {
             Id = Guid.CreateVersion7(),
-            UserAccountId = _uid,
+            AccountId = _accountId,
             Domain = domain,
             CreatedAt = DateTimeOffset.UtcNow,
             IsActive = true,

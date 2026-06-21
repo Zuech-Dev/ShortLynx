@@ -14,19 +14,19 @@ public sealed class LinkService(
 {
     private const int MaxCodeAttempts = 5;
 
-    /// <summary>Creates an API-key-owned link (REST API path).</summary>
+    /// <summary>Creates an API-key-owned link (REST API path) for the key's account.</summary>
     public Task<AnonymousLinkResult> CreateAnonymousLinkAsync(
         string url, ApiKeyEntity owner, CancellationToken ct = default)
-        => CreateLinkAsync(url, link => link.ApiKeyId = owner.Id, ct);
+        => CreateLinkAsync(url, owner.AccountId, link => link.ApiKeyId = owner.Id, ct);
 
-    /// <summary>Creates a user-owned link (admin dashboard path); leaves ApiKeyId null.</summary>
+    /// <summary>Creates a link owned by an account (admin dashboard path).</summary>
     public Task<AnonymousLinkResult> CreateAnonymousLinkAsync(
-        string url, Guid userAccountId, CancellationToken ct = default)
-        => CreateLinkAsync(url, link => link.UserAccountId = userAccountId, ct);
+        string url, Guid accountId, Guid? createdByUserAccountId = null, CancellationToken ct = default)
+        => CreateLinkAsync(url, accountId, link => link.UserAccountId = createdByUserAccountId, ct);
 
-    /// <summary>Creates a user-owned, user-attributed (Mode 2) link with no anonymous short code.</summary>
+    /// <summary>Creates an account-owned, user-attributed (Mode 2) link with no anonymous short code.</summary>
     public async Task<LinkEntity> CreateUserAttributedLinkAsync(
-        string url, Guid userAccountId, CancellationToken ct = default)
+        string url, Guid accountId, Guid? createdByUserAccountId = null, CancellationToken ct = default)
     {
         var validation = await urlValidator.ValidateAsync(url);
         if (!validation.IsValid)
@@ -39,7 +39,8 @@ public sealed class LinkService(
             Mode = LinkMode.UserAttributed,
             CreatedAt = DateTimeOffset.UtcNow,
             IsActive = true,
-            UserAccountId = userAccountId,
+            AccountId = accountId,
+            UserAccountId = createdByUserAccountId,
         };
         db.LinkEntities.Add(link);
         await db.SaveChangesAsync(ct);
@@ -47,7 +48,7 @@ public sealed class LinkService(
     }
 
     private async Task<AnonymousLinkResult> CreateLinkAsync(
-        string url, Action<LinkEntity> assignOwner, CancellationToken ct)
+        string url, Guid accountId, Action<LinkEntity> assignProvenance, CancellationToken ct)
     {
         var validation = await urlValidator.ValidateAsync(url);
         if (!validation.IsValid)
@@ -60,8 +61,9 @@ public sealed class LinkService(
             Mode = LinkMode.Anonymous,
             CreatedAt = DateTimeOffset.UtcNow,
             IsActive = true,
+            AccountId = accountId,
         };
-        assignOwner(link);
+        assignProvenance(link);
         db.LinkEntities.Add(link);
         await db.SaveChangesAsync(ct);
 
@@ -100,17 +102,17 @@ public sealed class LinkService(
     }
 
     public async Task<bool> SetLinkDomainAsync(
-        Guid linkId, Guid? customDomainId, Guid userAccountId, CancellationToken ct = default)
+        Guid linkId, Guid? customDomainId, Guid accountId, CancellationToken ct = default)
     {
         var link = await db.LinkEntities
-            .FirstOrDefaultAsync(l => l.Id == linkId && l.UserAccountId == userAccountId, ct);
+            .FirstOrDefaultAsync(l => l.Id == linkId && l.AccountId == accountId, ct);
         if (link is null) return false;
 
         if (customDomainId is { } domainId)
         {
             var ownsVerified = await db.CustomDomainEntities.AnyAsync(
                 d => d.Id == domainId
-                  && d.UserAccountId == userAccountId
+                  && d.AccountId == accountId
                   && d.VerificationStatus == DomainVerificationStatus.Verified, ct);
             if (!ownsVerified) return false;
         }

@@ -25,7 +25,7 @@ public class ApiKeysControllerTests : IClassFixture<ApiFactory>
     public async Task CreateApiKey_NoAuthHeader_Returns401()
     {
         var client = _factory.CreateClient();
-        var response = await client.PostAsJsonAsync("/api-keys", new CreateApiKeyRequest("test", []));
+        var response = await client.PostAsJsonAsync("/api-keys", new CreateApiKeyRequest("test", [], Guid.NewGuid()));
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
@@ -34,7 +34,7 @@ public class ApiKeysControllerTests : IClassFixture<ApiFactory>
     {
         var client = _factory.CreateClient();
         client.DefaultRequestHeaders.Add("Authorization", "Bearer wrong-secret");
-        var response = await client.PostAsJsonAsync("/api-keys", new CreateApiKeyRequest("test", []));
+        var response = await client.PostAsJsonAsync("/api-keys", new CreateApiKeyRequest("test", [], Guid.NewGuid()));
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
@@ -45,7 +45,7 @@ public class ApiKeysControllerTests : IClassFixture<ApiFactory>
     {
         var client = CreateAdminClient();
         var response = await client.PostAsJsonAsync("/api-keys",
-            new CreateApiKeyRequest("integration-test-key", ["links:read", "links:write"]));
+            new CreateApiKeyRequest("integration-test-key", ["links:read", "links:write"], await _factory.SeedAccountAsync()));
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
@@ -61,7 +61,7 @@ public class ApiKeysControllerTests : IClassFixture<ApiFactory>
     {
         var client = CreateAdminClient();
         var response = await client.PostAsJsonAsync("/api-keys",
-            new CreateApiKeyRequest("scoped-key", ["links:read", "analytics:read"]));
+            new CreateApiKeyRequest("scoped-key", ["links:read", "analytics:read"], await _factory.SeedAccountAsync()));
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
@@ -77,7 +77,7 @@ public class ApiKeysControllerTests : IClassFixture<ApiFactory>
         // Create an API key via the admin endpoint.
         var adminClient = CreateAdminClient();
         var keyResponse = await (await adminClient.PostAsJsonAsync("/api-keys",
-            new CreateApiKeyRequest("auto-auth-test-key", ["links:read", "links:write"])))
+            new CreateApiKeyRequest("auto-auth-test-key", ["links:read", "links:write"], await _factory.SeedAccountAsync())))
             .Content.ReadFromJsonAsync<ApiKeyResponse>();
 
         Assert.NotNull(keyResponse);
@@ -105,7 +105,7 @@ public class ApiKeysControllerTests : IClassFixture<ApiFactory>
     {
         var adminClient = CreateAdminClient();
         var keyResponse = await (await adminClient.PostAsJsonAsync("/api-keys",
-            new CreateApiKeyRequest("empty-links-key", ["links:read"])))
+            new CreateApiKeyRequest("empty-links-key", ["links:read"], await _factory.SeedAccountAsync())))
             .Content.ReadFromJsonAsync<ApiKeyResponse>();
 
         var apiClient = _factory.CreateClient();
@@ -126,10 +126,10 @@ public class ApiKeysControllerTests : IClassFixture<ApiFactory>
 
         // Key A creates two links.
         var keyA = await (await adminClient.PostAsJsonAsync("/api-keys",
-                new CreateApiKeyRequest("list-key-a", ["links:read", "links:write"])))
+                new CreateApiKeyRequest("list-key-a", ["links:read", "links:write"], await _factory.SeedAccountAsync())))
             .Content.ReadFromJsonAsync<ApiKeyResponse>();
         var keyB = await (await adminClient.PostAsJsonAsync("/api-keys",
-                new CreateApiKeyRequest("list-key-b", ["links:read", "links:write"])))
+                new CreateApiKeyRequest("list-key-b", ["links:read", "links:write"], await _factory.SeedAccountAsync())))
             .Content.ReadFromJsonAsync<ApiKeyResponse>();
 
         var clientA = _factory.CreateClient();
@@ -154,7 +154,7 @@ public class ApiKeysControllerTests : IClassFixture<ApiFactory>
     {
         var adminClient = CreateAdminClient();
         var key = await (await adminClient.PostAsJsonAsync("/api-keys",
-                new CreateApiKeyRequest("paged-key", ["links:read", "links:write"])))
+                new CreateApiKeyRequest("paged-key", ["links:read", "links:write"], await _factory.SeedAccountAsync())))
             .Content.ReadFromJsonAsync<ApiKeyResponse>();
 
         var apiClient = _factory.CreateClient();

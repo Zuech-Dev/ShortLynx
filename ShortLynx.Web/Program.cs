@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.HttpOverrides;
+using ShortLynx.Repository;
 using ShortLynx.Services.Visits;
 using ShortLynx.Services.Redirect;
 using ShortLynx.Web.Extensions;
@@ -21,6 +22,12 @@ builder.Services.AddShortLynxRateLimiter(builder.Configuration);
 builder.Services.AddHealthChecks();
 
 var app = builder.Build();
+
+// Dev-only guard: fail fast at startup if the database is behind the migrations, so schema drift
+// (a generated-but-unapplied migration) surfaces here instead of as a cryptic query-time error like
+// "column does not exist". Resolve with: dotnet ef database update.
+if (app.Environment.IsDevelopment())
+    DatabaseMigrationGuard.ThrowIfPending(app.Services);
 
 app.UseForwardedHeaders();
 

@@ -64,16 +64,18 @@ else
         var uid = userId.Value;
 
         await using var db = await DbFactory.CreateDbContextAsync();
+        var accountId = await AccountResolver.GetOrCreatePersonalAccountIdAsync(
+            db, uid, principal.Identity?.Name ?? "Personal");
 
-        // All counts scoped to the signed-in user — links they own directly (UserAccountId) or via an API key.
+        // All counts scoped to the current account.
         _totalLinks = await db.LinkEntities
-            .CountAsync(l => l.UserAccountId == uid || l.ApiKey!.UserAccountId == uid);
+            .CountAsync(l => l.AccountId == accountId);
         _totalClicks = await db.VisitEntities
-            .CountAsync(v => v.ShortCode.Link.UserAccountId == uid || v.ShortCode.Link.ApiKey!.UserAccountId == uid);
+            .CountAsync(v => v.ShortCode.Link.AccountId == accountId);
         _totalUserClicks = await db.UserVisitEntities
-            .CountAsync(v => v.UserLinkCode.Link.UserAccountId == uid || v.UserLinkCode.Link.ApiKey!.UserAccountId == uid);
+            .CountAsync(v => v.UserLinkCode.Link.AccountId == accountId);
         _totalApiKeys = await db.ApiKeyEntities
-            .CountAsync(k => k.UserAccountId == uid && k.IsActive);
+            .CountAsync(k => k.AccountId == accountId && k.IsActive);
 
         // Cross-tenant total only for super-admins.
         if (_isSuperAdmin)

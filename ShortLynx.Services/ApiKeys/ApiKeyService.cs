@@ -10,11 +10,10 @@ namespace ShortLynx.Services.ApiKeys;
 public sealed class ApiKeyService(ShortLynxDbContext db, IOptions<ApiKeyOptions> options) : IApiKeyService
 {
     public async Task<(ApiKeyEntity Record, string PlaintextKey)> CreateAsync(
-        string name, string[] scopes, Guid? userAccountId = null, CancellationToken ct = default)
+        string name, string[] scopes, Guid accountId, Guid? createdByUserAccountId = null, CancellationToken ct = default)
     {
-        if (userAccountId is { } uid &&
-            !await db.UserAccountEntities.AnyAsync(u => u.Id == uid, ct))
-            throw new ArgumentException($"No user account exists with id {uid}.", nameof(userAccountId));
+        if (!await db.AccountEntities.AnyAsync(a => a.Id == accountId, ct))
+            throw new ArgumentException($"No account exists with id {accountId}.", nameof(accountId));
 
         var keyBytes = RandomNumberGenerator.GetBytes(32);
         var plaintext = Convert.ToHexString(keyBytes); // 64-char hex key
@@ -30,7 +29,8 @@ public sealed class ApiKeyService(ShortLynxDbContext db, IOptions<ApiKeyOptions>
             Scopes = string.Join(",", scopes),
             CreatedAt = DateTimeOffset.UtcNow,
             IsActive = true,
-            UserAccountId = userAccountId,
+            AccountId = accountId,
+            UserAccountId = createdByUserAccountId,
         };
 
         db.ApiKeyEntities.Add(entity);
@@ -66,11 +66,11 @@ public sealed class ApiKeyService(ShortLynxDbContext db, IOptions<ApiKeyOptions>
         return null;
     }
 
-    public async Task<bool> RevokeAsync(Guid keyId, Guid userAccountId, CancellationToken ct = default)
+    public async Task<bool> RevokeAsync(Guid keyId, Guid accountId, CancellationToken ct = default)
     {
-        // Ownership-scoped, atomic revoke. No DateTimeOffset in the predicate (SQLite-safe).
+        // Account-scoped, atomic revoke. No DateTimeOffset in the predicate (SQLite-safe).
         var affected = await db.ApiKeyEntities
-            .Where(k => k.Id == keyId && k.UserAccountId == userAccountId && k.IsActive)
+            .Where(k => k.Id == keyId && k.AccountId == accountId && k.IsActive)
             .ExecuteUpdateAsync(s => s.SetProperty(k => k.IsActive, false), ct);
         return affected > 0;
     }

@@ -23,6 +23,12 @@
         <ProjectReference Include="..\ShortLynx.Data\ShortLynx.Data.csproj" />
         <ProjectReference Include="..\ShortLynx.Repository\ShortLynx.Repository.csproj" />
         <ProjectReference Include="..\ShortLynx.Services\ShortLynx.Services.csproj" />
+        <!-- Carries the EF migrations assembly into the app so the dev-time DatabaseMigrationGuard can
+             enumerate migrations at startup. Content (the provider's design-time appsettings) is excluded
+             so it can't clobber the app's own configuration. -->
+        <ProjectReference Include="..\ShortLynx.Data.PostgreSql\ShortLynx.Data.PostgreSql.csproj">
+            <ExcludeAssets>contentFiles</ExcludeAssets>
+        </ProjectReference>
     </ItemGroup>
 
     <!-- Tailwind CSS via the standalone CLI. tools/tailwindcss is git-ignored and platform-specific

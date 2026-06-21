@@ -129,11 +129,16 @@ else
     string? _scopeError;
     string? _newPlaintextKey;
 
+    Guid _accountId;
+
     protected override async Task OnInitializedAsync()
     {
-        var userId = (await AuthState).User.GetUserId();
+        var principal = (await AuthState).User;
+        var userId = principal.GetUserId();
         if (userId is null) { _loaded = true; return; }
         _uid = userId.Value;
+        await using (var db = await DbFactory.CreateDbContextAsync())
+            _accountId = await AccountResolver.GetOrCreatePersonalAccountIdAsync(db, _uid, principal.Identity?.Name ?? "Personal");
         _resolved = true;
         await LoadAsync();
     }
@@ -142,7 +147,7 @@ else
     {
         await using var db = await DbFactory.CreateDbContextAsync();
         var keys = await db.ApiKeyEntities
-            .Where(k => k.UserAccountId == _uid)
+            .Where(k => k.AccountId == _accountId)
             .OrderByDescending(k => k.Id)
             .ToListAsync();
 
@@ -175,7 +180,7 @@ else
 
         await using var scope = ScopeFactory.CreateAsyncScope();
         var svc = scope.ServiceProvider.GetRequiredService<IApiKeyService>();
-        var (_, plaintext) = await svc.CreateAsync(_form.Name!, _form.SelectedScopes.ToArray(), _uid);
+        var (_, plaintext) = await svc.CreateAsync(_form.Name!, _form.SelectedScopes.ToArray(), _accountId, _uid);
 
         _newPlaintextKey = plaintext;
         _form = new();
@@ -192,7 +197,7 @@ else
 
         await using var scope = ScopeFactory.CreateAsyncScope();
         var svc = scope.ServiceProvider.GetRequiredService<IApiKeyService>();
-        await svc.RevokeAsync(keyId, _uid);
+        await svc.RevokeAsync(keyId, _accountId);
         await LoadAsync();
     }
 

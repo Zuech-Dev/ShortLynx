@@ -15,6 +15,7 @@ public class LinksComponentTests : BunitContext
     private readonly FakeLinkService _links = new();
     private readonly SqliteConnection _conn;
     private readonly Guid _uid = Guid.CreateVersion7();
+    private readonly Guid _accountId;
 
     public LinksComponentTests()
     {
@@ -32,6 +33,7 @@ public class LinksComponentTests : BunitContext
         var factory = Services.GetRequiredService<IDbContextFactory<ShortLynxDbContext>>();
         using var db = factory.CreateDbContext();
         db.Database.EnsureCreated();
+        _accountId = AccountTestSeed.SeedOwner(db, _uid);
     }
 
     [Fact]
@@ -43,7 +45,7 @@ public class LinksComponentTests : BunitContext
         cut.Find("form").Submit();
 
         Assert.Single(_links.Created);
-        Assert.Equal(_uid, _links.Created[0].Uid);
+        Assert.Equal(_accountId, _links.Created[0].AccountId);
         Assert.Contains(_links.CodeToReturn, cut.Markup);
         Assert.NotNull(cut.Find("[data-testid=new-link]"));
     }
@@ -74,6 +76,6 @@ public class LinksComponentTests : BunitContext
         // Routed through the Mode-2 creation path, not the anonymous one.
         Assert.Empty(_links.Created);
         Assert.Single(_links.CreatedUserAttributed);
-        Assert.Equal(_uid, _links.CreatedUserAttributed[0].Uid);
+        Assert.Equal(_accountId, _links.CreatedUserAttributed[0].AccountId);
     }
 }

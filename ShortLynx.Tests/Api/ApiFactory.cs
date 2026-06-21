@@ -83,6 +83,20 @@ public sealed class ApiFactory : WebApplicationFactory<ShortLynx.Core.CoreApiEnt
         });
     }
 
+    /// <summary>Seeds an account and returns its id (resources/keys are account-owned).</summary>
+    public async Task<Guid> SeedAccountAsync(string name = "Test Account")
+    {
+        using var scope = Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ShortLynxDbContext>();
+        var account = new ShortLynx.Data.Entities.AccountEntity
+        {
+            Id = Guid.CreateVersion7(), Name = name, CreatedAt = DateTimeOffset.UtcNow, IsActive = true,
+        };
+        db.Add(account);
+        await db.SaveChangesAsync();
+        return account.Id;
+    }
+
     async ValueTask IAsyncDisposable.DisposeAsync()
     {
         await _connection.DisposeAsync();

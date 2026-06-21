@@ -2,145 +2,86 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ShortLynx.Tests.Data;
 
-// Validates the per-tenant scoping predicate used by the admin dashboard pages. A link is owned by
-// either an API key (Link.ApiKey.UserAccountId) or a user directly (Link.UserAccountId), so scoping is
-// `UserAccountId == uid OR ApiKey.UserAccountId == uid`. A tenant must never see another's rows.
+// Validates per-account (tenant) scoping. Resources are owned by an account (Link.AccountId), so scoping
+// is simply `AccountId == currentAccountId`. An account must never see another's rows.
 public class TenantScopingTests
 {
     [Fact]
-    public async Task LinksScopedByApiKeyOwner_ReturnOnlyOwnRows()
+    public async Task LinksScopedByAccount_ReturnOnlyOwnRows()
     {
         await using var db = await TestDatabase.CreateAsync();
 
-        var user1 = EntityFactory.UserAccount("u1@example.com");
-        var user2 = EntityFactory.UserAccount("u2@example.com");
-
-        var key1 = EntityFactory.ApiKey("k1");
-        key1.UserAccountId = user1.Id;
-        var key2 = EntityFactory.ApiKey("k2");
-        key2.Prefix = "TESTKEY2";
-        key2.UserAccountId = user2.Id;
-
-        var link1 = EntityFactory.AnonymousLink(key1.Id);
-        var link2 = EntityFactory.AnonymousLink(key2.Id);
+        var account1 = EntityFactory.Account("a1");
+        var account2 = EntityFactory.Account("a2");
+        var link1 = EntityFactory.AnonymousLink(account1.Id);
+        var link2 = EntityFactory.AnonymousLink(account2.Id);
 
         await using (var seed = db.CreateContext())
         {
-            seed.UserAccountEntities.AddRange(user1, user2);
-            seed.ApiKeyEntities.AddRange(key1, key2);
+            seed.AccountEntities.AddRange(account1, account2);
             seed.LinkEntities.AddRange(link1, link2);
             await seed.SaveChangesAsync();
         }
 
         await using var ctx = db.CreateContext();
 
-        var u1Links = await ctx.LinkEntities
-            .Where(l => l.ApiKey.UserAccountId == user1.Id)
-            .ToListAsync();
-        var u2Links = await ctx.LinkEntities
-            .Where(l => l.ApiKey.UserAccountId == user2.Id)
-            .ToListAsync();
+        var a1Links = await ctx.LinkEntities.Where(l => l.AccountId == account1.Id).ToListAsync();
+        var a2Links = await ctx.LinkEntities.Where(l => l.AccountId == account2.Id).ToListAsync();
 
-        Assert.Single(u1Links);
-        Assert.Equal(link1.Id, u1Links[0].Id);
-        Assert.Single(u2Links);
-        Assert.Equal(link2.Id, u2Links[0].Id);
+        Assert.Single(a1Links);
+        Assert.Equal(link1.Id, a1Links[0].Id);
+        Assert.Single(a2Links);
+        Assert.Equal(link2.Id, a2Links[0].Id);
     }
 
     [Fact]
-    public async Task LinkCount_ScopedByOwner_ExcludesOtherTenants()
+    public async Task LinkCount_ScopedByAccount_ExcludesOtherAccounts()
     {
         await using var db = await TestDatabase.CreateAsync();
 
-        var user1 = EntityFactory.UserAccount("only1@example.com");
-        var user2 = EntityFactory.UserAccount("only2@example.com");
-        var key1 = EntityFactory.ApiKey("k1");
-        key1.UserAccountId = user1.Id;
-        var key2 = EntityFactory.ApiKey("k2");
-        key2.Prefix = "TESTKEY2";
-        key2.UserAccountId = user2.Id;
+        var account1 = EntityFactory.Account("only1");
+        var account2 = EntityFactory.Account("only2");
 
         await using (var seed = db.CreateContext())
         {
-            seed.UserAccountEntities.AddRange(user1, user2);
-            seed.ApiKeyEntities.AddRange(key1, key2);
+            seed.AccountEntities.AddRange(account1, account2);
             seed.LinkEntities.AddRange(
-                EntityFactory.AnonymousLink(key1.Id),
-                EntityFactory.AnonymousLink(key1.Id),
-                EntityFactory.AnonymousLink(key2.Id));
+                EntityFactory.AnonymousLink(account1.Id),
+                EntityFactory.AnonymousLink(account1.Id),
+                EntityFactory.AnonymousLink(account2.Id));
             await seed.SaveChangesAsync();
         }
 
         await using var ctx = db.CreateContext();
-        var u1Count = await ctx.LinkEntities.CountAsync(l => l.ApiKey!.UserAccountId == user1.Id);
+        var a1Count = await ctx.LinkEntities.CountAsync(l => l.AccountId == account1.Id);
 
-        Assert.Equal(2, u1Count);
-    }
-
-    // ── Option C: user-owned (dashboard) links ────────────────────────────────
-
-    [Fact]
-    public async Task UserOwnedLink_VisibleToOwnerViaOrPredicate_NotOthers()
-    {
-        await using var db = await TestDatabase.CreateAsync();
-
-        var user1 = EntityFactory.UserAccount("owner1@example.com");
-        var user2 = EntityFactory.UserAccount("owner2@example.com");
-        var link1 = EntityFactory.UserOwnedLink(user1.Id);
-        var link2 = EntityFactory.UserOwnedLink(user2.Id);
-
-        await using (var seed = db.CreateContext())
-        {
-            seed.UserAccountEntities.AddRange(user1, user2);
-            seed.LinkEntities.AddRange(link1, link2);
-            await seed.SaveChangesAsync();
-        }
-
-        await using var ctx = db.CreateContext();
-        var u1 = user1.Id;
-        var u1Links = await ctx.LinkEntities
-            .Where(l => l.UserAccountId == u1 || l.ApiKey!.UserAccountId == u1)
-            .ToListAsync();
-
-        Assert.Single(u1Links);
-        Assert.Equal(link1.Id, u1Links[0].Id);
+        Assert.Equal(2, a1Count);
     }
 
     [Fact]
-    public async Task MixedOwnership_OwnerSeesBothUserOwnedAndKeyOwned()
+    public async Task KeyCreatedLinks_InheritKeyAccount_AndScopeWithDashboardLinks()
     {
         await using var db = await TestDatabase.CreateAsync();
 
-        var user1 = EntityFactory.UserAccount("mix1@example.com");
-        var user2 = EntityFactory.UserAccount("mix2@example.com");
-        var key1 = EntityFactory.ApiKey("k1");
-        key1.UserAccountId = user1.Id;
-        var key2 = EntityFactory.ApiKey("k2");
-        key2.Prefix = "TESTKEY2";
-        key2.UserAccountId = user2.Id;
+        var account = EntityFactory.Account("shared");
+        var key = EntityFactory.ApiKey(account.Id);
 
-        var u1KeyLink = EntityFactory.AnonymousLink(key1.Id);
-        var u1UserLink = EntityFactory.UserOwnedLink(user1.Id);
-        var u2KeyLink = EntityFactory.AnonymousLink(key2.Id);
-        var u2UserLink = EntityFactory.UserOwnedLink(user2.Id);
+        // One link created via the key, one created in the dashboard — both own the same account.
+        var keyLink = EntityFactory.AnonymousLink(account.Id);
+        keyLink.ApiKeyId = key.Id;
+        var dashLink = EntityFactory.AnonymousLink(account.Id);
 
         await using (var seed = db.CreateContext())
         {
-            seed.UserAccountEntities.AddRange(user1, user2);
-            seed.ApiKeyEntities.AddRange(key1, key2);
-            seed.LinkEntities.AddRange(u1KeyLink, u1UserLink, u2KeyLink, u2UserLink);
+            seed.AddRange(account, key, keyLink, dashLink);
             await seed.SaveChangesAsync();
         }
 
         await using var ctx = db.CreateContext();
-        var u1 = user1.Id;
-        var u1Links = await ctx.LinkEntities
-            .Where(l => l.UserAccountId == u1 || l.ApiKey!.UserAccountId == u1)
-            .Select(l => l.Id)
-            .ToListAsync();
+        var links = await ctx.LinkEntities.Where(l => l.AccountId == account.Id).Select(l => l.Id).ToListAsync();
 
-        Assert.Equal(2, u1Links.Count);
-        Assert.Contains(u1KeyLink.Id, u1Links);
-        Assert.Contains(u1UserLink.Id, u1Links);
+        Assert.Equal(2, links.Count);
+        Assert.Contains(keyLink.Id, links);
+        Assert.Contains(dashLink.Id, links);
     }
 }

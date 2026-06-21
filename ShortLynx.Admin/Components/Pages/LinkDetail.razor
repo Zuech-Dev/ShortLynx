@@ -184,8 +184,9 @@ else
     List<VisitEntity> _recentVisits = [];
     List<UserCodeRow> _userRows = [];
 
-    // Custom-domain pinning (user-owned links only).
+    // Custom-domain pinning (current-account links only).
     bool _canPin, _pinSaved;
+    Guid _accountId;
     List<DomainOption> _verifiedDomains = [];
     string _selectedDomainKey = string.Empty;
 
@@ -198,6 +199,8 @@ else
             var userId = principal.GetUserId();
             if (userId is null) { _notFound = true; _loaded = true; return; }
             _uid = userId.Value;
+            await using (var db = await DbFactory.CreateDbContextAsync())
+                _accountId = await AccountResolver.GetOrCreatePersonalAccountIdAsync(db, _uid, principal.Identity?.Name ?? "Personal");
             _authResolved = true;
         }
         await LoadAsync();
@@ -216,9 +219,9 @@ else
 
         if (_link is null) { _notFound = true; _loaded = true; return; }
 
-        // Ownership: tenants may only view their own links (owned directly or via an API key);
-        // super-admins may view any. Report "not found" (not "forbidden") so existence isn't leaked.
-        if (!_isSuperAdmin && _link.UserAccountId != _uid && _link.ApiKey?.UserAccountId != _uid)
+        // Ownership: members may only view links in their account; super-admins may view any.
+        // Report "not found" (not "forbidden") so existence isn't leaked.
+        if (!_isSuperAdmin && _link.AccountId != _accountId)
         {
             _link = null;
             _notFound = true;
@@ -260,12 +263,12 @@ else
                 clickMap.GetValueOrDefault(c.Id, 0))).ToList();
         }
 
-        // Pinning is only offered for links the user owns directly (not API-key-owned ones).
-        _canPin = _link.UserAccountId == _uid;
+        // Pinning is offered for links in the current account (not when a super-admin views another's).
+        _canPin = _link.AccountId == _accountId;
         if (_canPin)
         {
             _verifiedDomains = await db.CustomDomainEntities
-                .Where(d => d.UserAccountId == _uid && d.VerificationStatus == DomainVerificationStatus.Verified)
+                .Where(d => d.AccountId == _accountId && d.VerificationStatus == DomainVerificationStatus.Verified)
                 .OrderBy(d => d.Domain)
                 .Select(d => new DomainOption(d.Id, d.Domain))
                 .ToListAsync();
@@ -283,7 +286,7 @@ else
 
         await using var scope = ScopeFactory.CreateAsyncScope();
         var svc = scope.ServiceProvider.GetRequiredService<ILinkService>();
-        if (await svc.SetLinkDomainAsync(Id, domainId, _uid))
+        if (await svc.SetLinkDomainAsync(Id, domainId, _accountId))
         {
             _pinSaved = true;
             await LoadAsync();

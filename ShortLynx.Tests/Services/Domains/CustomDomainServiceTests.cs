@@ -21,13 +21,13 @@ public class CustomDomainServiceTests
     private static CustomDomainService MakeSvc(ShortLynx.Data.Context.ShortLynxDbContext ctx, IDnsResolver dns)
         => new(ctx, dns, Options.Create(Opts));
 
-    private static async Task<Guid> SeedUserAsync(TestDatabase db)
+    private static async Task<Guid> SeedAccountAsync(TestDatabase db)
     {
-        var user = EntityFactory.UserAccount($"{Guid.NewGuid():N}@example.com");
+        var account = EntityFactory.Account();
         await using var ctx = db.CreateContext();
-        ctx.UserAccountEntities.Add(user);
+        ctx.AccountEntities.Add(account);
         await ctx.SaveChangesAsync();
-        return user.Id;
+        return account.Id;
     }
 
     // ── Add ───────────────────────────────────────────────────────────────────
@@ -36,7 +36,7 @@ public class CustomDomainServiceTests
     public async Task Add_CreatesPendingDomain_WithToken()
     {
         await using var db = await TestDatabase.CreateAsync();
-        var uid = await SeedUserAsync(db);
+        var uid = await SeedAccountAsync(db);
 
         var domain = await MakeSvc(db.CreateContext(), new FakeDnsResolver())
             .AddAsync("go.example.com", uid);
@@ -54,7 +54,7 @@ public class CustomDomainServiceTests
     public async Task Add_NormalisesDomain(string input, string expected)
     {
         await using var db = await TestDatabase.CreateAsync();
-        var uid = await SeedUserAsync(db);
+        var uid = await SeedAccountAsync(db);
 
         var domain = await MakeSvc(db.CreateContext(), new FakeDnsResolver()).AddAsync(input, uid);
 
@@ -65,7 +65,7 @@ public class CustomDomainServiceTests
     public async Task Add_DuplicateDomain_Throws()
     {
         await using var db = await TestDatabase.CreateAsync();
-        var uid = await SeedUserAsync(db);
+        var uid = await SeedAccountAsync(db);
 
         await MakeSvc(db.CreateContext(), new FakeDnsResolver()).AddAsync("dupe.example.com", uid);
 
@@ -79,8 +79,8 @@ public class CustomDomainServiceTests
     public async Task List_ReturnsOnlyOwnersDomains()
     {
         await using var db = await TestDatabase.CreateAsync();
-        var owner = await SeedUserAsync(db);
-        var other = await SeedUserAsync(db);
+        var owner = await SeedAccountAsync(db);
+        var other = await SeedAccountAsync(db);
 
         await MakeSvc(db.CreateContext(), new FakeDnsResolver()).AddAsync("mine.example.com", owner);
         await MakeSvc(db.CreateContext(), new FakeDnsResolver()).AddAsync("theirs.example.com", other);
@@ -97,7 +97,7 @@ public class CustomDomainServiceTests
     public async Task Verify_MatchingTxtRecord_SetsVerifiedAndActive()
     {
         await using var db = await TestDatabase.CreateAsync();
-        var uid = await SeedUserAsync(db);
+        var uid = await SeedAccountAsync(db);
         var dns = new FakeDnsResolver();
 
         var domain = await MakeSvc(db.CreateContext(), dns).AddAsync("go.example.com", uid);
@@ -115,7 +115,7 @@ public class CustomDomainServiceTests
     public async Task Verify_NoMatchingRecord_SetsFailed()
     {
         await using var db = await TestDatabase.CreateAsync();
-        var uid = await SeedUserAsync(db);
+        var uid = await SeedAccountAsync(db);
         var dns = new FakeDnsResolver();
 
         var domain = await MakeSvc(db.CreateContext(), dns).AddAsync("go.example.com", uid);
@@ -133,8 +133,8 @@ public class CustomDomainServiceTests
     public async Task Verify_DomainNotOwnedByUser_ReturnsNull()
     {
         await using var db = await TestDatabase.CreateAsync();
-        var owner = await SeedUserAsync(db);
-        var other = await SeedUserAsync(db);
+        var owner = await SeedAccountAsync(db);
+        var other = await SeedAccountAsync(db);
         var dns = new FakeDnsResolver();
 
         var domain = await MakeSvc(db.CreateContext(), dns).AddAsync("go.example.com", owner);
@@ -150,7 +150,7 @@ public class CustomDomainServiceTests
     public async Task Remove_OwnedDomain_DeletesAndReturnsTrue()
     {
         await using var db = await TestDatabase.CreateAsync();
-        var uid = await SeedUserAsync(db);
+        var uid = await SeedAccountAsync(db);
         var domain = await MakeSvc(db.CreateContext(), new FakeDnsResolver()).AddAsync("go.example.com", uid);
 
         var removed = await MakeSvc(db.CreateContext(), new FakeDnsResolver()).RemoveAsync(domain.Id, uid);
@@ -164,8 +164,8 @@ public class CustomDomainServiceTests
     public async Task Remove_AnotherUsersDomain_ReturnsFalse()
     {
         await using var db = await TestDatabase.CreateAsync();
-        var owner = await SeedUserAsync(db);
-        var other = await SeedUserAsync(db);
+        var owner = await SeedAccountAsync(db);
+        var other = await SeedAccountAsync(db);
         var domain = await MakeSvc(db.CreateContext(), new FakeDnsResolver()).AddAsync("go.example.com", owner);
 
         var removed = await MakeSvc(db.CreateContext(), new FakeDnsResolver()).RemoveAsync(domain.Id, other);
@@ -191,7 +191,7 @@ public class CustomDomainServiceTests
     public async Task Recheck_VerifiedDomainWithMissingTxt_DemotesToFailedAndInactive()
     {
         await using var db = await TestDatabase.CreateAsync();
-        var uid = await SeedUserAsync(db);
+        var uid = await SeedAccountAsync(db);
         var dns = new FakeDnsResolver(); // publishes nothing
         var domain = await SeedVerifiedAsync(db, dns, uid, "go.example.com");
 
@@ -209,7 +209,7 @@ public class CustomDomainServiceTests
     public async Task Recheck_VerifiedDomainStillPublishingTxt_StaysVerified()
     {
         await using var db = await TestDatabase.CreateAsync();
-        var uid = await SeedUserAsync(db);
+        var uid = await SeedAccountAsync(db);
         var dns = new FakeDnsResolver();
         var domain = await SeedVerifiedAsync(db, dns, uid, "go.example.com");
         dns.Records[Opts.VerificationHost("go.example.com")] = [Opts.ExpectedTxtValue(domain.VerificationToken)];
@@ -227,7 +227,7 @@ public class CustomDomainServiceTests
     public async Task Recheck_IgnoresPendingDomains()
     {
         await using var db = await TestDatabase.CreateAsync();
-        var uid = await SeedUserAsync(db);
+        var uid = await SeedAccountAsync(db);
         var dns = new FakeDnsResolver();
         var added = await MakeSvc(db.CreateContext(), dns).AddAsync("pending.example.com", uid); // Pending
 

@@ -1,9 +1,12 @@
 using System.Security.Claims;
 using Bunit;
 using Bunit.TestDoubles;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using ShortLynx.Admin.Components.Pages;
+using ShortLynx.Data.Context;
 using ShortLynx.Data.Entities;
 using ShortLynx.Data.Enums;
 using ShortLynx.Services.Domains;
@@ -13,10 +16,17 @@ namespace ShortLynx.Tests.Admin;
 public class DomainsComponentTests : BunitContext
 {
     private readonly FakeCustomDomainService _domains = new();
+    private readonly SqliteConnection _conn;
     private readonly Guid _uid = Guid.CreateVersion7();
+    private readonly Guid _accountId;
 
     public DomainsComponentTests()
     {
+        _conn = new SqliteConnection("DataSource=:memory:");
+        _conn.Open();
+        Services.AddDbContextFactory<ShortLynxDbContext>(o => o.UseSqlite(_conn));
+        Services.AddScoped<ShortLynxDbContext>(sp =>
+            sp.GetRequiredService<IDbContextFactory<ShortLynxDbContext>>().CreateDbContext());
         Services.AddScoped<ICustomDomainService>(_ => _domains);
         Services.AddSingleton<IOptions<CustomDomainOptions>>(Options.Create(new CustomDomainOptions()));
 
@@ -25,13 +35,18 @@ public class DomainsComponentTests : BunitContext
         auth.SetClaims(new Claim(ClaimTypes.NameIdentifier, _uid.ToString()));
 
         JSInterop.Mode = JSRuntimeMode.Loose;
+
+        var factory = Services.GetRequiredService<IDbContextFactory<ShortLynxDbContext>>();
+        using var db = factory.CreateDbContext();
+        db.Database.EnsureCreated();
+        _accountId = AccountTestSeed.SeedOwner(db, _uid);
     }
 
     private CustomDomainEntity Seed(string domain, DomainVerificationStatus status = DomainVerificationStatus.Pending)
     {
         var d = new CustomDomainEntity
         {
-            Id = Guid.CreateVersion7(), UserAccountId = _uid, Domain = domain,
+            Id = Guid.CreateVersion7(), AccountId = _accountId, Domain = domain,
             CreatedAt = DateTimeOffset.UtcNow, IsActive = status == DomainVerificationStatus.Verified,
             VerificationStatus = status, VerificationToken = "tok-123",
         };

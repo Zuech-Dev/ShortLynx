@@ -1,12 +1,33 @@
 using Microsoft.Extensions.Options;
+using ShortLynx.Data.Entities;
 using ShortLynx.Services.ApiKeys;
 
 namespace ShortLynx.Tests.Services.ApiKeys;
 
 public class ApiKeyServiceTests
 {
-    private static ApiKeyService MakeSvc(ShortLynx.Data.Context.ShortLynxDbContext ctx, string secret = "test-secret-at-least-32-chars-long!")
+    private const string Secret = "test-secret-at-least-32-chars-long!";
+
+    private static ApiKeyService MakeSvc(ShortLynx.Data.Context.ShortLynxDbContext ctx, string secret = Secret)
         => new(ctx, Options.Create(new ApiKeyOptions { HmacSecret = secret }));
+
+    private static async Task<Guid> SeedAccountAsync(TestDatabase db, string name = "Acct")
+    {
+        var account = EntityFactory.Account(name);
+        await using var ctx = db.CreateContext();
+        ctx.AccountEntities.Add(account);
+        await ctx.SaveChangesAsync();
+        return account.Id;
+    }
+
+    // Seeds an account and mints a key against it.
+    private static async Task<(ApiKeyEntity Record, string Plaintext, Guid AccountId)> CreateKeyAsync(
+        TestDatabase db, string name, string[] scopes, string secret = Secret)
+    {
+        var accountId = await SeedAccountAsync(db);
+        var (record, plaintext) = await MakeSvc(db.CreateContext(), secret).CreateAsync(name, scopes, accountId);
+        return (record, plaintext, accountId);
+    }
 
     // ── Create ────────────────────────────────────────────────────────────────
 
@@ -14,7 +35,7 @@ public class ApiKeyServiceTests
     public async Task Create_ReturnsBothRecordAndPlaintextKey()
     {
         await using var db = await TestDatabase.CreateAsync();
-        var (record, plaintext) = await MakeSvc(db.CreateContext()).CreateAsync("My Key", ["links:write"]);
+        var (record, plaintext, _) = await CreateKeyAsync(db, "My Key", ["links:write"]);
 
         Assert.NotNull(record);
         Assert.Equal(64, plaintext.Length); // 32 random bytes → hex
@@ -24,7 +45,7 @@ public class ApiKeyServiceTests
     public async Task Create_PersistsEntityToDb()
     {
         await using var db = await TestDatabase.CreateAsync();
-        var (record, _) = await MakeSvc(db.CreateContext()).CreateAsync("Persisted Key", []);
+        var (record, _, _) = await CreateKeyAsync(db, "Persisted Key", []);
 
         await using var ctx = db.CreateContext();
         var stored = await ctx.ApiKeyEntities.FindAsync(record.Id);
@@ -36,7 +57,7 @@ public class ApiKeyServiceTests
     public async Task Create_DoesNotStorePlaintextInDb()
     {
         await using var db = await TestDatabase.CreateAsync();
-        var (record, plaintext) = await MakeSvc(db.CreateContext()).CreateAsync("Hidden Key", []);
+        var (record, plaintext, _) = await CreateKeyAsync(db, "Hidden Key", []);
 
         Assert.NotEqual(plaintext, record.KeyHash);
         Assert.Equal(plaintext[..8], record.Prefix);
@@ -46,7 +67,7 @@ public class ApiKeyServiceTests
     public async Task Create_SetsIsActiveTrue()
     {
         await using var db = await TestDatabase.CreateAsync();
-        var (record, _) = await MakeSvc(db.CreateContext()).CreateAsync("Active Key", []);
+        var (record, _, _) = await CreateKeyAsync(db, "Active Key", []);
         Assert.True(record.IsActive);
     }
 
@@ -54,8 +75,26 @@ public class ApiKeyServiceTests
     public async Task Create_JoinsMultipleScopesWithComma()
     {
         await using var db = await TestDatabase.CreateAsync();
-        var (record, _) = await MakeSvc(db.CreateContext()).CreateAsync("Scoped Key", ["links:read", "links:write"]);
+        var (record, _, _) = await CreateKeyAsync(db, "Scoped Key", ["links:read", "links:write"]);
         Assert.Equal("links:read,links:write", record.Scopes);
+    }
+
+    [Fact]
+    public async Task Create_SetsOwningAccount()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+        var (record, _, accountId) = await CreateKeyAsync(db, "Owned Key", ["links:read"]);
+        Assert.Equal(accountId, record.AccountId);
+    }
+
+    [Fact]
+    public async Task Create_WithUnknownAccount_Throws()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+        var svc = MakeSvc(db.CreateContext());
+
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => svc.CreateAsync("Orphan Key", [], Guid.CreateVersion7()));
     }
 
     // ── Validate ─────────────────────────────────────────────────────────────
@@ -64,11 +103,10 @@ public class ApiKeyServiceTests
     public async Task Validate_CorrectKey_ReturnsEntity()
     {
         await using var db = await TestDatabase.CreateAsync();
-        const string secret = "test-secret-at-least-32-chars-long!";
-        var (_, plaintext) = await MakeSvc(db.CreateContext(), secret).CreateAsync("Valid Key", []);
+        var (_, plaintext, _) = await CreateKeyAsync(db, "Valid Key", []);
 
         // Fresh context — simulates a new request.
-        var result = await MakeSvc(db.CreateContext(), secret).ValidateAsync(plaintext);
+        var result = await MakeSvc(db.CreateContext()).ValidateAsync(plaintext);
 
         Assert.NotNull(result);
         Assert.Equal("Valid Key", result.Name);
@@ -78,12 +116,11 @@ public class ApiKeyServiceTests
     public async Task Validate_WrongKey_ReturnsNull()
     {
         await using var db = await TestDatabase.CreateAsync();
-        const string secret = "test-secret-at-least-32-chars-long!";
-        var (_, plaintext) = await MakeSvc(db.CreateContext(), secret).CreateAsync("Real Key", []);
+        var (_, plaintext, _) = await CreateKeyAsync(db, "Real Key", []);
 
         // Flip one character in the body of the key (not the prefix so lookup still fires).
         var tampered = plaintext[..10] + (plaintext[10] == 'A' ? 'B' : 'A') + plaintext[11..];
-        var result = await MakeSvc(db.CreateContext(), secret).ValidateAsync(tampered);
+        var result = await MakeSvc(db.CreateContext()).ValidateAsync(tampered);
 
         Assert.Null(result);
     }
@@ -92,8 +129,7 @@ public class ApiKeyServiceTests
     public async Task Validate_InactiveKey_ReturnsNull()
     {
         await using var db = await TestDatabase.CreateAsync();
-        const string secret = "test-secret-at-least-32-chars-long!";
-        var (record, plaintext) = await MakeSvc(db.CreateContext(), secret).CreateAsync("Inactive Key", []);
+        var (record, plaintext, _) = await CreateKeyAsync(db, "Inactive Key", []);
 
         await using (var ctx = db.CreateContext())
         {
@@ -102,7 +138,7 @@ public class ApiKeyServiceTests
             await ctx.SaveChangesAsync();
         }
 
-        var result = await MakeSvc(db.CreateContext(), secret).ValidateAsync(plaintext);
+        var result = await MakeSvc(db.CreateContext()).ValidateAsync(plaintext);
         Assert.Null(result);
     }
 
@@ -110,8 +146,7 @@ public class ApiKeyServiceTests
     public async Task Validate_ExpiredKey_ReturnsNull()
     {
         await using var db = await TestDatabase.CreateAsync();
-        const string secret = "test-secret-at-least-32-chars-long!";
-        var (record, plaintext) = await MakeSvc(db.CreateContext(), secret).CreateAsync("Expired Key", []);
+        var (record, plaintext, _) = await CreateKeyAsync(db, "Expired Key", []);
 
         await using (var ctx = db.CreateContext())
         {
@@ -120,7 +155,7 @@ public class ApiKeyServiceTests
             await ctx.SaveChangesAsync();
         }
 
-        var result = await MakeSvc(db.CreateContext(), secret).ValidateAsync(plaintext);
+        var result = await MakeSvc(db.CreateContext()).ValidateAsync(plaintext);
         Assert.Null(result);
     }
 
@@ -144,7 +179,7 @@ public class ApiKeyServiceTests
     public async Task Validate_KeyFromDifferentSecret_ReturnsNull()
     {
         await using var db = await TestDatabase.CreateAsync();
-        var (_, plaintext) = await MakeSvc(db.CreateContext(), "secret-one-xxxxxxxxxxxxxxxxxxxxxxxxxx").CreateAsync("Key A", []);
+        var (_, plaintext, _) = await CreateKeyAsync(db, "Key A", [], "secret-one-xxxxxxxxxxxxxxxxxxxxxxxxxx");
 
         var result = await MakeSvc(db.CreateContext(), "secret-two-xxxxxxxxxxxxxxxxxxxxxxxxxx").ValidateAsync(plaintext);
         Assert.Null(result);
@@ -154,7 +189,7 @@ public class ApiKeyServiceTests
     public async Task Validate_TwoActiveKeysShareAPrefix_EachValidatesToItsOwnKey()
     {
         await using var db = await TestDatabase.CreateAsync();
-        const string secret = "test-secret-at-least-32-chars-long!";
+        var accountId = await SeedAccountAsync(db);
 
         // Two distinct plaintext keys that happen to share the same 8-char prefix (a collision).
         const string plaintextA = "COLLIDE0" + "AAAAAAAAAAAAAAAA";
@@ -162,13 +197,13 @@ public class ApiKeyServiceTests
 
         await using (var seed = db.CreateContext())
         {
-            seed.ApiKeyEntities.Add(MakeKey("Key A", "COLLIDE0", Hmac(secret, plaintextA)));
-            seed.ApiKeyEntities.Add(MakeKey("Key B", "COLLIDE0", Hmac(secret, plaintextB)));
+            seed.ApiKeyEntities.Add(MakeKey("Key A", "COLLIDE0", Hmac(Secret, plaintextA), accountId));
+            seed.ApiKeyEntities.Add(MakeKey("Key B", "COLLIDE0", Hmac(Secret, plaintextB), accountId));
             await seed.SaveChangesAsync();
         }
 
-        var resultA = await MakeSvc(db.CreateContext(), secret).ValidateAsync(plaintextA);
-        var resultB = await MakeSvc(db.CreateContext(), secret).ValidateAsync(plaintextB);
+        var resultA = await MakeSvc(db.CreateContext()).ValidateAsync(plaintextA);
+        var resultB = await MakeSvc(db.CreateContext()).ValidateAsync(plaintextB);
 
         Assert.NotNull(resultA);
         Assert.Equal("Key A", resultA.Name);
@@ -176,7 +211,7 @@ public class ApiKeyServiceTests
         Assert.Equal("Key B", resultB.Name);
     }
 
-    private static ShortLynx.Data.Entities.ApiKeyEntity MakeKey(string name, string prefix, string keyHash) => new()
+    private static ApiKeyEntity MakeKey(string name, string prefix, string keyHash, Guid accountId) => new()
     {
         Id = Guid.CreateVersion7(),
         Prefix = prefix,
@@ -185,6 +220,7 @@ public class ApiKeyServiceTests
         Scopes = "links:read",
         CreatedAt = DateTimeOffset.UtcNow,
         IsActive = true,
+        AccountId = accountId,
     };
 
     private static string Hmac(string secret, string input) => Convert.ToHexString(
@@ -192,51 +228,15 @@ public class ApiKeyServiceTests
             System.Text.Encoding.UTF8.GetBytes(secret),
             System.Text.Encoding.UTF8.GetBytes(input)));
 
-    // ── User-account association (C1 multi-tenant scoping prerequisite) ─────────
-
-    [Fact]
-    public async Task Create_WithUserAccountId_SetsOwner()
-    {
-        await using var db = await TestDatabase.CreateAsync();
-        var user = EntityFactory.UserAccount("owner@example.com");
-        await using (var seed = db.CreateContext())
-        {
-            seed.UserAccountEntities.Add(user);
-            await seed.SaveChangesAsync();
-        }
-
-        var (record, _) = await MakeSvc(db.CreateContext())
-            .CreateAsync("Owned Key", ["links:read"], user.Id);
-
-        Assert.Equal(user.Id, record.UserAccountId);
-    }
-
-    [Fact]
-    public async Task Create_WithUnknownUserAccountId_Throws()
-    {
-        await using var db = await TestDatabase.CreateAsync();
-        var svc = MakeSvc(db.CreateContext());
-
-        await Assert.ThrowsAsync<ArgumentException>(
-            () => svc.CreateAsync("Orphan Key", [], Guid.CreateVersion7()));
-    }
-
-    // ── RevokeAsync ───────────────────────────────────────────────────────────
+    // ── RevokeAsync (account-scoped) ──────────────────────────────────────────
 
     [Fact]
     public async Task Revoke_OwnActiveKey_DeactivatesAndBlocksAuth()
     {
         await using var db = await TestDatabase.CreateAsync();
-        var user = EntityFactory.UserAccount("owner@example.com");
-        await using (var seed = db.CreateContext())
-        {
-            seed.UserAccountEntities.Add(user);
-            await seed.SaveChangesAsync();
-        }
+        var (record, plaintext, accountId) = await CreateKeyAsync(db, "k", ["links:read"]);
 
-        var (record, plaintext) = await MakeSvc(db.CreateContext()).CreateAsync("k", ["links:read"], user.Id);
-
-        var revoked = await MakeSvc(db.CreateContext()).RevokeAsync(record.Id, user.Id);
+        var revoked = await MakeSvc(db.CreateContext()).RevokeAsync(record.Id, accountId);
         Assert.True(revoked);
 
         await using var ctx = db.CreateContext();
@@ -249,20 +249,13 @@ public class ApiKeyServiceTests
     }
 
     [Fact]
-    public async Task Revoke_AnotherUsersKey_ReturnsFalse_LeavesActive()
+    public async Task Revoke_AnotherAccountsKey_ReturnsFalse_LeavesActive()
     {
         await using var db = await TestDatabase.CreateAsync();
-        var owner = EntityFactory.UserAccount("owner@example.com");
-        var other = EntityFactory.UserAccount("other@example.com");
-        await using (var seed = db.CreateContext())
-        {
-            seed.UserAccountEntities.AddRange(owner, other);
-            await seed.SaveChangesAsync();
-        }
+        var (record, _, _) = await CreateKeyAsync(db, "k", []);
+        var otherAccountId = await SeedAccountAsync(db, "Other");
 
-        var (record, _) = await MakeSvc(db.CreateContext()).CreateAsync("k", [], owner.Id);
-
-        var revoked = await MakeSvc(db.CreateContext()).RevokeAsync(record.Id, other.Id);
+        var revoked = await MakeSvc(db.CreateContext()).RevokeAsync(record.Id, otherAccountId);
         Assert.False(revoked);
 
         await using var ctx = db.CreateContext();

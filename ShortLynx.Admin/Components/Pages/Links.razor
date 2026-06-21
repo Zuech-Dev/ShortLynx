@@ -123,13 +123,17 @@ else
     bool _loaded;
     bool _resolved;
     Guid _uid;
+    Guid _accountId;
     List<LinkRow> _rows = [];
 
     protected override async Task OnInitializedAsync()
     {
-        var userId = (await AuthState).User.GetUserId();
+        var principal = (await AuthState).User;
+        var userId = principal.GetUserId();
         if (userId is null) { _loaded = true; return; }
         _uid = userId.Value;
+        await using (var db = await DbFactory.CreateDbContextAsync())
+            _accountId = await AccountResolver.GetOrCreatePersonalAccountIdAsync(db, _uid, principal.Identity?.Name ?? "Personal");
         _resolved = true;
         await LoadAsync();
     }
@@ -142,7 +146,7 @@ else
 
         var links = await db.LinkEntities
             .Include(l => l.ApiKey)
-            .Where(l => l.UserAccountId == _uid || l.ApiKey!.UserAccountId == _uid)
+            .Where(l => l.AccountId == _accountId)
             .OrderByDescending(l => l.Id)
             .Skip((_page - 1) * PageSize)
             .Take(PageSize)
@@ -197,14 +201,14 @@ else
             if (_form.Mode == LinkMode.UserAttributed)
             {
                 // Mode-2 links have no shared code — go straight to the detail page to add recipients.
-                var link = await svc.CreateUserAttributedLinkAsync(_form.Url!, _uid);
+                var link = await svc.CreateUserAttributedLinkAsync(_form.Url!, _accountId, _uid);
                 _form = new();
                 _showCreate = false;
                 Nav.NavigateTo($"/links/{link.Id}");
                 return;
             }
 
-            var result = await svc.CreateAnonymousLinkAsync(_form.Url!, _uid);
+            var result = await svc.CreateAnonymousLinkAsync(_form.Url!, _accountId, _uid);
             _newShortCode = result.ShortCode.Code;
             _form = new();
             _showCreate = false;

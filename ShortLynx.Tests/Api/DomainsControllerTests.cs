@@ -22,36 +22,15 @@ public class DomainsControllerTests : IClassFixture<ApiFactory>
     // Creates an API key associated with a fresh user account (custom domains are user-scoped).
     private async Task<(HttpClient Client, Guid UserId)> CreateUserKeyClientAsync(string[]? scopes = null)
     {
+        var accountId = await _factory.SeedAccountAsync();
         using var scope = _factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<ShortLynxDbContext>();
-        var user = new UserAccountEntity
-        {
-            Id = Guid.CreateVersion7(),
-            Email = $"{Guid.NewGuid():N}@example.com",
-            CreatedAt = DateTimeOffset.UtcNow,
-            IsActive = true,
-        };
-        db.UserAccountEntities.Add(user);
-        await db.SaveChangesAsync();
-
         var svc = scope.ServiceProvider.GetRequiredService<IApiKeyService>();
         var granted = scopes ?? [Scopes.DomainsRead, Scopes.DomainsWrite, Scopes.LinksRead, Scopes.LinksWrite];
-        var (_, plaintext) = await svc.CreateAsync("dom-key", granted, user.Id);
+        var (_, plaintext) = await svc.CreateAsync("dom-key", granted, accountId);
 
         var client = _factory.CreateClient();
         client.DefaultRequestHeaders.Add("Authorization", $"Bearer {plaintext}");
-        return (client, user.Id);
-    }
-
-    // An API key NOT associated with any user account.
-    private async Task<HttpClient> CreateUserlessKeyClientAsync()
-    {
-        using var scope = _factory.Services.CreateScope();
-        var svc = scope.ServiceProvider.GetRequiredService<IApiKeyService>();
-        var (_, plaintext) = await svc.CreateAsync("userless-key", [Scopes.DomainsWrite, Scopes.DomainsRead]);
-        var client = _factory.CreateClient();
-        client.DefaultRequestHeaders.Add("Authorization", $"Bearer {plaintext}");
-        return client;
+        return (client, accountId);
     }
 
     private static async Task<DomainResponse> AddDomainAsync(HttpClient client, string domain)
@@ -79,14 +58,6 @@ public class DomainsControllerTests : IClassFixture<ApiFactory>
         var (client, _) = await CreateUserKeyClientAsync([Scopes.DomainsRead]);
         var response = await client.PostAsJsonAsync("/domains", new AddDomainRequest(UniqueDomain()));
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
-    }
-
-    [Fact]
-    public async Task AddDomain_KeyWithoutUserAccount_Returns400()
-    {
-        var client = await CreateUserlessKeyClientAsync();
-        var response = await client.PostAsJsonAsync("/domains", new AddDomainRequest(UniqueDomain()));
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
     // ── CRUD + verification ─────────────────────────────────────────────────

@@ -101,15 +101,22 @@ else
 
     bool _loaded, _resolved, _showAdd, _busy;
     Guid _uid;
+    Guid _accountId;
     List<DomainRow> _domains = [];
     readonly AddDomainForm _form = new();
     string? _addError;
 
     protected override async Task OnInitializedAsync()
     {
-        var userId = (await AuthState).User.GetUserId();
+        var principal = (await AuthState).User;
+        var userId = principal.GetUserId();
         if (userId is null) { _loaded = true; return; }
         _uid = userId.Value;
+        await using (var scope = ScopeFactory.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ShortLynxDbContext>();
+            _accountId = await AccountResolver.GetOrCreatePersonalAccountIdAsync(db, _uid, principal.Identity?.Name ?? "Personal");
+        }
         _resolved = true;
         await LoadAsync();
     }
@@ -119,7 +126,7 @@ else
         if (!_resolved) return;
         await using var scope = ScopeFactory.CreateAsyncScope();
         var svc = scope.ServiceProvider.GetRequiredService<ICustomDomainService>();
-        var domains = await svc.ListAsync(_uid);
+        var domains = await svc.ListAsync(_accountId);
         _domains = domains.Select(d => new DomainRow(
             d.Id, d.Domain, d.VerificationStatus, d.VerificationToken)).ToList();
         _loaded = true;
@@ -133,7 +140,7 @@ else
         {
             await using var scope = ScopeFactory.CreateAsyncScope();
             var svc = scope.ServiceProvider.GetRequiredService<ICustomDomainService>();
-            await svc.AddAsync(_form.Domain!, _uid);
+            await svc.AddAsync(_form.Domain!, _accountId, _uid);
             _form.Domain = string.Empty;
             _showAdd = false;
             await LoadAsync();
@@ -151,7 +158,7 @@ else
         {
             await using var scope = ScopeFactory.CreateAsyncScope();
             var svc = scope.ServiceProvider.GetRequiredService<ICustomDomainService>();
-            await svc.VerifyAsync(id, _uid);
+            await svc.VerifyAsync(id, _accountId);
             await LoadAsync();
         }
         finally { _busy = false; }
@@ -164,7 +171,7 @@ else
         {
             await using var scope = ScopeFactory.CreateAsyncScope();
             var svc = scope.ServiceProvider.GetRequiredService<ICustomDomainService>();
-            await svc.RemoveAsync(id, _uid);
+            await svc.RemoveAsync(id, _accountId);
             await LoadAsync();
         }
         finally { _busy = false; }

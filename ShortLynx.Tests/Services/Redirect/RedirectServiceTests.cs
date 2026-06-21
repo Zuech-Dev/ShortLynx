@@ -12,28 +12,28 @@ public class RedirectServiceTests
         return new RedirectService(ctx, cache ?? new MemoryCache(new MemoryCacheOptions()), opts);
     }
 
-    private static async Task<(ShortLynx.Data.Entities.ApiKeyEntity Key, ShortLynx.Data.Entities.LinkEntity Link)>
+    private static async Task<(ShortLynx.Data.Entities.AccountEntity Account, ShortLynx.Data.Entities.LinkEntity Link)>
         SeedLinkAsync(TestDatabase db)
     {
-        var key = EntityFactory.ApiKey();
-        var link = EntityFactory.AnonymousLink(key.Id);
+        var account = EntityFactory.Account();
+        var link = EntityFactory.AnonymousLink(account.Id);
         await using var ctx = db.CreateContext();
-        ctx.AddRange(key, link);
+        ctx.AddRange(account, link);
         await ctx.SaveChangesAsync();
-        return (key, link);
+        return (account, link);
     }
 
-    // Seeds a user + verified custom domain + a link pinned to that domain. Returns the link and host.
+    // Seeds an account + verified custom domain + a link pinned to that domain. Returns the link and host.
     private static async Task<(ShortLynx.Data.Entities.LinkEntity Link, string Host)>
         SeedPinnedLinkAsync(TestDatabase db, string host = "go.example.com")
     {
-        var user = EntityFactory.UserAccount($"{Guid.NewGuid():N}@example.com");
-        var domain = EntityFactory.CustomDomain(user.Id, host);
-        var link = EntityFactory.UserOwnedLink(user.Id);
+        var account = EntityFactory.Account();
+        var domain = EntityFactory.CustomDomain(account.Id, host);
+        var link = EntityFactory.AnonymousLink(account.Id);
         link.CustomDomainId = domain.Id;
 
         await using var ctx = db.CreateContext();
-        ctx.AddRange(user, domain, link);
+        ctx.AddRange(account, domain, link);
         await ctx.SaveChangesAsync();
         return (link, host);
     }
@@ -93,13 +93,13 @@ public class RedirectServiceTests
     public async Task LookupAsync_Mode1_InactiveLink_ReturnsNull()
     {
         await using var db = await TestDatabase.CreateAsync();
-        var key = EntityFactory.ApiKey();
-        var link = EntityFactory.AnonymousLink(key.Id);
+        var account = EntityFactory.Account();
+        var link = EntityFactory.AnonymousLink(account.Id);
         link.IsActive = false;
 
         await using (var ctx = db.CreateContext())
         {
-            ctx.AddRange(key, link);
+            ctx.AddRange(account, link);
             await ctx.SaveChangesAsync();
         }
 

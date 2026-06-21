@@ -42,7 +42,7 @@ public class ApiKeysController(IApiKeyService apiKeyService, IOptions<ApiKeyOpti
         try
         {
             (record, plaintext) = await apiKeyService.CreateAsync(
-                request.Name, request.Scopes ?? [], request.UserAccountId, ct);
+                request.Name, request.Scopes ?? [], request.AccountId, ct: ct);
         }
         catch (ArgumentException ex)
         {

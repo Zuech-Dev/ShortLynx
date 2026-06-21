@@ -14,31 +14,32 @@ public class LinkServiceTests
             new RandomBase62Generator(Options.Create(new ShortCodeOptions { Length = 8 })),
             new StubUrlValidationService(urlValid, invalidReason));
 
+    private static async Task<Guid> SeedAccountAsync(TestDatabase db)
+    {
+        var account = EntityFactory.Account();
+        await using var ctx = db.CreateContext();
+        ctx.AccountEntities.Add(account);
+        await ctx.SaveChangesAsync();
+        return account.Id;
+    }
+
     private static async Task<ApiKeyEntity> SeedApiKeyAsync(TestDatabase db)
     {
-        var key = EntityFactory.ApiKey();
+        var account = EntityFactory.Account();
+        var key = EntityFactory.ApiKey(account.Id);
         await using var ctx = db.CreateContext();
-        ctx.ApiKeyEntities.Add(key);
+        ctx.AddRange(account, key);
         await ctx.SaveChangesAsync();
         return key;
     }
 
     private static async Task<LinkEntity> SeedLinkAsync(TestDatabase db, ApiKeyEntity key)
     {
-        var link = EntityFactory.AnonymousLink(key.Id);
+        var link = EntityFactory.AnonymousLink(key.AccountId);
         await using var ctx = db.CreateContext();
         ctx.LinkEntities.Add(link);
         await ctx.SaveChangesAsync();
         return link;
-    }
-
-    private static async Task<UserAccountEntity> SeedUserAsync(TestDatabase db)
-    {
-        var user = EntityFactory.UserAccount();
-        await using var ctx = db.CreateContext();
-        ctx.UserAccountEntities.Add(user);
-        await ctx.SaveChangesAsync();
-        return user;
     }
 
     // ── CreateAnonymousLinkAsync ──────────────────────────────────────────────
@@ -111,30 +112,30 @@ public class LinkServiceTests
     // ── CreateAnonymousLinkAsync (user-owned / dashboard) ─────────────────────
 
     [Fact]
-    public async Task CreateUserOwnedLink_SetsUserAccountId_AndNullApiKey()
+    public async Task CreateAccountOwnedLink_SetsAccountId_AndNullApiKey()
     {
         await using var db = await TestDatabase.CreateAsync();
-        var user = await SeedUserAsync(db);
+        var accountId = await SeedAccountAsync(db);
 
-        var result = await MakeSvc(db.CreateContext()).CreateAnonymousLinkAsync("https://example.com", user.Id);
+        var result = await MakeSvc(db.CreateContext()).CreateAnonymousLinkAsync("https://example.com", accountId);
 
         await using var ctx = db.CreateContext();
         var link = await ctx.LinkEntities.FindAsync(result.Link.Id);
         Assert.NotNull(link);
-        Assert.Equal(user.Id, link.UserAccountId);
+        Assert.Equal(accountId, link.AccountId);
         Assert.Null(link.ApiKeyId);
         Assert.Equal(8, result.ShortCode.Code.Length);
     }
 
     [Fact]
-    public async Task CreateUserOwnedLink_InvalidUrl_ThrowsArgumentException()
+    public async Task CreateAccountOwnedLink_InvalidUrl_ThrowsArgumentException()
     {
         await using var db = await TestDatabase.CreateAsync();
-        var user = await SeedUserAsync(db);
+        var accountId = await SeedAccountAsync(db);
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
             MakeSvc(db.CreateContext(), urlValid: false, invalidReason: "blocked URL")
-                .CreateAnonymousLinkAsync("https://bad.example.com", user.Id));
+                .CreateAnonymousLinkAsync("https://bad.example.com", accountId));
     }
 
     // ── CreateUserLinkCodesAsync ──────────────────────────────────────────────
@@ -214,15 +215,15 @@ public class LinkServiceTests
     public async Task CreateUserAttributedLink_SetsModeAndOwner_AndMintsNoShortCode()
     {
         await using var db = await TestDatabase.CreateAsync();
-        var user = await SeedUserAsync(db);
+        var accountId = await SeedAccountAsync(db);
 
-        var link = await MakeSvc(db.CreateContext()).CreateUserAttributedLinkAsync("https://example.com", user.Id);
+        var link = await MakeSvc(db.CreateContext()).CreateUserAttributedLinkAsync("https://example.com", accountId);
 
         await using var ctx = db.CreateContext();
         var stored = await ctx.LinkEntities.FindAsync(link.Id);
         Assert.NotNull(stored);
         Assert.Equal(LinkMode.UserAttributed, stored.Mode);
-        Assert.Equal(user.Id, stored.UserAccountId);
+        Assert.Equal(accountId, stored.AccountId);
         Assert.Null(stored.ApiKeyId);
 
         // Mode-2 links resolve only via user codes — no anonymous short code is created.
@@ -234,11 +235,11 @@ public class LinkServiceTests
     public async Task CreateUserAttributedLink_InvalidUrl_ThrowsArgumentException()
     {
         await using var db = await TestDatabase.CreateAsync();
-        var user = await SeedUserAsync(db);
+        var accountId = await SeedAccountAsync(db);
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
             MakeSvc(db.CreateContext(), urlValid: false, invalidReason: "blocked URL")
-                .CreateUserAttributedLinkAsync("https://bad.example.com", user.Id));
+                .CreateUserAttributedLinkAsync("https://bad.example.com", accountId));
     }
 
     // ── CreateUserLinkCodesAsync (recipient labels + one-time use) ────────────
@@ -301,9 +302,9 @@ public class LinkServiceTests
 
     // ── SetLinkDomainAsync (custom-domain pinning) ────────────────────────────
 
-    private static async Task<Guid> SeedVerifiedDomainAsync(TestDatabase db, Guid userId, string domain = "go.example.com")
+    private static async Task<Guid> SeedVerifiedDomainAsync(TestDatabase db, Guid accountId, string domain = "go.example.com")
     {
-        var d = EntityFactory.CustomDomain(userId, domain);
+        var d = EntityFactory.CustomDomain(accountId, domain);
         d.VerificationStatus = DomainVerificationStatus.Verified;
         d.IsActive = true;
         await using var ctx = db.CreateContext();
@@ -316,11 +317,11 @@ public class LinkServiceTests
     public async Task SetLinkDomain_PinsToOwnVerifiedDomain_ReturnsTrue()
     {
         await using var db = await TestDatabase.CreateAsync();
-        var user = await SeedUserAsync(db);
-        var link = await MakeSvc(db.CreateContext()).CreateAnonymousLinkAsync("https://example.com", user.Id);
-        var domainId = await SeedVerifiedDomainAsync(db, user.Id);
+        var accountId = await SeedAccountAsync(db);
+        var link = await MakeSvc(db.CreateContext()).CreateAnonymousLinkAsync("https://example.com", accountId);
+        var domainId = await SeedVerifiedDomainAsync(db, accountId);
 
-        var ok = await MakeSvc(db.CreateContext()).SetLinkDomainAsync(link.Link.Id, domainId, user.Id);
+        var ok = await MakeSvc(db.CreateContext()).SetLinkDomainAsync(link.Link.Id, domainId, accountId);
         Assert.True(ok);
 
         await using var ctx = db.CreateContext();
@@ -332,12 +333,12 @@ public class LinkServiceTests
     public async Task SetLinkDomain_Null_Unpins()
     {
         await using var db = await TestDatabase.CreateAsync();
-        var user = await SeedUserAsync(db);
-        var link = await MakeSvc(db.CreateContext()).CreateAnonymousLinkAsync("https://example.com", user.Id);
-        var domainId = await SeedVerifiedDomainAsync(db, user.Id);
-        await MakeSvc(db.CreateContext()).SetLinkDomainAsync(link.Link.Id, domainId, user.Id);
+        var accountId = await SeedAccountAsync(db);
+        var link = await MakeSvc(db.CreateContext()).CreateAnonymousLinkAsync("https://example.com", accountId);
+        var domainId = await SeedVerifiedDomainAsync(db, accountId);
+        await MakeSvc(db.CreateContext()).SetLinkDomainAsync(link.Link.Id, domainId, accountId);
 
-        var ok = await MakeSvc(db.CreateContext()).SetLinkDomainAsync(link.Link.Id, null, user.Id);
+        var ok = await MakeSvc(db.CreateContext()).SetLinkDomainAsync(link.Link.Id, null, accountId);
         Assert.True(ok);
 
         await using var ctx = db.CreateContext();
@@ -349,39 +350,34 @@ public class LinkServiceTests
     public async Task SetLinkDomain_UnverifiedDomain_ReturnsFalse()
     {
         await using var db = await TestDatabase.CreateAsync();
-        var user = await SeedUserAsync(db);
-        var link = await MakeSvc(db.CreateContext()).CreateAnonymousLinkAsync("https://example.com", user.Id);
+        var accountId = await SeedAccountAsync(db);
+        var link = await MakeSvc(db.CreateContext()).CreateAnonymousLinkAsync("https://example.com", accountId);
 
         // Pending (unverified) domain.
         Guid pendingId;
         await using (var ctx = db.CreateContext())
         {
-            var d = EntityFactory.CustomDomain(user.Id, "pending.example.com");
+            var d = EntityFactory.CustomDomain(accountId, "pending.example.com");
             ctx.CustomDomainEntities.Add(d);
             await ctx.SaveChangesAsync();
             pendingId = d.Id;
         }
 
-        var ok = await MakeSvc(db.CreateContext()).SetLinkDomainAsync(link.Link.Id, pendingId, user.Id);
+        var ok = await MakeSvc(db.CreateContext()).SetLinkDomainAsync(link.Link.Id, pendingId, accountId);
         Assert.False(ok);
     }
 
     [Fact]
-    public async Task SetLinkDomain_AnotherUsersLink_ReturnsFalse()
+    public async Task SetLinkDomain_AnotherAccountsLink_ReturnsFalse()
     {
         await using var db = await TestDatabase.CreateAsync();
-        var owner = await SeedUserAsync(db);
-        var link = await MakeSvc(db.CreateContext()).CreateAnonymousLinkAsync("https://example.com", owner.Id);
+        var ownerAccount = await SeedAccountAsync(db);
+        var link = await MakeSvc(db.CreateContext()).CreateAnonymousLinkAsync("https://example.com", ownerAccount);
 
-        var otherUser = EntityFactory.UserAccount("other@example.com");
-        await using (var ctx = db.CreateContext())
-        {
-            ctx.UserAccountEntities.Add(otherUser);
-            await ctx.SaveChangesAsync();
-        }
-        var otherDomain = await SeedVerifiedDomainAsync(db, otherUser.Id, "other.example.com");
+        var otherAccount = await SeedAccountAsync(db);
+        var otherDomain = await SeedVerifiedDomainAsync(db, otherAccount, "other.example.com");
 
-        var ok = await MakeSvc(db.CreateContext()).SetLinkDomainAsync(link.Link.Id, otherDomain, otherUser.Id);
+        var ok = await MakeSvc(db.CreateContext()).SetLinkDomainAsync(link.Link.Id, otherDomain, otherAccount);
         Assert.False(ok);
     }
 }

@@ -34,10 +34,9 @@ public static class ServiceExtensions
         services.Configure<MagicLinkOptions>(configuration.GetSection("MagicLink"));
         services.Configure<VisitSinkOptions>(configuration.GetSection("VisitSink"));
         services.Configure<SmtpEmailOptions>(configuration.GetSection("Email"));
-        services.Configure<ResendOptions>(configuration.GetSection("Resend"));
         services.Configure<CustomDomainOptions>(configuration.GetSection("CustomDomain"));
 
-        services.AddHttpClient<IEmailSender, ResendEmailSender>();
+        services.AddShortLynxEmail(configuration);
         services.AddScoped<IApiKeyService, ApiKeyService>();
         services.AddScoped<IShortCodeGenerator, HashBase62Generator>();
         services.AddSingleton<IUrlValidationService, UrlValidationService>();

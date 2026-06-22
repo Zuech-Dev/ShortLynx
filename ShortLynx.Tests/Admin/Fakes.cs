@@ -10,6 +10,7 @@ namespace ShortLynx.Tests.Admin;
 internal sealed class FakeAccountService : IAccountService
 {
     public AccountRole Role = AccountRole.Owner;
+    public Func<Guid, IReadOnlyList<AccountSummary>> AccountsFor = _ => [];
     public readonly List<MemberView> Members = [];
     public readonly List<(Guid AccountId, string Email, AccountRole Role, Guid By)> Invited = [];
     public readonly List<(Guid AccountId, Guid Target, AccountRole Role)> RoleChanges = [];
@@ -48,7 +49,7 @@ internal sealed class FakeAccountService : IAccountService
         => Task.FromResult<IReadOnlyList<MemberView>>(Members);
 
     public Task<IReadOnlyList<AccountSummary>> ListAccountsForUserAsync(Guid userAccountId, CancellationToken ct = default)
-        => Task.FromResult<IReadOnlyList<AccountSummary>>([]);
+        => Task.FromResult(AccountsFor(userAccountId));
 
     public Task<AccountRole?> GetRoleAsync(Guid accountId, Guid userAccountId, CancellationToken ct = default)
         => Task.FromResult<AccountRole?>(Role);

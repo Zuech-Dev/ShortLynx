@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using ShortLynx.Admin.Options;
 using ShortLynx.Data.Context;
+using ShortLynx.Services.Accounts;
 using ShortLynx.Services.MagicLinks;
 
 namespace ShortLynx.Admin.Pages.Auth;
@@ -16,6 +17,7 @@ namespace ShortLynx.Admin.Pages.Auth;
 public class ConfirmModel(
     IMagicLinkService magicLinkService,
     IDbContextFactory<ShortLynxDbContext> dbFactory,
+    IAccountService accountService,
     IOptions<AdminOptions> adminOptions) : PageModel
 {
     public string Error { get; private set; } = string.Empty;
@@ -38,10 +40,12 @@ public class ConfirmModel(
             return Page();
         }
 
-        // Authorization gate: only allowlisted emails may complete sign-in. A valid token alone is
-        // NOT sufficient — without this, anyone could self-provision an account and log in.
+        // Authorization gate: a user may sign in if they're on the allowlist (bootstrap owners /
+        // platform super-admins) OR they belong to at least one account (invited members). A valid
+        // token alone is never sufficient.
         var opts = adminOptions.Value;
-        if (!opts.IsAllowed(user.Email))
+        var accounts = await accountService.ListAccountsForUserAsync(user.Id, ct);
+        if (!opts.IsAllowed(user.Email) && accounts.Count == 0)
         {
             Error = "This account is not authorised to access the admin dashboard.";
             return Page();
@@ -66,6 +70,15 @@ public class ConfirmModel(
         };
         if (isSuperAdmin)
             claims.Add(new Claim(AdminClaims.IsAdmin, "true"));
+
+        // Stamp the current account + role (the highest-role membership) when the user has one.
+        // Allowlisted users without a membership get a personal account lazily on first page load.
+        if (accounts.Count > 0)
+        {
+            var primary = accounts[0];
+            claims.Add(new Claim(AdminClaims.AccountId, primary.AccountId.ToString()));
+            claims.Add(new Claim(AdminClaims.AccountRole, primary.Role.ToString()));
+        }
 
         var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
         await HttpContext.SignInAsync(

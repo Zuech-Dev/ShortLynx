@@ -3,6 +3,7 @@ using Microsoft.Extensions.Options;
 using ShortLynx.Core.RateLimit;
 using ShortLynx.Services.Accounts;
 using ShortLynx.Services.ApiKeys;
+using ShortLynx.Services.Auth;
 using ShortLynx.Services.Domains;
 using ShortLynx.Services.Email;
 using ShortLynx.Services.Links;
@@ -46,6 +47,14 @@ public static class ServiceExtensions
         services.AddSingleton<IDnsResolver, DnsClientResolver>();
         services.AddHostedService<DomainReverificationService>();
         services.AddScoped<IAccountService, AccountService>();
+
+        // User sessions (magic-link → JWT + refresh) for bring-your-own-frontend clients.
+        services.AddOptions<JwtOptions>()
+            .Bind(configuration.GetSection("Jwt"))
+            .Validate(o => o.IsValid, "Jwt:SigningKey is required, must differ from the placeholder, and be 32+ chars.")
+            .ValidateOnStart();
+        services.Configure<AccessControlOptions>(configuration.GetSection("Admin"));
+        services.AddScoped<IUserSessionService, UserSessionService>();
 
         services.AddSingleton<InMemoryVisitEventSink>();
         services.AddSingleton<IVisitEventSink>(sp => sp.GetRequiredService<InMemoryVisitEventSink>());

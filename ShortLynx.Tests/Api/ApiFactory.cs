@@ -46,6 +46,7 @@ public sealed class ApiFactory : WebApplicationFactory<ShortLynx.Core.CoreApiEnt
             {
                 ["ApiKey:HmacSecret"] = "test-hmac-secret-at-least-32-chars!",
                 ["ApiKey:AdminSecret"] = "test-admin-secret-value",
+                ["Jwt:SigningKey"] = "test-jwt-signing-key-at-least-32-chars!!",
                 ["MagicLink:ConfirmationUrlBase"] = "https://test.example.com/auth/confirm",
                 // High limits so normal tests don't trip the limiter; rate-limit tests override these.
                 ["RateLimit:MagicLinkPermitLimit"] = "1000",

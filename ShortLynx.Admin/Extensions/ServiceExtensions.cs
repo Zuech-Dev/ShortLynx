@@ -4,6 +4,7 @@ using ShortLynx.Admin.Options;
 using ShortLynx.Data.Context;
 using ShortLynx.Data.Operations;
 using ShortLynx.Repository;
+using ShortLynx.Services.Accounts;
 using ShortLynx.Services.ApiKeys;
 using ShortLynx.Services.Domains;
 using ShortLynx.Services.Email;
@@ -72,6 +73,7 @@ public static class ServiceExtensions
         // Custom domains: management + DNS-TXT verification.
         services.AddScoped<ICustomDomainService, CustomDomainService>();
         services.AddSingleton<IDnsResolver, DnsClientResolver>();
+        services.AddScoped<IAccountService, AccountService>();
 
         return services;
     }

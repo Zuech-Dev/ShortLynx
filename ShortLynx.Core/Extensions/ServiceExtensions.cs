@@ -1,6 +1,7 @@
 using System.Threading.RateLimiting;
 using Microsoft.Extensions.Options;
 using ShortLynx.Core.RateLimit;
+using ShortLynx.Services.Accounts;
 using ShortLynx.Services.ApiKeys;
 using ShortLynx.Services.Domains;
 using ShortLynx.Services.Email;
@@ -44,6 +45,7 @@ public static class ServiceExtensions
         services.AddScoped<ICustomDomainService, CustomDomainService>();
         services.AddSingleton<IDnsResolver, DnsClientResolver>();
         services.AddHostedService<DomainReverificationService>();
+        services.AddScoped<IAccountService, AccountService>();
 
         services.AddSingleton<InMemoryVisitEventSink>();
         services.AddSingleton<IVisitEventSink>(sp => sp.GetRequiredService<InMemoryVisitEventSink>());

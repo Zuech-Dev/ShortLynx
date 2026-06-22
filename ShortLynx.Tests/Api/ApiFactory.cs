@@ -91,32 +91,7 @@ public sealed class ApiFactory : WebApplicationFactory<ShortLynx.Core.CoreApiEnt
     /// </summary>
     public async Task<(HttpClient Client, Guid UserId, Guid AccountId)> CreateSessionClientAsync()
     {
-        var email = $"{Guid.NewGuid():N}@example.com";
-        Guid userId, accountId;
-        string token;
-        using (var scope = Services.CreateScope())
-        {
-            token = await scope.ServiceProvider
-                .GetRequiredService<ShortLynx.Services.MagicLinks.IMagicLinkService>()
-                .CreateTokenAsync(email);
-
-            var db = scope.ServiceProvider.GetRequiredService<ShortLynxDbContext>();
-            var user = await db.UserAccountEntities.SingleAsync(u => u.Email == email);
-            var account = new ShortLynx.Data.Entities.AccountEntity
-            {
-                Id = Guid.CreateVersion7(), Name = "Acme", CreatedAt = DateTimeOffset.UtcNow, IsActive = true,
-            };
-            db.Add(account);
-            db.Add(new ShortLynx.Data.Entities.MembershipEntity
-            {
-                Id = Guid.CreateVersion7(), AccountId = account.Id, UserAccountId = user.Id,
-                Role = ShortLynx.Data.Enums.AccountRole.Owner, CreatedAt = DateTimeOffset.UtcNow,
-            });
-            await db.SaveChangesAsync();
-            userId = user.Id;
-            accountId = account.Id;
-        }
-
+        var (token, userId, accountId) = await SeedMemberTokenAsync();
         var session = await (await CreateClient().PostAsJsonAsync(
                 "/auth/session", new ShortLynx.Core.Models.Requests.CreateSessionRequest(token)))
             .Content.ReadFromJsonAsync<ShortLynx.Core.Models.Responses.SessionResponse>();
@@ -124,6 +99,31 @@ public sealed class ApiFactory : WebApplicationFactory<ShortLynx.Core.CoreApiEnt
         var client = CreateClient();
         client.DefaultRequestHeaders.Add("Authorization", $"Bearer {session!.AccessToken}");
         return (client, userId, accountId);
+    }
+
+    /// <summary>Seeds a user who owns a fresh account and returns a valid magic-link token + ids.</summary>
+    public async Task<(string Token, Guid UserId, Guid AccountId)> SeedMemberTokenAsync()
+    {
+        var email = $"{Guid.NewGuid():N}@example.com";
+        using var scope = Services.CreateScope();
+        var token = await scope.ServiceProvider
+            .GetRequiredService<ShortLynx.Services.MagicLinks.IMagicLinkService>()
+            .CreateTokenAsync(email);
+
+        var db = scope.ServiceProvider.GetRequiredService<ShortLynxDbContext>();
+        var user = await db.UserAccountEntities.SingleAsync(u => u.Email == email);
+        var account = new ShortLynx.Data.Entities.AccountEntity
+        {
+            Id = Guid.CreateVersion7(), Name = "Acme", CreatedAt = DateTimeOffset.UtcNow, IsActive = true,
+        };
+        db.Add(account);
+        db.Add(new ShortLynx.Data.Entities.MembershipEntity
+        {
+            Id = Guid.CreateVersion7(), AccountId = account.Id, UserAccountId = user.Id,
+            Role = ShortLynx.Data.Enums.AccountRole.Owner, CreatedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+        return (token, user.Id, account.Id);
     }
 
     /// <summary>Seeds an account and returns its id (resources/keys are account-owned).</summary>

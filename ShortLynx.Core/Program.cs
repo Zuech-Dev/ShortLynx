@@ -63,6 +63,16 @@ builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationSc
     });
 builder.Services.AddAuthorization();
 
+// CORS for bring-your-own-frontend clients. Configure Cors:AllowedOrigins (exact origins) to enable
+// cross-origin access; credentials are allowed so cookie sessions work. Empty ⇒ same-origin only.
+const string CorsPolicy = "frontend";
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
+builder.Services.AddCors(o => o.AddPolicy(CorsPolicy, p =>
+{
+    if (allowedOrigins.Length > 0)
+        p.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod().AllowCredentials();
+}));
+
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 builder.Services.AddProblemDetails();
@@ -89,7 +99,9 @@ else
 }
 
 app.UseHttpsRedirection();
+app.UseCors(CorsPolicy);
 app.UseRateLimiter();
+app.UseMiddleware<ShortLynx.Core.Auth.CsrfCookieMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

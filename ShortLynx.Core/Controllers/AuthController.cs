@@ -127,6 +127,12 @@ public class AuthController(
     {
         Response.Cookies.Append(Jwt.AccessCookieName, tokens.AccessToken, CookieOptions(tokens.AccessExpiresAt));
         Response.Cookies.Append(Jwt.RefreshCookieName, tokens.RefreshToken, CookieOptions(tokens.RefreshExpiresAt));
+
+        // Non-httpOnly CSRF token (double-submit): the SPA reads it and echoes it in the X-CSRF-Token header.
+        var csrf = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(16));
+        var csrfOptions = CookieOptions(tokens.RefreshExpiresAt);
+        csrfOptions.HttpOnly = false;
+        Response.Cookies.Append(Jwt.CsrfCookieName, csrf, csrfOptions);
     }
 
     private void ClearSessionCookies()
@@ -134,6 +140,9 @@ public class AuthController(
         var expired = CookieOptions(DateTimeOffset.UtcNow.AddDays(-1));
         Response.Cookies.Append(Jwt.AccessCookieName, "", expired);
         Response.Cookies.Append(Jwt.RefreshCookieName, "", expired);
+        var csrfExpired = CookieOptions(DateTimeOffset.UtcNow.AddDays(-1));
+        csrfExpired.HttpOnly = false;
+        Response.Cookies.Append(Jwt.CsrfCookieName, "", csrfExpired);
     }
 
     private CookieOptions CookieOptions(DateTimeOffset expires) => new()

@@ -1,9 +1,49 @@
 @page "/users"
 @attribute [Authorize(Policy = AdminClaims.SuperAdminPolicy)]
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.Extensions.DependencyInjection
+@using ShortLynx.Services.Accounts
 @inject IDbContextFactory<ShortLynxDbContext> DbFactory
+@inject IServiceScopeFactory ScopeFactory
 
 <PageTitle>Users — ShortLynx Admin</PageTitle>
-<h1 class="text-2xl font-bold mb-4">Users</h1>
+
+<div class="flex justify-between items-center mb-4">
+    <h1 class="text-2xl font-bold">Users</h1>
+    <button class="btn btn-primary" @onclick="() => _showCreate = !_showCreate">
+        @(_showCreate ? "Cancel" : "+ New account")
+    </button>
+</div>
+
+@if (_showCreate)
+{
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5 class="card-title">Create an account</h5>
+            <p class="text-gray-500 text-sm">Creates a new account scoped to its own context, with the given owner. The owner gets a sign-in email.</p>
+            <EditForm Model="_createForm" OnValidSubmit="CreateAccount">
+                <DataAnnotationsValidator/>
+                <div class="flex flex-wrap gap-2 items-end">
+                    <div>
+                        <label class="field-label">Account name</label>
+                        <InputText class="field-input" @bind-Value="_createForm.Name" placeholder="Acme Inc." data-testid="account-name"/>
+                    </div>
+                    <div>
+                        <label class="field-label">Owner email</label>
+                        <InputText class="field-input" @bind-Value="_createForm.OwnerEmail" placeholder="owner@example.com" data-testid="owner-email"/>
+                    </div>
+                    <button type="submit" class="btn btn-primary" data-testid="create-account-submit">Create account</button>
+                </div>
+                <ValidationMessage For="() => _createForm.Name"/>
+                <ValidationMessage For="() => _createForm.OwnerEmail"/>
+                @if (_createdName is not null)
+                {
+                    <div class="text-green-700 text-sm mt-1" data-testid="account-created">Created '@_createdName' and emailed the owner a sign-in link.</div>
+                }
+            </EditForm>
+        </div>
+    </div>
+}
 
 @if (!_loaded)
 {
@@ -77,6 +117,31 @@ else
 
     async Task PrevPage() { if (_page > 1) { _page--; await LoadAsync(); } }
     async Task NextPage() { _page++; await LoadAsync(); }
+
+    bool _showCreate;
+    string? _createdName;
+    readonly CreateAccountForm _createForm = new();
+
+    async Task CreateAccount()
+    {
+        _createdName = null;
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        var svc = scope.ServiceProvider.GetRequiredService<IAccountService>();
+        var account = await svc.CreateAccountWithOwnerAsync(_createForm.Name!, _createForm.OwnerEmail!);
+        _createdName = account.Name;
+        _createForm.Name = string.Empty;
+        _createForm.OwnerEmail = string.Empty;
+        await LoadAsync();
+    }
+
+    sealed class CreateAccountForm
+    {
+        [Required(ErrorMessage = "Account name is required.")]
+        public string? Name { get; set; }
+
+        [Required(ErrorMessage = "Owner email is required."), EmailAddress]
+        public string? OwnerEmail { get; set; }
+    }
 
     sealed record UserRow(string Email, bool IsActive, DateTimeOffset CreatedAt);
 }

@@ -1,10 +1,58 @@
 using ShortLynx.Data.Entities;
 using ShortLynx.Data.Enums;
+using ShortLynx.Services.Accounts;
 using ShortLynx.Services.ApiKeys;
 using ShortLynx.Services.Domains;
 using ShortLynx.Services.Links;
 
 namespace ShortLynx.Tests.Admin;
+
+internal sealed class FakeAccountService : IAccountService
+{
+    public AccountRole Role = AccountRole.Owner;
+    public readonly List<MemberView> Members = [];
+    public readonly List<(Guid AccountId, string Email, AccountRole Role, Guid By)> Invited = [];
+    public readonly List<(Guid AccountId, Guid Target, AccountRole Role)> RoleChanges = [];
+    public readonly List<(Guid AccountId, Guid Target)> Removed = [];
+    public readonly List<(string Name, string OwnerEmail)> CreatedAccounts = [];
+
+    public Task<AccountEntity> CreateAccountWithOwnerAsync(string name, string ownerEmail, CancellationToken ct = default)
+    {
+        CreatedAccounts.Add((name, ownerEmail));
+        return Task.FromResult(new AccountEntity { Id = Guid.CreateVersion7(), Name = name, CreatedAt = DateTimeOffset.UtcNow, IsActive = true });
+    }
+
+    public Task<MembershipEntity> InviteMemberAsync(Guid accountId, string email, AccountRole role, Guid invitedByUserAccountId, CancellationToken ct = default)
+    {
+        Invited.Add((accountId, email, role, invitedByUserAccountId));
+        return Task.FromResult(new MembershipEntity
+        {
+            Id = Guid.CreateVersion7(), AccountId = accountId, UserAccountId = Guid.CreateVersion7(),
+            Role = role, CreatedAt = DateTimeOffset.UtcNow, InvitedByUserAccountId = invitedByUserAccountId,
+        });
+    }
+
+    public Task<bool> ChangeRoleAsync(Guid accountId, Guid targetUserAccountId, AccountRole newRole, Guid actorUserAccountId, CancellationToken ct = default)
+    {
+        RoleChanges.Add((accountId, targetUserAccountId, newRole));
+        return Task.FromResult(true);
+    }
+
+    public Task<bool> RemoveMemberAsync(Guid accountId, Guid targetUserAccountId, Guid actorUserAccountId, CancellationToken ct = default)
+    {
+        Removed.Add((accountId, targetUserAccountId));
+        return Task.FromResult(true);
+    }
+
+    public Task<IReadOnlyList<MemberView>> ListMembersAsync(Guid accountId, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<MemberView>>(Members);
+
+    public Task<IReadOnlyList<AccountSummary>> ListAccountsForUserAsync(Guid userAccountId, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<AccountSummary>>([]);
+
+    public Task<AccountRole?> GetRoleAsync(Guid accountId, Guid userAccountId, CancellationToken ct = default)
+        => Task.FromResult<AccountRole?>(Role);
+}
 
 internal sealed class FakeApiKeyService : IApiKeyService
 {

@@ -6,6 +6,8 @@ using Microsoft.Extensions.Options;
 using ShortLynx.Core.Models.Requests;
 using ShortLynx.Core.Models.Responses;
 using ShortLynx.Core.RateLimit;
+using ShortLynx.Data.Context;
+using ShortLynx.Data.Enums;
 using ShortLynx.Services.Accounts;
 using ShortLynx.Services.Auth;
 using ShortLynx.Services.MagicLinks;
@@ -19,6 +21,7 @@ public class AuthController(
     IMagicLinkService magicLinks,
     IUserSessionService sessions,
     IAccountService accounts,
+    ShortLynxDbContext db,
     IOptions<AccessControlOptions> accessControl,
     IOptions<JwtOptions> jwtOptions) : ControllerBase
 {
@@ -47,15 +50,29 @@ public class AuthController(
         if (!accessControl.Value.IsAllowed(user.Email) && userAccounts.Count == 0)
             return StatusCode(StatusCodes.Status403Forbidden, new { error = "This account is not authorised." });
 
-        var primary = userAccounts.Count > 0 ? userAccounts[0] : null;
-        var tokens = await sessions.IssueAsync(user, primary?.AccountId, primary?.Role, ct);
+        // Every session needs an account to act in. Members use their highest-role one; an allowlisted
+        // user without a membership (e.g. a bootstrap super-admin) gets a personal account here.
+        Guid accountId;
+        AccountRole role;
+        if (userAccounts.Count > 0)
+        {
+            accountId = userAccounts[0].AccountId;
+            role = userAccounts[0].Role;
+        }
+        else
+        {
+            accountId = await AccountResolver.GetOrCreatePersonalAccountIdAsync(db, user.Id, user.Email, ct);
+            role = AccountRole.Owner;
+        }
+
+        var tokens = await sessions.IssueAsync(user, accountId, role, ct);
         SetSessionCookies(tokens);
 
         return Ok(new SessionResponse(
             tokens.AccessToken,
             tokens.RefreshToken,
             ExpiresInSeconds(tokens.AccessExpiresAt),
-            new UserSummary(user.Id, user.Email, user.IsAdmin, primary?.AccountId, primary?.Role.ToString())));
+            new UserSummary(user.Id, user.Email, user.IsAdmin, accountId, role.ToString())));
     }
 
     // POST /auth/refresh — rotate the refresh token (from body or cookie) into a fresh pair.

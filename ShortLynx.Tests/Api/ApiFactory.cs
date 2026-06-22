@@ -1,3 +1,4 @@
+using System.Net.Http.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
@@ -82,6 +83,47 @@ public sealed class ApiFactory : WebApplicationFactory<ShortLynx.Core.CoreApiEnt
             var db = scope.ServiceProvider.GetRequiredService<ShortLynxDbContext>();
             db.Database.EnsureCreated();
         });
+    }
+
+    /// <summary>
+    /// Seeds a user who is an Owner of a fresh account, logs them in via /auth/session, and returns an
+    /// HttpClient pre-authenticated with the access token plus the user/account ids.
+    /// </summary>
+    public async Task<(HttpClient Client, Guid UserId, Guid AccountId)> CreateSessionClientAsync()
+    {
+        var email = $"{Guid.NewGuid():N}@example.com";
+        Guid userId, accountId;
+        string token;
+        using (var scope = Services.CreateScope())
+        {
+            token = await scope.ServiceProvider
+                .GetRequiredService<ShortLynx.Services.MagicLinks.IMagicLinkService>()
+                .CreateTokenAsync(email);
+
+            var db = scope.ServiceProvider.GetRequiredService<ShortLynxDbContext>();
+            var user = await db.UserAccountEntities.SingleAsync(u => u.Email == email);
+            var account = new ShortLynx.Data.Entities.AccountEntity
+            {
+                Id = Guid.CreateVersion7(), Name = "Acme", CreatedAt = DateTimeOffset.UtcNow, IsActive = true,
+            };
+            db.Add(account);
+            db.Add(new ShortLynx.Data.Entities.MembershipEntity
+            {
+                Id = Guid.CreateVersion7(), AccountId = account.Id, UserAccountId = user.Id,
+                Role = ShortLynx.Data.Enums.AccountRole.Owner, CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync();
+            userId = user.Id;
+            accountId = account.Id;
+        }
+
+        var session = await (await CreateClient().PostAsJsonAsync(
+                "/auth/session", new ShortLynx.Core.Models.Requests.CreateSessionRequest(token)))
+            .Content.ReadFromJsonAsync<ShortLynx.Core.Models.Responses.SessionResponse>();
+
+        var client = CreateClient();
+        client.DefaultRequestHeaders.Add("Authorization", $"Bearer {session!.AccessToken}");
+        return (client, userId, accountId);
     }
 
     /// <summary>Seeds an account and returns its id (resources/keys are account-owned).</summary>

@@ -151,6 +151,17 @@ public partial class ShortLynxDbContext
                           .HasForeignKey(e => e.UserAccountId)
                           .OnDelete(DeleteBehavior.Cascade);
                 }
+            )
+           .Entity<RefreshTokenEntity>(entity =>
+                {
+                    entity.HasKey(e => e.Id);
+                    entity.Property(e => e.Id).ValueGeneratedNever();
+                    entity.HasIndex(e => e.TokenHash).IsUnique();
+                    entity.HasOne(e => e.UserAccount)
+                          .WithMany()
+                          .HasForeignKey(e => e.UserAccountId)
+                          .OnDelete(DeleteBehavior.Cascade);
+                }
             );
 
         OnModelCreatingPartial(modelBuilder);

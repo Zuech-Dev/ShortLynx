@@ -64,8 +64,8 @@ else
         var uid = userId.Value;
 
         await using var db = await DbFactory.CreateDbContextAsync();
-        var accountId = await AccountResolver.GetOrCreatePersonalAccountIdAsync(
-            db, uid, principal.Identity?.Name ?? "Personal");
+        var accountId = await AccountResolver.ResolveAccountIdAsync(
+            db, uid, principal.GetAccountId(), principal.Identity?.Name ?? "Personal");
 
         // All counts scoped to the current account.
         _totalLinks = await db.LinkEntities

@@ -1,0 +1,51 @@
+@using Microsoft.Extensions.DependencyInjection
+@using ShortLynx.Services.Accounts
+@inject IServiceScopeFactory ScopeFactory
+@inject NavigationManager Nav
+
+@* Only worth showing when the user actually belongs to more than one account. A plain POST form
+   (like Sign out) re-issues the auth cookie via /auth/switch — Blazor leaves non-EditForm forms
+   alone, so this is a real browser navigation that survives the claim change. *@
+@if (_accounts.Count > 1)
+{
+    <form method="post" action="/auth/switch" class="flex items-center gap-2" data-testid="account-switcher">
+        <AntiforgeryToken/>
+        <input type="hidden" name="returnUrl" value="@_returnUrl"/>
+        <select name="accountId" class="field-input py-1 text-sm" data-testid="account-select"
+                onchange="this.form.submit()">
+            @foreach (var a in _accounts)
+            {
+                <option value="@a.AccountId" selected="@(a.AccountId == _current)">
+                    @a.Name (@a.Role)
+                </option>
+            }
+        </select>
+        <button type="submit" class="btn btn-outline text-sm" data-testid="account-switch-btn">Switch</button>
+    </form>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    private List<AccountSummary> _accounts = [];
+    private Guid _current;
+    private string _returnUrl = "/";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var principal = (await AuthState).User;
+        var userId = principal.GetUserId();
+        if (userId is null) return;
+
+        _current = principal.GetAccountId() ?? Guid.Empty;
+        _returnUrl = "/" + Nav.ToBaseRelativePath(Nav.Uri);
+
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        var svc = scope.ServiceProvider.GetRequiredService<IAccountService>();
+        _accounts = (await svc.ListAccountsForUserAsync(userId.Value)).ToList();
+
+        // Default the selection to the highest-role account when no explicit one is on the cookie yet.
+        if (_current == Guid.Empty && _accounts.Count > 0)
+            _current = _accounts[0].AccountId;
+    }
+}

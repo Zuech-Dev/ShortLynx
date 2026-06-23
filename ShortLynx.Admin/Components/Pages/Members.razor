@@ -111,7 +111,7 @@ else
 
         await using var scope = ScopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<ShortLynxDbContext>();
-        _accountId = await AccountResolver.GetOrCreatePersonalAccountIdAsync(db, _uid, principal.Identity?.Name ?? "Personal");
+        _accountId = await AccountResolver.ResolveAccountIdAsync(db, _uid, principal.GetAccountId(), principal.Identity?.Name ?? "Personal");
         var svc = scope.ServiceProvider.GetRequiredService<IAccountService>();
         _myRole = await svc.GetRoleAsync(_accountId, _uid) ?? AccountRole.Viewer;
         _canManage = AccountPermissions.CanManageMembers(_myRole);

@@ -200,7 +200,7 @@ else
             if (userId is null) { _notFound = true; _loaded = true; return; }
             _uid = userId.Value;
             await using (var db = await DbFactory.CreateDbContextAsync())
-                _accountId = await AccountResolver.GetOrCreatePersonalAccountIdAsync(db, _uid, principal.Identity?.Name ?? "Personal");
+                _accountId = await AccountResolver.ResolveAccountIdAsync(db, _uid, principal.GetAccountId(), principal.Identity?.Name ?? "Personal");
             _authResolved = true;
         }
         await LoadAsync();

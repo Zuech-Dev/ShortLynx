@@ -10,6 +10,9 @@ namespace ShortLynx.Tests.Admin;
 internal sealed class FakeAccountService : IAccountService
 {
     public AccountRole Role = AccountRole.Owner;
+    // When false, GetRoleAsync reports the user is not a member (returns null) — used to exercise the
+    // account-switch membership gate.
+    public bool MembershipExists = true;
     public Func<Guid, IReadOnlyList<AccountSummary>> AccountsFor = _ => [];
     public readonly List<MemberView> Members = [];
     public readonly List<(Guid AccountId, string Email, AccountRole Role, Guid By)> Invited = [];
@@ -52,7 +55,7 @@ internal sealed class FakeAccountService : IAccountService
         => Task.FromResult(AccountsFor(userAccountId));
 
     public Task<AccountRole?> GetRoleAsync(Guid accountId, Guid userAccountId, CancellationToken ct = default)
-        => Task.FromResult<AccountRole?>(Role);
+        => Task.FromResult(MembershipExists ? Role : (AccountRole?)null);
 }
 
 internal sealed class FakeApiKeyService : IApiKeyService

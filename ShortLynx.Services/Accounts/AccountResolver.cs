@@ -12,6 +12,27 @@ namespace ShortLynx.Services.Accounts;
 /// </summary>
 public static class AccountResolver
 {
+    /// <summary>
+    /// Resolves the account the user should act in, honoring an explicitly selected account (the
+    /// dashboard account switcher) when the user is still a member of it. Falls back to the primary
+    /// (highest-role) account — lazily created — when no valid selection is supplied. This keeps a
+    /// stale or forged selection from leaking another tenant's data: a non-member selection is ignored.
+    /// </summary>
+    public static async Task<Guid> ResolveAccountIdAsync(
+        ShortLynxDbContext db, Guid userAccountId, Guid? selectedAccountId, string accountName,
+        CancellationToken ct = default)
+    {
+        if (selectedAccountId is { } selected)
+        {
+            var isMember = await db.MembershipEntities
+                .AnyAsync(m => m.AccountId == selected && m.UserAccountId == userAccountId, ct);
+            if (isMember)
+                return selected;
+        }
+
+        return await GetOrCreatePersonalAccountIdAsync(db, userAccountId, accountName, ct);
+    }
+
     public static async Task<Guid> GetOrCreatePersonalAccountIdAsync(
         ShortLynxDbContext db, Guid userAccountId, string accountName, CancellationToken ct = default)
     {

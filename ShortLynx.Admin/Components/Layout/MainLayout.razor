@@ -9,6 +9,7 @@
         <div class="top-row px-4 flex justify-end items-center gap-3">
             <AuthorizeView>
                 <Authorized>
+                    <AccountSwitcher/>
                     <span class="text-gray-500 text-sm">@context.User.Identity?.Name</span>
                     <form method="post" action="/auth/logout">
                         <AntiforgeryToken/>

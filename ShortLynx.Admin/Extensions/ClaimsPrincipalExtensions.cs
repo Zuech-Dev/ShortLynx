@@ -9,6 +9,10 @@ public static class ClaimsPrincipalExtensions
     public static Guid? GetUserId(this ClaimsPrincipal user)
         => Guid.TryParse(user.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var id) ? id : null;
 
+    /// <summary>The account the user is currently acting in (from the account_id claim), or null.</summary>
+    public static Guid? GetAccountId(this ClaimsPrincipal user)
+        => Guid.TryParse(user.FindFirst(AdminClaims.AccountId)?.Value, out var id) ? id : null;
+
     /// <summary>True if the user carries the super-admin claim (may view cross-tenant data).</summary>
     public static bool IsSuperAdmin(this ClaimsPrincipal user)
         => user.HasClaim(AdminClaims.IsAdmin, "true");

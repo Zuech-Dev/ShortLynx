@@ -79,6 +79,9 @@ All require a session and act on the JWT's **current account**.
 | `GET /me` | Current user + account + role |
 | `GET /me/accounts` | Accounts you belong to (for an account switcher) |
 | `GET /me/members` | Members of the current account |
+| `POST /me/members` `{ email, role }` | Invite a member (you may grant only roles below your own) |
+| `PUT /me/members/{userId}` `{ role }` | Change a member's role (you must outrank them) |
+| `DELETE /me/members/{userId}` | Remove a member (you must outrank them) |
 | `GET /me/links` `?page=&pageSize=` | List links |
 | `POST /me/links` `{ url, mode? }` | Create (`mode`: `Anonymous` default, or `UserAttributed`) |
 | `GET /me/links/{id}` | One link |
@@ -93,7 +96,9 @@ All require a session and act on the JWT's **current account**.
 
 ### Roles
 `Owner > Admin > Member > Viewer`. Members manage resources; Admins/Owners also manage membership.
-Member management lives in the Admin dashboard today; a `/me/members` write surface is a future addition.
+Member writes are permission-gated server-side: you can only act on members **below** your own role and
+grant roles **below** your own — otherwise the call returns `403` (or `400` for an invalid role/email).
+The Admin dashboard offers the same operations with a UI.
 
 ---
 

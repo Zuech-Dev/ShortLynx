@@ -6,6 +6,7 @@ using ShortLynx.Data.Operations;
 using ShortLynx.Repository;
 using ShortLynx.Services.Accounts;
 using ShortLynx.Services.ApiKeys;
+using ShortLynx.Services.Auth;
 using ShortLynx.Services.Domains;
 using ShortLynx.Services.Email;
 using ShortLynx.Services.Links;
@@ -56,7 +57,7 @@ public static class ServiceExtensions
             .ValidateOnStart();
         services.Configure<MagicLinkOptions>(configuration.GetSection("MagicLink"));
         services.Configure<SmtpEmailOptions>(configuration.GetSection("Email"));
-        services.Configure<AdminOptions>(configuration.GetSection("Admin"));
+        services.Configure<AccessControlOptions>(configuration.GetSection("Admin"));
         services.Configure<DashboardOptions>(configuration.GetSection("Dashboard"));
         services.Configure<ShortCodeOptions>(configuration.GetSection("ShortCode"));
         services.Configure<UrlValidationOptions>(configuration.GetSection("UrlValidation"));

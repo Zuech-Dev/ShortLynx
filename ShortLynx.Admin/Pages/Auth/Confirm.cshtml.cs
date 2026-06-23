@@ -9,6 +9,7 @@ using Microsoft.Extensions.Options;
 using ShortLynx.Admin.Options;
 using ShortLynx.Data.Context;
 using ShortLynx.Services.Accounts;
+using ShortLynx.Services.Auth;
 using ShortLynx.Services.MagicLinks;
 
 namespace ShortLynx.Admin.Pages.Auth;
@@ -18,7 +19,7 @@ public class ConfirmModel(
     IMagicLinkService magicLinkService,
     IDbContextFactory<ShortLynxDbContext> dbFactory,
     IAccountService accountService,
-    IOptions<AdminOptions> adminOptions) : PageModel
+    IOptions<AccessControlOptions> adminOptions) : PageModel
 {
     public string Error { get; private set; } = string.Empty;
 

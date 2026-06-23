@@ -241,6 +241,9 @@
   .mt-4 {
     margin-top: calc(var(--spacing) * 4);
   }
+  .mr-1 {
+    margin-right: var(--spacing);
+  }
   .mb-0 {
     margin-bottom: 0;
   }
@@ -279,6 +282,9 @@
   }
   .min-h-screen {
     min-height: 100vh;
+  }
+  .w-48 {
+    width: calc(var(--spacing) * 48);
   }
   .w-auto {
     width: auto;

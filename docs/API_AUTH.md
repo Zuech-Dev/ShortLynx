@@ -102,7 +102,28 @@ The Admin dashboard offers the same operations with a UI.
 
 ---
 
-## 4. Config the operator must set (Core)
+## 4. The `/admin/users` surface (platform super-admins only)
+
+Cross-tenant user management, gated by the `is_admin` claim (non-admins get `403`). Use this to onboard
+users, move them between accounts, and disable accounts. Account-scoped membership management lives under
+`/me/members` (above); this is the platform-wide equivalent and is **not** bounded by a single account.
+
+| Method & path | Purpose |
+|---|---|
+| `GET /admin/users` `?page=&pageSize=` | List users with their account memberships |
+| `POST /admin/users` `{ email, accountId?, role?, accountName? }` | Add a user. With `accountId` (must exist) → add to it at `role` (default Member). Without it → create a new account (`accountName` or the email) owned by the user. |
+| `PUT /admin/users/{id}` `{ isActive?, isAdmin? }` | Toggle active and/or super-admin (omitted fields unchanged) |
+| `DELETE /admin/users/{id}` | **Soft delete** — deactivate (blocks sign-in, keeps the record + memberships) |
+| `PUT /admin/users/{id}/accounts/{accountId}` `{ role }` | Assign to an existing account or change the role (upsert) |
+| `DELETE /admin/users/{id}/accounts/{accountId}` | Remove the user's membership in an account |
+
+Assigning to a non-existent account returns `404`. A deactivated user can't sign in even with a valid,
+unexpired magic-link token; re-enable with `PUT {id} { "isActive": true }`. The same operations are
+available in the Admin dashboard's **Users** page (super-admin only).
+
+---
+
+## 5. Config the operator must set (Core)
 - `Jwt:SigningKey` — 32+ char secret (fail-fast at startup).
 - `Cors:AllowedOrigins` — your frontend's exact origin(s) for cross-origin use.
 - `MagicLink:ConfirmationUrlBase` — your frontend callback URL.

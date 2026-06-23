@@ -58,6 +58,53 @@ internal sealed class FakeAccountService : IAccountService
         => Task.FromResult(MembershipExists ? Role : (AccountRole?)null);
 }
 
+internal sealed class FakeUserAdminService : ShortLynx.Services.Users.IUserAdminService
+{
+    public readonly List<ShortLynx.Services.Users.AdminUserView> Users = [];
+    public readonly List<(string Email, Guid? AccountId, AccountRole? Role, string? Name)> Added = [];
+    public readonly List<(Guid UserId, Guid AccountId, AccountRole Role)> Assigned = [];
+    public readonly List<(Guid UserId, Guid AccountId)> RemovedFrom = [];
+    public readonly List<(Guid UserId, bool Value)> SuperAdminSet = [];
+    public readonly List<(Guid UserId, bool Value)> ActiveSet = [];
+    public bool ThrowAccountNotFound;
+
+    public Task<IReadOnlyList<ShortLynx.Services.Users.AdminUserView>> ListUsersAsync(int page, int pageSize, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<ShortLynx.Services.Users.AdminUserView>>(Users);
+
+    public Task<ShortLynx.Services.Users.AdminUserView> AddUserAsync(
+        string email, Guid? accountId = null, AccountRole? role = null, string? newAccountName = null, CancellationToken ct = default)
+    {
+        if (ThrowAccountNotFound) throw new KeyNotFoundException($"Account '{accountId}' does not exist.");
+        Added.Add((email, accountId, role, newAccountName));
+        return Task.FromResult(new ShortLynx.Services.Users.AdminUserView(
+            Guid.CreateVersion7(), email, true, false, DateTimeOffset.UtcNow, []));
+    }
+
+    public Task<bool> AssignToAccountAsync(Guid userId, Guid accountId, AccountRole role, CancellationToken ct = default)
+    {
+        Assigned.Add((userId, accountId, role));
+        return Task.FromResult(true);
+    }
+
+    public Task<bool> RemoveFromAccountAsync(Guid userId, Guid accountId, CancellationToken ct = default)
+    {
+        RemovedFrom.Add((userId, accountId));
+        return Task.FromResult(true);
+    }
+
+    public Task<bool> SetSuperAdminAsync(Guid userId, bool isAdmin, CancellationToken ct = default)
+    {
+        SuperAdminSet.Add((userId, isAdmin));
+        return Task.FromResult(true);
+    }
+
+    public Task<bool> SetActiveAsync(Guid userId, bool isActive, CancellationToken ct = default)
+    {
+        ActiveSet.Add((userId, isActive));
+        return Task.FromResult(true);
+    }
+}
+
 internal sealed class FakeApiKeyService : IApiKeyService
 {
     public readonly List<(string Name, string[] Scopes, Guid AccountId)> Created = [];

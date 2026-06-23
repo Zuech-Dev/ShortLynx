@@ -126,6 +126,29 @@ public sealed class ApiFactory : WebApplicationFactory<ShortLynx.Core.CoreApiEnt
         return (token, user.Id, account.Id);
     }
 
+    /// <summary>
+    /// Like <see cref="CreateSessionClientAsync"/> but flags the user as a platform super-admin first,
+    /// so their session JWT carries the is_admin claim (gates the /admin/* surface).
+    /// </summary>
+    public async Task<(HttpClient Client, Guid UserId)> CreateAdminSessionClientAsync()
+    {
+        var (token, userId, _) = await SeedMemberTokenAsync();
+        using (var scope = Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ShortLynxDbContext>();
+            await db.UserAccountEntities.Where(u => u.Id == userId)
+                .ExecuteUpdateAsync(s => s.SetProperty(u => u.IsAdmin, true));
+        }
+
+        var session = await (await CreateClient().PostAsJsonAsync(
+                "/auth/session", new ShortLynx.Core.Models.Requests.CreateSessionRequest(token)))
+            .Content.ReadFromJsonAsync<ShortLynx.Core.Models.Responses.SessionResponse>();
+
+        var client = CreateClient();
+        client.DefaultRequestHeaders.Add("Authorization", $"Bearer {session!.AccessToken}");
+        return (client, userId);
+    }
+
     /// <summary>Seeds an account and returns its id (resources/keys are account-owned).</summary>
     public async Task<Guid> SeedAccountAsync(string name = "Test Account")
     {

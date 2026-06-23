@@ -74,6 +74,7 @@ public static class ServiceExtensions
         services.AddScoped<ICustomDomainService, CustomDomainService>();
         services.AddSingleton<IDnsResolver, DnsClientResolver>();
         services.AddScoped<IAccountService, AccountService>();
+        services.AddScoped<ShortLynx.Services.Users.IUserAdminService, ShortLynx.Services.Users.UserAdminService>();
 
         return services;
     }

@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using ShortLynx.Services.MagicLinks;
 using ShortLynx.Tests.Stubs;
@@ -99,6 +100,24 @@ public class MagicLinkServiceTests
 
         Assert.NotNull(user);
         Assert.Equal("valid@example.com", user.Email);
+    }
+
+    [Fact]
+    public async Task ValidateToken_InactiveUser_ReturnsNull()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+        var token = await MakeSvc(db.CreateContext()).CreateTokenAsync("inactive@example.com");
+
+        // Deactivate the user (soft delete) after the token was issued.
+        await using (var ctx = db.CreateContext())
+        {
+            await ctx.UserAccountEntities
+                .Where(u => u.Email == "inactive@example.com")
+                .ExecuteUpdateAsync(s => s.SetProperty(u => u.IsActive, false));
+        }
+
+        var result = await MakeSvc(db.CreateContext()).ValidateTokenAsync(token);
+        Assert.Null(result);
     }
 
     [Fact]

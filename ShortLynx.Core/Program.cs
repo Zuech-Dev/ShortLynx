@@ -61,7 +61,9 @@ builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationSc
             },
         };
     });
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+    // Platform super-admins (is_admin claim) gate the cross-tenant /admin/* surface.
+    options.AddPolicy(AuthorizationPolicies.SuperAdmin, p => p.RequireClaim(JwtClaims.IsAdmin, "true")));
 
 // CORS for bring-your-own-frontend clients. Configure Cors:AllowedOrigins (exact origins) to enable
 // cross-origin access; credentials are allowed so cookie sessions work. Empty ⇒ same-origin only.

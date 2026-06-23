@@ -88,6 +88,8 @@ public sealed class MagicLinkService(
         if (tokenEntity is null) return null;
         if (tokenEntity.UsedAt.HasValue) return null;
         if (tokenEntity.ExpiresAt < DateTimeOffset.UtcNow) return null;
+        // A deactivated (soft-deleted) user can't sign in, even with a valid, unexpired token.
+        if (!tokenEntity.UserAccount.IsActive) return null;
 
         // Atomically claim the token: only the request that flips UsedAt from null wins, so two
         // concurrent redemptions can't both succeed. No DateTimeOffset in the predicate (SQLite-safe);

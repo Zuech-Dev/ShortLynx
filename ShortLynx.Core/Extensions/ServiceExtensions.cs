@@ -10,6 +10,7 @@ using ShortLynx.Services.Links;
 using ShortLynx.Services.MagicLinks;
 using ShortLynx.Services.ShortCodes;
 using ShortLynx.Services.UrlValidation;
+using ShortLynx.Services.Users;
 using ShortLynx.Services.Visits;
 
 namespace ShortLynx.Core.Extensions;
@@ -46,6 +47,7 @@ public static class ServiceExtensions
         services.AddSingleton<IDnsResolver, DnsClientResolver>();
         services.AddHostedService<DomainReverificationService>();
         services.AddScoped<IAccountService, AccountService>();
+        services.AddScoped<IUserAdminService, UserAdminService>();
 
         // User sessions (magic-link → JWT + refresh) for bring-your-own-frontend clients.
         services.AddOptions<JwtOptions>()

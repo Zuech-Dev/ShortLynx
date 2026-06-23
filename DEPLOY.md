@@ -1,7 +1,7 @@
 # ShortLynx — Deploy Checklist
 
 **Stack:** .NET 10 · PostgreSQL · three deployable apps + Resend (email) · DNS (custom domains)
-**Target:** Railway (recommended — see platform notes) · 245 tests green at time of writing
+**Target:** Railway (recommended — see platform notes) · 324 tests green at time of writing
 
 ---
 
@@ -42,8 +42,11 @@
 
 ## 🚧 Still to do before first prod deploy
 
-- [ ] **Migrations** — apps do **not** auto-migrate; apply the SQL script (see Migrations below). Current migrations: `Initial`, `AddLinkUserOwnership`, `AddUserLinkCodeRecipient`, `AddLinkCustomDomainPin`.
-- [ ] **Set the new secrets/config** — `VisitSink__IpHashPepper` (Core + Web), `ShortLynx__PublicBaseUrl` (Admin). See env vars below. Without the pepper, stored IP hashes are *unkeyed* (brute-forceable) in prod.
+- [ ] **Migrations** — apps do **not** auto-migrate; apply the SQL script (see Migrations below). The
+  `RehomeOwnershipToAccounts` migration **backfills data** — verify it on a seeded copy before prod.
+- [ ] **Set the new secrets/config** — `VisitSink__IpHashPepper` (Core + Web), `ShortLynx__PublicBaseUrl`
+  (Admin), and **`Jwt__SigningKey` (Core — fail-fast; Core won't start without it)** plus
+  `Cors__AllowedOrigins` if a separate frontend calls the API. See env vars below.
 - [ ] **Tailwind CSS in the containers** — the Linux build can't run the committed macOS Tailwind binary, so the build uses the committed (unminified) `wwwroot/css/tailwind.css` for **both** Admin and Web. That's fine functionally; for minified CSS, fetch `tailwindcss-linux-x64` in each Dockerfile and let the build regenerate. (Bootstrap has been fully removed — Tailwind is the only stylesheet now.)
 - [ ] **Custom-domain DNS + TLS** — for each custom domain a user verifies: they create the TXT record the dashboard/API shows, then point the host at `ShortLynx.Web`. Issuing TLS certs for arbitrary customer hostnames is a **platform concern** (Railway/Fly custom-domain support or a proxy in front) — not handled in app code.
 - [ ] **Outbound DNS egress** — Admin (verify button) and Core (verify endpoint + re-verification job) perform outbound DNS TXT lookups; ensure egress is allowed.
@@ -75,11 +78,20 @@ VisitSink__IpHashPepper = <random secret>    # empty = unkeyed hashing (dev only
 **Core only:**
 ```
 ApiKey__AdminSecret            = <16+ random chars>   # gates POST /api-keys
-MagicLink__ConfirmationUrlBase = https://<admin-domain>/auth/confirm
+MagicLink__ConfirmationUrlBase = https://<admin-or-frontend>/auth/confirm   # where the magic-link points
 Resend__ApiKey                 = <resend api key>
 Resend__FromAddress            = noreply@<verified-domain>   Resend__FromName = ShortLynx
 # Custom-domain re-verification cadence (optional; default 1440 = 24h)
 CustomDomain__ReverifyIntervalMinutes = 1440
+
+# User sessions (bring-your-own-frontend) — see docs/API_AUTH.md
+Jwt__SigningKey            = <32+ random chars>      # fail-fast: Core won't start without it
+Jwt__CookieSameSite        = Lax                     # None (with CookieSecure=true) for cross-site cookies
+Cors__AllowedOrigins__0    = https://<your-frontend-origin>   # only for cross-origin frontends
+
+# Email delivery mode (optional; default Resend). Use Hybrid/Log in non-prod to read magic links from logs.
+Email__Mode                = Resend                  # Resend | Log | Hybrid
+# Email__DeliverableDomains__0 = your-verified-domain.com    # Hybrid only
 ```
 
 **Admin only (fail-closed — no login without the allowlist):**
@@ -101,7 +113,9 @@ ShortLynx__PublicBaseUrl       = https://<short-domain>      # builds full short
 ## Migrations
 
 Apps don't migrate on startup. Current migrations (PostgreSQL):
-`Initial` → `AddLinkUserOwnership` → `AddUserLinkCodeRecipient` → `AddLinkCustomDomainPin`.
+`Initial` → `AddLinkUserOwnership` → `AddUserLinkCodeRecipient` → `AddLinkCustomDomainPin` →
+`AddAccountsAndMemberships` → `RehomeOwnershipToAccounts` (**data backfill** — creates an account +
+Owner membership per existing user/key and re-homes resources; verify on a seeded DB) → `AddRefreshTokens`.
 Pick one:
 
 - **Recommended — idempotent SQL script** applied to Railway Postgres on each migration change:
@@ -116,7 +130,7 @@ Pick one:
 ---
 
 ## Pre-Deploy
-- [ ] `dotnet test ShortLynx.slnx` green (currently 245)
+- [ ] `dotnet test ShortLynx.slnx` green (currently 324)
 - [ ] Working tree committed on `implementation`; pushed to origin
 - [ ] **DB password rotated** (the old one was leaked — see git-scrub history) and set only in Railway variables
 - [ ] All secrets above set in Railway; **no** secrets in any committed `appsettings*.json`
@@ -139,6 +153,8 @@ Pick one:
 - [ ] Verify client IP is real (not the proxy) in a new visit row → confirms forwarded headers
 - [ ] Custom domain: add one (Admin or `POST /domains`), create the shown TXT record, verify → status `Verified`; point the host at Web; pin a link to it and confirm it resolves on that host but not others
 - [ ] Confirm `tailwind.css` is present and the Admin/Web pages are styled (Tailwind, no Bootstrap)
+- [ ] **Accounts/teams:** superuser creates an account+owner from Admin `/users`; an owner invites a member from `/members`; the invited member can sign in and is scoped to that account
+- [ ] **Session API** (if using a custom frontend): `POST /auth/magic-link` → exchange the token at `/auth/session` → `GET /me` with the bearer token → `/me/links` create/list works and is account-scoped (see [docs/API_AUTH.md](docs/API_AUTH.md))
 
 ## Rollback triggers
 - Redirect endpoint 5xx rate > 1%, or any redirect returning 500
@@ -149,7 +165,7 @@ Pick one:
 ---
 
 ## First-deploy gotchas (ShortLynx-specific)
-1. **App won't start** → almost always `ApiKey__HmacSecret` missing/placeholder/<32 chars (fail-fast by design).
+1. **App won't start** → almost always `ApiKey__HmacSecret` (Core+Admin) or **`Jwt__SigningKey` (Core)** missing/placeholder/<32 chars (fail-fast by design).
 2. **Can't log into Admin** → `Admin__AllowedEmails__0` not set (fail-closed by design).
 3. **Magic-link URL points at localhost** → set `MagicLink__ConfirmationUrlBase` to the real Admin domain.
 4. **All redirects share one rate-limit bucket / analytics show one IP** → forwarded headers (now configured) or check the proxy is actually forwarding.

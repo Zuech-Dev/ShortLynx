@@ -1,0 +1,188 @@
+@page "/members"
+@attribute [Authorize]
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.Extensions.DependencyInjection
+@using ShortLynx.Services.Accounts
+@inject IServiceScopeFactory ScopeFactory
+
+<PageTitle>Members — ShortLynx Admin</PageTitle>
+
+<div class="flex justify-between items-center mb-3">
+    <h1 class="text-2xl font-bold">Members</h1>
+    @if (_canManage)
+    {
+        <button class="btn btn-primary" @onclick="() => _showInvite = !_showInvite">
+            @(_showInvite ? "Cancel" : "+ Invite member")
+        </button>
+    }
+</div>
+
+@if (_showInvite)
+{
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5 class="card-title">Invite a member</h5>
+            <EditForm Model="_form" OnValidSubmit="Invite">
+                <DataAnnotationsValidator/>
+                <div class="flex flex-wrap gap-2 items-end">
+                    <div>
+                        <label class="field-label">Email</label>
+                        <InputText class="field-input" @bind-Value="_form.Email" placeholder="teammate@example.com" data-testid="invite-email"/>
+                    </div>
+                    <div>
+                        <label class="field-label">Role</label>
+                        <select class="field-input" @bind="_form.Role" data-testid="invite-role">
+                            @foreach (var r in AssignableRoles())
+                            {
+                                <option value="@r">@r</option>
+                            }
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary" data-testid="invite-submit">Send invite</button>
+                </div>
+                <ValidationMessage For="() => _form.Email"/>
+                @if (_error is not null)
+                {
+                    <div class="text-red-600 text-sm mt-1" data-testid="invite-error">@_error</div>
+                }
+            </EditForm>
+        </div>
+    </div>
+}
+
+@if (!_loaded)
+{
+    <p class="text-gray-500">Loading…</p>
+}
+else
+{
+    <div class="overflow-x-auto">
+        <table class="data-table">
+            <thead>
+            <tr><th>Email</th><th>Role</th><th>Joined</th><th></th></tr>
+            </thead>
+            <tbody>
+            @foreach (var m in _members)
+            {
+                <tr data-testid="member-row">
+                    <td>@m.Email @if (m.UserAccountId == _uid) { <span class="text-gray-400 text-xs">(you)</span> }</td>
+                    <td><span class="badge badge-gray">@m.Role</span></td>
+                    <td class="text-gray-500 text-sm whitespace-nowrap">@m.CreatedAt.ToString("yyyy-MM-dd")</td>
+                    <td class="text-right">
+                        @if (AccountPermissions.CanManageMember(_myRole, m.Role) && m.UserAccountId != _uid)
+                        {
+                            <div class="flex gap-2 justify-end items-center">
+                                <select class="field-input w-auto py-1" data-testid="role-select"
+                                        @onchange="e => ChangeRole(m.UserAccountId, e.Value!.ToString()!)">
+                                    @foreach (var r in AssignableRoles())
+                                    {
+                                        <option value="@r" selected="@(r == m.Role)">@r</option>
+                                    }
+                                </select>
+                                <button class="btn btn-outline-danger" data-testid="remove-btn"
+                                        disabled="@_busy" @onclick="() => Remove(m.UserAccountId)">Remove</button>
+                            </div>
+                        }
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    bool _loaded, _resolved, _showInvite, _busy, _canManage;
+    Guid _uid;
+    Guid _accountId;
+    AccountRole _myRole;
+    List<MemberView> _members = [];
+    readonly InviteForm _form = new();
+    string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var principal = (await AuthState).User;
+        var userId = principal.GetUserId();
+        if (userId is null) { _loaded = true; return; }
+        _uid = userId.Value;
+
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ShortLynxDbContext>();
+        _accountId = await AccountResolver.ResolveAccountIdAsync(db, _uid, principal.GetAccountId(), principal.Identity?.Name ?? "Personal");
+        var svc = scope.ServiceProvider.GetRequiredService<IAccountService>();
+        _myRole = await svc.GetRoleAsync(_accountId, _uid) ?? AccountRole.Viewer;
+        _canManage = AccountPermissions.CanManageMembers(_myRole);
+        _form.Role = AssignableRoles().FirstOrDefault();
+        _resolved = true;
+        await LoadAsync();
+    }
+
+    async Task LoadAsync()
+    {
+        if (!_resolved) return;
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        var svc = scope.ServiceProvider.GetRequiredService<IAccountService>();
+        _members = (await svc.ListMembersAsync(_accountId)).ToList();
+        _loaded = true;
+    }
+
+    // Roles strictly below the current user's — the only ones they may grant.
+    IEnumerable<AccountRole> AssignableRoles()
+        => Enum.GetValues<AccountRole>().Where(r => r < _myRole);
+
+    async Task Invite()
+    {
+        if (!_canManage) return;
+        _error = null;
+        try
+        {
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var svc = scope.ServiceProvider.GetRequiredService<IAccountService>();
+            await svc.InviteMemberAsync(_accountId, _form.Email!, _form.Role, _uid);
+            _form.Email = string.Empty;
+            _showInvite = false;
+            await LoadAsync();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or UnauthorizedAccessException)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    async Task ChangeRole(Guid targetUserId, string roleText)
+    {
+        if (!Enum.TryParse<AccountRole>(roleText, out var role)) return;
+        _busy = true;
+        try
+        {
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var svc = scope.ServiceProvider.GetRequiredService<IAccountService>();
+            await svc.ChangeRoleAsync(_accountId, targetUserId, role, _uid);
+            await LoadAsync();
+        }
+        finally { _busy = false; }
+    }
+
+    async Task Remove(Guid targetUserId)
+    {
+        _busy = true;
+        try
+        {
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var svc = scope.ServiceProvider.GetRequiredService<IAccountService>();
+            await svc.RemoveMemberAsync(_accountId, targetUserId, _uid);
+            await LoadAsync();
+        }
+        finally { _busy = false; }
+    }
+
+    sealed class InviteForm
+    {
+        [Required(ErrorMessage = "Email is required."), EmailAddress]
+        public string? Email { get; set; }
+        public AccountRole Role { get; set; } = AccountRole.Member;
+    }
+}

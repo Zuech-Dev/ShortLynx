@@ -1,0 +1,240 @@
+@page "/links"
+@attribute [Authorize]
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.Extensions.DependencyInjection
+@using ShortLynx.Services.Links
+@inject IDbContextFactory<ShortLynxDbContext> DbFactory
+@inject IServiceScopeFactory ScopeFactory
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>Links — ShortLynx Admin</PageTitle>
+
+<div class="flex justify-between items-center mb-3">
+    <h1 class="text-2xl font-bold">Links</h1>
+    <button class="btn btn-primary" @onclick="() => _showCreate = !_showCreate">
+        @(_showCreate ? "Cancel" : "+ New link")
+    </button>
+</div>
+
+@if (_newShortCode is not null)
+{
+    <div class="alert alert-success mb-4" role="alert" data-testid="new-link">
+        <div class="font-semibold mb-1">Link created.</div>
+        <div class="flex gap-2 items-center">
+            <span>Short code: <code>@_newShortCode</code></span>
+            <button class="btn btn-outline-success" @onclick="CopyNewCode">Copy</button>
+            <button type="button" class="ml-auto text-gray-400 hover:text-gray-600" aria-label="Dismiss" @onclick="() => _newShortCode = null">✕</button>
+        </div>
+    </div>
+}
+
+@if (_showCreate)
+{
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5 class="card-title">Create a link</h5>
+            <EditForm Model="_form" OnValidSubmit="CreateLink">
+                <DataAnnotationsValidator/>
+                <div class="mb-3">
+                    <label class="field-label">Destination URL</label>
+                    <InputText class="field-input" @bind-Value="_form.Url" placeholder="https://example.com/page"/>
+                    <ValidationMessage For="() => _form.Url"/>
+                    @if (_createError is not null)
+                    {
+                        <div class="text-red-600 text-sm mt-1" data-testid="create-error">@_createError</div>
+                    }
+                </div>
+                <div class="mb-3">
+                    <label class="field-label">Link type</label>
+                    <InputRadioGroup @bind-Value="_form.Mode">
+                        <div class="flex flex-col gap-1">
+                            <label class="inline-flex items-center gap-2" for="mode-anon">
+                                <InputRadio id="mode-anon" Value="LinkMode.Anonymous"/>
+                                <span>Anonymous <span class="text-gray-500 text-sm">— one shared short code, aggregate clicks</span></span>
+                            </label>
+                            <label class="inline-flex items-center gap-2" for="mode-user">
+                                <InputRadio id="mode-user" Value="LinkMode.UserAttributed"/>
+                                <span>User-attributed <span class="text-gray-500 text-sm">— a code per recipient, per-recipient clicks</span></span>
+                            </label>
+                        </div>
+                    </InputRadioGroup>
+                </div>
+                <button type="submit" class="btn btn-primary" data-testid="create-submit">
+                    @(_form.Mode == LinkMode.UserAttributed ? "Create & add recipients" : "Create link")
+                </button>
+            </EditForm>
+        </div>
+    </div>
+}
+
+@if (!_loaded)
+{
+    <p class="text-gray-500">Loading…</p>
+}
+else if (_rows.Count == 0)
+{
+    <p class="text-gray-500">No links yet.</p>
+}
+else
+{
+    <div class="overflow-x-auto">
+        <table class="data-table">
+            <thead>
+            <tr>
+                <th>Code</th>
+                <th>URL</th>
+                <th>Owner</th>
+                <th>Mode</th>
+                <th class="text-right">Clicks</th>
+                <th>Created</th>
+                <th></th>
+            </tr>
+            </thead>
+            <tbody>
+            @foreach (var r in _rows)
+            {
+                <tr>
+                    <td><code>@r.ShortCode</code></td>
+                    <td class="truncate max-w-[280px]" title="@r.Url">@r.Url</td>
+                    <td class="text-gray-500 text-sm">@r.ApiKeyName</td>
+                    <td><span class="badge @(r.Mode == "Anonymous" ? "badge-gray" : "badge-blue")">@r.Mode</span></td>
+                    <td class="text-right">@r.Clicks</td>
+                    <td class="text-gray-500 text-sm whitespace-nowrap">@r.CreatedAt.ToString("yyyy-MM-dd")</td>
+                    <td><a class="btn btn-outline-primary" href="/links/@r.Id">View</a></td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+
+    <div class="flex gap-2 mt-3">
+        <button class="btn btn-outline" @onclick="PrevPage" disabled="@(_page == 1)">← Prev</button>
+        <span class="self-center text-gray-500 text-sm">Page @_page</span>
+        <button class="btn btn-outline" @onclick="NextPage" disabled="@(_rows.Count < PageSize)">Next →</button>
+    </div>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    const int PageSize = 20;
+    int _page = 1;
+    bool _loaded;
+    bool _resolved;
+    Guid _uid;
+    Guid _accountId;
+    List<LinkRow> _rows = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var principal = (await AuthState).User;
+        var userId = principal.GetUserId();
+        if (userId is null) { _loaded = true; return; }
+        _uid = userId.Value;
+        await using (var db = await DbFactory.CreateDbContextAsync())
+            _accountId = await AccountResolver.ResolveAccountIdAsync(db, _uid, principal.GetAccountId(), principal.Identity?.Name ?? "Personal");
+        _resolved = true;
+        await LoadAsync();
+    }
+
+    async Task LoadAsync()
+    {
+        if (!_resolved) return;
+        _loaded = false;
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        var links = await db.LinkEntities
+            .Include(l => l.ApiKey)
+            .Where(l => l.AccountId == _accountId)
+            .OrderByDescending(l => l.Id)
+            .Skip((_page - 1) * PageSize)
+            .Take(PageSize)
+            .ToListAsync();
+
+        var linkIds = links.Select(l => l.Id).ToList();
+
+        var codes = await db.ShortCodeEntities
+            .Where(sc => linkIds.Contains(sc.LinkId))
+            .ToListAsync();
+
+        var codeMap = codes.ToDictionary(sc => sc.LinkId, sc => sc);
+        var codeIds = codes.Select(sc => sc.Id).ToList();
+
+        var visits = await db.VisitEntities
+            .Where(v => codeIds.Contains(v.ShortCodeId))
+            .GroupBy(v => v.ShortCodeId)
+            .Select(g => new { Id = g.Key, Count = g.Count() })
+            .ToListAsync();
+
+        var clickMap = visits.ToDictionary(v => v.Id, v => v.Count);
+
+        _rows = links.Select(l =>
+        {
+            var sc = codeMap.GetValueOrDefault(l.Id);
+            var clicks = sc is not null ? clickMap.GetValueOrDefault(sc.Id, 0) : 0;
+            return new LinkRow(l.Id, l.OriginalUrl, l.Mode.ToString(),
+                sc?.Code ?? string.Empty, l.ApiKey?.Name ?? "Dashboard",
+                l.CreatedAt, clicks);
+        }).ToList();
+
+        _loaded = true;
+    }
+
+    async Task PrevPage() { if (_page > 1) { _page--; await LoadAsync(); } }
+    async Task NextPage() { _page++; await LoadAsync(); }
+
+    bool _showCreate;
+    string? _newShortCode;
+    string? _createError;
+    CreateLinkForm _form = new();
+
+    async Task CreateLink()
+    {
+        if (!_resolved) return;
+        _createError = null;
+        try
+        {
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var svc = scope.ServiceProvider.GetRequiredService<ILinkService>();
+
+            if (_form.Mode == LinkMode.UserAttributed)
+            {
+                // Mode-2 links have no shared code — go straight to the detail page to add recipients.
+                var link = await svc.CreateUserAttributedLinkAsync(_form.Url!, _accountId, _uid);
+                _form = new();
+                _showCreate = false;
+                Nav.NavigateTo($"/links/{link.Id}");
+                return;
+            }
+
+            var result = await svc.CreateAnonymousLinkAsync(_form.Url!, _accountId, _uid);
+            _newShortCode = result.ShortCode.Code;
+            _form = new();
+            _showCreate = false;
+            await LoadAsync();
+        }
+        catch (ArgumentException ex)
+        {
+            // URL validation / SSRF rejection.
+            _createError = ex.Message;
+        }
+    }
+
+    async Task CopyNewCode()
+    {
+        if (_newShortCode is not null)
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", _newShortCode);
+    }
+
+    sealed record LinkRow(Guid Id, string Url, string Mode, string ShortCode,
+        string ApiKeyName, DateTimeOffset CreatedAt, int Clicks);
+
+    sealed class CreateLinkForm
+    {
+        [Required(ErrorMessage = "URL is required."), Url(ErrorMessage = "Enter a valid URL.")]
+        public string? Url { get; set; }
+
+        public LinkMode Mode { get; set; } = LinkMode.Anonymous;
+    }
+}

@@ -1,0 +1,44 @@
+<div class="top-row flex items-center pl-3 navbar-dark">
+    <div class="w-full">
+        <a class="navbar-brand" href="">ShortLynx</a>
+    </div>
+</div>
+
+<input type="checkbox" title="Navigation menu" class="navbar-toggler"/>
+
+<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
+    <nav class="flex flex-col">
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                <span class="bi bi-speedometer2-nav-menu" aria-hidden="true"></span> Dashboard
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="links">
+                <span class="bi bi-link-45deg-nav-menu" aria-hidden="true"></span> Links
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="api-keys">
+                <span class="bi bi-key-nav-menu" aria-hidden="true"></span> API Keys
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="domains">
+                <span class="bi bi-globe-nav-menu" aria-hidden="true"></span> Domains
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="members">
+                <span class="bi bi-people-nav-menu" aria-hidden="true"></span> Members
+            </NavLink>
+        </div>
+        <AuthorizeView Policy="@AdminClaims.SuperAdminPolicy">
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="users">
+                    <span class="bi bi-people-nav-menu" aria-hidden="true"></span> Users
+                </NavLink>
+            </div>
+        </AuthorizeView>
+    </nav>
+</div>

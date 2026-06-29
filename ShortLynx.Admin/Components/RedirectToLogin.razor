@@ -1,0 +1,32 @@
+@inject NavigationManager Nav
+
+@if (_authenticated)
+{
+    <div class="alert m-4 border-yellow-200 bg-yellow-50 text-yellow-800" role="alert">
+        <h4 class="text-lg font-semibold mb-1">Access denied</h4>
+        <p class="mb-2">Your account doesn't have permission to view this page.</p>
+        <a href="/" class="btn btn-outline">← Back to dashboard</a>
+    </div>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+    bool _authenticated;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Authenticated but unauthorized (e.g. a tenant hitting a super-admin page) → show a message
+        // rather than bouncing to login, which would just mint another magic link.
+        if (AuthState is not null)
+        {
+            var user = (await AuthState).User;
+            if (user.Identity?.IsAuthenticated == true)
+            {
+                _authenticated = true;
+                return;
+            }
+        }
+
+        Nav.NavigateTo("/auth/login", forceLoad: true);
+    }
+}

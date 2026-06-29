@@ -1,0 +1,344 @@
+@page "/links/{Id:guid}"
+@attribute [Authorize]
+@using Microsoft.Extensions.DependencyInjection
+@using Microsoft.Extensions.Options
+@using ShortLynx.Services.Links
+@inject IDbContextFactory<ShortLynxDbContext> DbFactory
+@inject IServiceScopeFactory ScopeFactory
+@inject IOptions<DashboardOptions> DashboardOpts
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+
+<PageTitle>Link Detail — ShortLynx Admin</PageTitle>
+
+@if (_notFound)
+{
+    <p class="text-red-600">Link not found.</p>
+    <a href="/links" class="btn btn-outline">← Back to Links</a>
+}
+else if (!_loaded)
+{
+    <p class="text-gray-500">Loading…</p>
+}
+else
+{
+    <div class="flex items-center gap-2 mb-3">
+        <a href="/links" class="btn btn-outline">← Back</a>
+        <h1 class="text-xl font-bold">Link Detail</h1>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <dl class="grid grid-cols-1 sm:grid-cols-[8rem_1fr] gap-x-4 gap-y-2 mb-0">
+                <dt class="font-medium text-gray-500">URL</dt>
+                <dd><a class="text-blue-700 hover:underline" href="@_link!.OriginalUrl" target="_blank" rel="noopener">@_link.OriginalUrl</a></dd>
+
+                <dt class="font-medium text-gray-500">Short Code</dt>
+                <dd><code>@_shortCode</code></dd>
+
+                <dt class="font-medium text-gray-500">Mode</dt>
+                <dd>@_link.Mode</dd>
+
+                <dt class="font-medium text-gray-500">API Key</dt>
+                <dd>@(_link.ApiKey?.Name ?? "—")</dd>
+
+                <dt class="font-medium text-gray-500">Created</dt>
+                <dd>@_link.CreatedAt.ToString("yyyy-MM-dd HH:mm") UTC</dd>
+            </dl>
+        </div>
+    </div>
+
+    @if (_canPin)
+    {
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title">Custom domain</h5>
+                <p class="text-gray-500 text-sm">Pin this link to one of your verified domains, or leave it on any host.</p>
+                <div class="flex gap-2 items-center max-w-[520px]">
+                    <select class="field-input" @bind="_selectedDomainKey" data-testid="pin-select">
+                        <option value="">Any host (no pin)</option>
+                        @foreach (var d in _verifiedDomains)
+                        {
+                            <option value="@d.Id">@d.Domain</option>
+                        }
+                    </select>
+                    <button class="btn btn-primary" data-testid="pin-save" @onclick="SavePin">Save</button>
+                </div>
+                @if (_verifiedDomains.Count == 0)
+                {
+                    <div class="text-sm text-gray-500 mt-1">No verified domains yet — add one under <a class="text-blue-700 hover:underline" href="/domains">Domains</a>.</div>
+                }
+                @if (_pinSaved)
+                {
+                    <div class="text-green-600 text-sm mt-1" data-testid="pin-saved">Saved.</div>
+                }
+            </div>
+        </div>
+    }
+
+    @if (_link.Mode == LinkMode.Anonymous)
+    {
+        <h5 class="text-base font-semibold mb-2">Click Analytics</h5>
+        <p class="text-gray-500">Total clicks: <strong>@_totalClicks</strong></p>
+
+        @if (_recentVisits.Count > 0)
+        {
+            <table class="data-table">
+                <thead>
+                <tr><th>Clicked At</th><th>Referrer</th></tr>
+                </thead>
+                <tbody>
+                @foreach (var v in _recentVisits)
+                {
+                    <tr>
+                        <td class="whitespace-nowrap">@v.ClickedAt.ToString("yyyy-MM-dd HH:mm") UTC</td>
+                        <td class="text-gray-500 text-sm truncate max-w-[300px]">@(v.Referrer ?? "—")</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+            @if (_totalClicks > 50)
+            {
+                <p class="text-gray-500 text-sm mt-1">Showing 50 most recent clicks.</p>
+            }
+        }
+    }
+    else
+    {
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title">Provision codes</h5>
+                <p class="text-gray-500 text-sm">One recipient per line (e.g. an email or campaign tag). A unique short code is minted for each.</p>
+                <EditForm Model="_provision" OnValidSubmit="ProvisionCodes">
+                    <div class="mb-2">
+                        <InputTextArea class="field-input font-mono" rows="4" @bind-Value="_provision.Recipients"
+                                       placeholder="alice@example.com&#10;bob@example.com" data-testid="provision-input"/>
+                    </div>
+                    <label class="inline-flex items-center gap-2 mb-2" for="one-time">
+                        <InputCheckbox id="one-time" @bind-Value="_provision.IsOneTimeUse"/>
+                        <span>One-time use <span class="text-gray-500 text-sm">— each code redirects only once</span></span>
+                    </label>
+                    @if (_provisionError is not null)
+                    {
+                        <div class="text-red-600 text-sm mb-2" data-testid="provision-error">@_provisionError</div>
+                    }
+                    <div>
+                        <button type="submit" class="btn btn-primary" data-testid="provision-submit">Provision codes</button>
+                    </div>
+                </EditForm>
+
+                @if (_minted.Count > 0)
+                {
+                    <div class="alert alert-success mt-3" data-testid="minted">
+                        <div class="flex items-center mb-2">
+                            <span class="font-semibold">@_minted.Count code(s) ready.</span>
+                            <button class="btn btn-outline-success ml-auto" @onclick="CopyAllMinted">Copy all</button>
+                        </div>
+                        <ul class="text-sm font-mono space-y-0.5">
+                            @foreach (var m in _minted)
+                            {
+                                <li>@(m.Recipient ?? "—") → <a class="text-blue-700 hover:underline" href="@m.Url" target="_blank" rel="noopener">@m.Url</a></li>
+                            }
+                        </ul>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <h5 class="text-base font-semibold mb-2">User Code Analytics</h5>
+        @if (_userRows.Count == 0)
+        {
+            <p class="text-gray-500">No user codes provisioned yet.</p>
+        }
+        else
+        {
+            <table class="data-table">
+                <thead>
+                <tr><th>Recipient</th><th>Code</th><th class="text-right">Clicks</th></tr>
+                </thead>
+                <tbody>
+                @foreach (var r in _userRows)
+                {
+                    <tr>
+                        <td>@(r.Recipient ?? "—") @if (r.IsOneTimeUse) { <span class="badge badge-yellow">one-time</span> }</td>
+                        <td><code>@r.Code</code></td>
+                        <td class="text-right">@r.Clicks</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        }
+    }
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+    [Parameter] public Guid Id { get; set; }
+
+    bool _loaded, _notFound;
+    bool _authResolved, _isSuperAdmin;
+    Guid _uid;
+    LinkEntity? _link;
+    string _shortCode = string.Empty;
+    int _totalClicks;
+    List<VisitEntity> _recentVisits = [];
+    List<UserCodeRow> _userRows = [];
+
+    // Custom-domain pinning (current-account links only).
+    bool _canPin, _pinSaved;
+    Guid _accountId;
+    List<DomainOption> _verifiedDomains = [];
+    string _selectedDomainKey = string.Empty;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!_authResolved)
+        {
+            var principal = (await AuthState).User;
+            _isSuperAdmin = principal.IsSuperAdmin();
+            var userId = principal.GetUserId();
+            if (userId is null) { _notFound = true; _loaded = true; return; }
+            _uid = userId.Value;
+            await using (var db = await DbFactory.CreateDbContextAsync())
+                _accountId = await AccountResolver.ResolveAccountIdAsync(db, _uid, principal.GetAccountId(), principal.Identity?.Name ?? "Personal");
+            _authResolved = true;
+        }
+        await LoadAsync();
+    }
+
+    async Task LoadAsync()
+    {
+        _loaded = false;
+        _notFound = false;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        _link = await db.LinkEntities
+            .Include(l => l.ApiKey)
+            .FirstOrDefaultAsync(l => l.Id == Id);
+
+        if (_link is null) { _notFound = true; _loaded = true; return; }
+
+        // Ownership: members may only view links in their account; super-admins may view any.
+        // Report "not found" (not "forbidden") so existence isn't leaked.
+        if (!_isSuperAdmin && _link.AccountId != _accountId)
+        {
+            _link = null;
+            _notFound = true;
+            _loaded = true;
+            return;
+        }
+
+        if (_link.Mode == LinkMode.Anonymous)
+        {
+            var sc = await db.ShortCodeEntities.FirstOrDefaultAsync(s => s.LinkId == Id);
+            _shortCode = sc?.Code ?? string.Empty;
+
+            if (sc is not null)
+            {
+                _totalClicks = await db.VisitEntities.CountAsync(v => v.ShortCodeId == sc.Id);
+                _recentVisits = await db.VisitEntities
+                    .Where(v => v.ShortCodeId == sc.Id)
+                    .OrderByDescending(v => v.Id)
+                    .Take(50)
+                    .ToListAsync();
+            }
+        }
+        else
+        {
+            var codes = await db.UserLinkCodeEntities
+                .Where(c => c.LinkId == Id)
+                .OrderByDescending(c => c.Id)
+                .ToListAsync();
+
+            var codeIds = codes.Select(c => c.Id).ToList();
+            var clicks = await db.UserVisitEntities
+                .Where(v => codeIds.Contains(v.UserLinkCodeId))
+                .GroupBy(v => v.UserLinkCodeId)
+                .Select(g => new { Id = g.Key, Count = g.Count() })
+                .ToListAsync();
+
+            var clickMap = clicks.ToDictionary(x => x.Id, x => x.Count);
+            _userRows = codes.Select(c => new UserCodeRow(c.Code, c.Recipient, c.IsOneTimeUse,
+                clickMap.GetValueOrDefault(c.Id, 0))).ToList();
+        }
+
+        // Pinning is offered for links in the current account (not when a super-admin views another's).
+        _canPin = _link.AccountId == _accountId;
+        if (_canPin)
+        {
+            _verifiedDomains = await db.CustomDomainEntities
+                .Where(d => d.AccountId == _accountId && d.VerificationStatus == DomainVerificationStatus.Verified)
+                .OrderBy(d => d.Domain)
+                .Select(d => new DomainOption(d.Id, d.Domain))
+                .ToListAsync();
+            _selectedDomainKey = _link.CustomDomainId?.ToString() ?? string.Empty;
+        }
+
+        _loaded = true;
+    }
+
+    async Task SavePin()
+    {
+        if (!_canPin) return;
+        _pinSaved = false;
+        Guid? domainId = Guid.TryParse(_selectedDomainKey, out var id) ? id : null;
+
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        var svc = scope.ServiceProvider.GetRequiredService<ILinkService>();
+        if (await svc.SetLinkDomainAsync(Id, domainId, _accountId))
+        {
+            _pinSaved = true;
+            await LoadAsync();
+        }
+    }
+
+    sealed record DomainOption(Guid Id, string Domain);
+
+    // ── Code provisioning (Mode 2) ────────────────────────────────────────────
+
+    readonly ProvisionForm _provision = new();
+    string? _provisionError;
+    List<MintedCode> _minted = [];
+
+    async Task ProvisionCodes()
+    {
+        _provisionError = null;
+
+        var recipients = (_provision.Recipients ?? string.Empty)
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(label => new CodeRecipient(Guid.CreateVersion7(), label))
+            .ToList();
+
+        if (recipients.Count == 0)
+        {
+            _provisionError = "Enter at least one recipient.";
+            return;
+        }
+
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        var svc = scope.ServiceProvider.GetRequiredService<ILinkService>();
+        var codes = await svc.CreateUserLinkCodesAsync(Id, recipients, _provision.IsOneTimeUse);
+
+        var baseUrl = DashboardOpts.Value;
+        _minted = codes.Select(c => new MintedCode(c.Recipient, baseUrl.BuildShortUrl(c.Code))).ToList();
+        _provision.Recipients = string.Empty;
+        await LoadAsync();
+    }
+
+    async Task CopyAllMinted()
+    {
+        var text = string.Join('\n', _minted.Select(m => m.Url));
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", text);
+    }
+
+    sealed class ProvisionForm
+    {
+        public string? Recipients { get; set; }
+        public bool IsOneTimeUse { get; set; }
+    }
+
+    sealed record MintedCode(string? Recipient, string Url);
+
+    sealed record UserCodeRow(string Code, string? Recipient, bool IsOneTimeUse, int Clicks);
+}

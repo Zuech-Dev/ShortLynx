@@ -1,0 +1,29 @@
+@page
+@model ShortLynx.Admin.Pages.Auth.ConfirmModel
+@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sign In — ShortLynx Admin</title>
+    <link rel="stylesheet" href="~/css/tailwind.css" />
+    <link rel="stylesheet" href="~/app.css" />
+</head>
+<body class="bg-gray-50 flex items-center min-h-screen">
+<div class="mx-auto w-full max-w-sm px-4">
+    <div class="card">
+        <div class="card-body p-6 text-center">
+            <h4 class="text-lg font-bold mb-3">ShortLynx Admin</h4>
+            <div class="alert alert-danger text-left">
+                <strong>Invalid or expired link.</strong>
+                <p class="text-sm mt-1">@Model.Error</p>
+            </div>
+            <a href="/auth/login" class="btn btn-outline-primary mt-2">Request a new link</a>
+        </div>
+    </div>
+</div>
+</body>
+</html>

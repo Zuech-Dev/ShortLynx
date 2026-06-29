@@ -1,0 +1,120 @@
+using System.Security.Cryptography;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using ShortLynx.Data.Context;
+using ShortLynx.Data.Entities;
+using ShortLynx.Data.Enums;
+
+namespace ShortLynx.Services.Domains;
+
+public sealed class CustomDomainService(
+    ShortLynxDbContext db,
+    IDnsResolver dns,
+    IOptions<CustomDomainOptions> options) : ICustomDomainService
+{
+    private readonly CustomDomainOptions _opts = options.Value;
+
+    public async Task<CustomDomainEntity> AddAsync(
+        string domain, Guid accountId, Guid? addedByUserAccountId = null, CancellationToken ct = default)
+    {
+        var normalised = Normalise(domain);
+        if (normalised.Length == 0)
+            throw new ArgumentException("Enter a domain.", nameof(domain));
+
+        if (await db.CustomDomainEntities.AnyAsync(d => d.Domain == normalised, ct))
+            throw new InvalidOperationException($"The domain '{normalised}' is already registered.");
+
+        var entity = new CustomDomainEntity
+        {
+            Id = Guid.CreateVersion7(),
+            AccountId = accountId,
+            UserAccountId = addedByUserAccountId,
+            Domain = normalised,
+            CreatedAt = DateTimeOffset.UtcNow,
+            IsActive = false,
+            VerificationStatus = DomainVerificationStatus.Pending,
+            VerificationToken = GenerateToken(),
+        };
+
+        db.CustomDomainEntities.Add(entity);
+        await db.SaveChangesAsync(ct);
+        return entity;
+    }
+
+    public async Task<IReadOnlyList<CustomDomainEntity>> ListAsync(Guid accountId, CancellationToken ct = default)
+        => await db.CustomDomainEntities
+            .Where(d => d.AccountId == accountId)
+            .OrderByDescending(d => d.Id)
+            .ToListAsync(ct);
+
+    public async Task<CustomDomainEntity?> VerifyAsync(Guid domainId, Guid accountId, CancellationToken ct = default)
+    {
+        var domain = await db.CustomDomainEntities
+            .FirstOrDefaultAsync(d => d.Id == domainId && d.AccountId == accountId, ct);
+        if (domain is null) return null;
+
+        var host = _opts.VerificationHost(domain.Domain);
+        var expected = _opts.ExpectedTxtValue(domain.VerificationToken);
+        var records = await dns.GetTxtRecordsAsync(host, ct);
+
+        var verified = records.Any(r => string.Equals(r.Trim(), expected, StringComparison.Ordinal));
+
+        domain.VerificationStatus = verified ? DomainVerificationStatus.Verified : DomainVerificationStatus.Failed;
+        domain.IsActive = verified;
+        domain.VerifiedAt = verified ? DateTimeOffset.UtcNow : null;
+        await db.SaveChangesAsync(ct);
+        return domain;
+    }
+
+    public async Task<bool> RemoveAsync(Guid domainId, Guid accountId, CancellationToken ct = default)
+    {
+        var affected = await db.CustomDomainEntities
+            .Where(d => d.Id == domainId && d.AccountId == accountId)
+            .ExecuteDeleteAsync(ct);
+        return affected > 0;
+    }
+
+    public async Task<int> RecheckVerifiedAsync(CancellationToken ct = default)
+    {
+        var verified = await db.CustomDomainEntities
+            .Where(d => d.VerificationStatus == DomainVerificationStatus.Verified)
+            .ToListAsync(ct);
+
+        var demoted = 0;
+        foreach (var domain in verified)
+        {
+            var expected = _opts.ExpectedTxtValue(domain.VerificationToken);
+            var records = await dns.GetTxtRecordsAsync(_opts.VerificationHost(domain.Domain), ct);
+            if (records.Any(r => string.Equals(r.Trim(), expected, StringComparison.Ordinal)))
+                continue;
+
+            // TXT record gone/changed — the user may no longer control the domain.
+            domain.VerificationStatus = DomainVerificationStatus.Failed;
+            domain.IsActive = false;
+            domain.VerifiedAt = null;
+            demoted++;
+        }
+
+        if (demoted > 0) await db.SaveChangesAsync(ct);
+        return demoted;
+    }
+
+    // Lowercases, trims, and strips any scheme/path the user may have pasted, leaving a bare host.
+    private static string Normalise(string domain)
+    {
+        var value = domain.Trim().ToLowerInvariant();
+        if (value.Length == 0) return value;
+
+        if (Uri.TryCreate(value.Contains("://") ? value : $"//{value}", UriKind.RelativeOrAbsolute, out var uri)
+            && uri.IsAbsoluteUri)
+            value = uri.Host;
+        else
+            value = value.Split('/', 2)[0];
+
+        return value.TrimEnd('.');
+    }
+
+    private static string GenerateToken()
+        => Convert.ToBase64String(RandomNumberGenerator.GetBytes(24))
+            .Replace('+', '-').Replace('/', '_').TrimEnd('=');
+}

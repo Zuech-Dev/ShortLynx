@@ -1,0 +1,59 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
+      <UserSecretsId>f06abd8e-ef3e-46ea-8178-9227cc43c60e</UserSecretsId>
+  </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.0" />
+        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.7" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.7" />
+        <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.7" />
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.7" />
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.7" />
+        <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.7" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.7" />
+        <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.18.0" />
+        <PackageReference Include="Npgsql.DependencyInjection" Version="10.0.2" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.7" />
+        <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.1" />
+        <PackageReference Include="Npgsql.Json.NET" Version="10.0.2" />
+        <PackageReference Include="Serilog" Version="4.3.1" />
+        <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
+        <PackageReference Include="Serilog.Enrichers.Environment" Version="3.0.1" />
+        <PackageReference Include="Serilog.Enrichers.Sensitive" Version="2.1.0" />
+        <PackageReference Include="Serilog.Exceptions.EntityFrameworkCore" Version="8.4.0" />
+        <PackageReference Include="Serilog.Extensions.Logging" Version="10.0.0" />
+        <PackageReference Include="Serilog.Extensions.Logging.File" Version="3.0.0" />
+        <PackageReference Include="Serilog.Formatting.Elasticsearch" Version="10.0.0" />
+        <PackageReference Include="Serilog.Settings.Configuration" Version="10.0.0" />
+        <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
+        <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Content Include="..\.dockerignore">
+        <Link>.dockerignore</Link>
+      </Content>
+      <Content Update="appsettings.Development.json">
+        <DependentUpon>appsettings.json</DependentUpon>
+      </Content>
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\ShortLynx.Data\ShortLynx.Data.csproj" />
+      <ProjectReference Include="..\ShortLynx.Repository\ShortLynx.Repository.csproj" />
+      <ProjectReference Include="..\ShortLynx.Services\ShortLynx.Services.csproj" />
+      <!-- Carries the EF migrations assembly into the app so the dev-time DatabaseMigrationGuard can
+           enumerate migrations at startup. Content (the provider's design-time appsettings) is excluded
+           so it can't clobber the app's own configuration. -->
+      <ProjectReference Include="..\ShortLynx.Data.PostgreSql\ShortLynx.Data.PostgreSql.csproj">
+        <ExcludeAssets>contentFiles</ExcludeAssets>
+      </ProjectReference>
+    </ItemGroup>
+
+</Project>

@@ -1,0 +1,12 @@
+{
+  "_comment": "Used by the EF design-time factory for migrations. Copy to appsettings.Development.json (gitignored) OR set the DATABASE_URL environment variable. Never commit real credentials.",
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  },
+  "Database": {
+    "ConnectionString": "Host=localhost;Port=5432;Database=shortlynx;Username=REPLACE_ME;Password=REPLACE_ME;SearchPath=public"
+  }
+}

@@ -1,0 +1,322 @@
+@page "/users"
+@attribute [Authorize(Policy = AdminClaims.SuperAdminPolicy)]
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.Extensions.DependencyInjection
+@using ShortLynx.Services.Accounts
+@using ShortLynx.Services.Users
+@inject IDbContextFactory<ShortLynxDbContext> DbFactory
+@inject IServiceScopeFactory ScopeFactory
+
+<PageTitle>Users — ShortLynx Admin</PageTitle>
+
+<div class="flex justify-between items-center mb-4">
+    <h1 class="text-2xl font-bold">Users</h1>
+    <button class="btn btn-primary" @onclick="() => _showAdd = !_showAdd">
+        @(_showAdd ? "Cancel" : "+ Add user")
+    </button>
+</div>
+
+@if (_showAdd)
+{
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5 class="card-title">Add a user</h5>
+            <p class="text-gray-500 text-sm">Assign the user to an existing account at a role, or create a new
+                account they own. Either way they get a sign-in email.</p>
+            <EditForm Model="_addForm" OnValidSubmit="AddUser">
+                <DataAnnotationsValidator/>
+                <div class="flex flex-wrap gap-2 items-end">
+                    <div>
+                        <label class="field-label">Email</label>
+                        <InputText class="field-input" @bind-Value="_addForm.Email" placeholder="user@example.com"
+                                   data-testid="add-email"/>
+                    </div>
+                    <div>
+                        <label class="field-label">Account</label>
+                        <select class="field-input" @bind="_addForm.AccountId" data-testid="add-account">
+                            <option value="">— New account (owner) —</option>
+                            @foreach (var a in _accounts)
+                            {
+                                <option value="@a.Id">@a.Name</option>
+                            }
+                        </select>
+                    </div>
+                    @if (string.IsNullOrEmpty(_addForm.AccountId))
+                    {
+                        <div>
+                            <label class="field-label">New account name</label>
+                            <InputText class="field-input" @bind-Value="_addForm.AccountName" placeholder="Acme Inc."
+                                       data-testid="add-account-name"/>
+                        </div>
+                    }
+                    else
+                    {
+                        <div>
+                            <label class="field-label">Role</label>
+                            <select class="field-input" @bind="_addForm.Role" data-testid="add-role">
+                                @foreach (var r in Enum.GetValues<AccountRole>())
+                                {
+                                    <option value="@r">@r</option>
+                                }
+                            </select>
+                        </div>
+                    }
+                    <button type="submit" class="btn btn-primary" data-testid="add-submit">Add user</button>
+                </div>
+                <ValidationMessage For="() => _addForm.Email"/>
+                @if (_addError is not null)
+                {
+                    <div class="text-red-600 text-sm mt-1" data-testid="add-error">@_addError</div>
+                }
+                @if (_addedEmail is not null)
+                {
+                    <div class="text-green-700 text-sm mt-1" data-testid="add-done">Added @_addedEmail and emailed a
+                        sign-in link.</div>
+                }
+            </EditForm>
+        </div>
+    </div>
+}
+
+@if (!_loaded)
+{
+    <p class="text-gray-500">Loading…</p>
+}
+else if (_rows.Count == 0)
+{
+    <p class="text-gray-500">No users yet.</p>
+}
+else
+{
+    <div class="overflow-x-auto">
+        <table class="data-table">
+            <thead>
+            <tr>
+                <th>Email</th>
+                <th>Accounts</th>
+                <th>Super-admin</th>
+                <th>Status</th>
+                <th>Created</th>
+                <th></th>
+            </tr>
+            </thead>
+            <tbody>
+            @foreach (var r in _rows)
+            {
+                <tr class="@(!r.IsActive ? "text-gray-400" : null)">
+                    <td>@r.Email</td>
+                    <td>
+                        @if (r.Accounts.Count == 0)
+                        {
+                            <span class="text-gray-400 text-xs">none</span>
+                        }
+                        else
+                        {
+                            @foreach (var a in r.Accounts)
+                            {
+                                <span class="badge badge-gray mr-1">@a.Name (@a.Role)</span>
+                            }
+                        }
+                    </td>
+                    <td>
+                        <button class="btn btn-outline text-xs" data-testid="toggle-admin"
+                                @onclick="() => ToggleAdmin(r)">
+                            @(r.IsAdmin ? "Yes — revoke" : "No — grant")
+                        </button>
+                    </td>
+                    <td>
+                        @if (r.IsActive)
+                        {
+                            <button class="btn btn-outline text-xs" data-testid="toggle-active"
+                                    @onclick="() => SetActive(r, false)">Active — deactivate</button>
+                        }
+                        else
+                        {
+                            <button class="btn btn-outline text-xs" data-testid="toggle-active"
+                                    @onclick="() => SetActive(r, true)">Inactive — reactivate</button>
+                        }
+                    </td>
+                    <td class="text-gray-500 text-sm whitespace-nowrap">@r.CreatedAt.ToString("yyyy-MM-dd")</td>
+                    <td>
+                        <button class="btn btn-outline text-xs" data-testid="manage-btn"
+                                @onclick="() => Toggle(r.Id)">@(_expanded == r.Id ? "Close" : "Manage")</button>
+                    </td>
+                </tr>
+                @if (_expanded == r.Id)
+                {
+                    <tr>
+                        <td colspan="6" class="bg-gray-50">
+                            <div class="p-2">
+                                <div class="font-semibold text-sm mb-1">Account memberships</div>
+                                @foreach (var a in r.Accounts)
+                                {
+                                    <div class="flex items-center gap-2 mb-1" data-testid="membership-row">
+                                        <span class="w-48 truncate">@a.Name</span>
+                                        <select class="field-input text-xs" data-testid="membership-role"
+                                                @onchange="e => AssignRole(r, a.AccountId, e.Value?.ToString())">
+                                            @foreach (var role in Enum.GetValues<AccountRole>())
+                                            {
+                                                <option value="@role" selected="@(role == a.Role)">@role</option>
+                                            }
+                                        </select>
+                                        <button class="btn btn-outline text-xs" data-testid="membership-remove"
+                                                @onclick="() => RemoveFromAccount(r, a.AccountId)">Remove</button>
+                                    </div>
+                                }
+                                <div class="flex items-end gap-2 mt-2">
+                                    <div>
+                                        <label class="field-label">Assign to account</label>
+                                        <select class="field-input text-xs" @bind="_assignAccountId" data-testid="assign-account">
+                                            <option value="">— choose —</option>
+                                            @foreach (var acc in _accounts)
+                                            {
+                                                <option value="@acc.Id">@acc.Name</option>
+                                            }
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="field-label">Role</label>
+                                        <select class="field-input text-xs" @bind="_assignRole" data-testid="assign-role">
+                                            @foreach (var role in Enum.GetValues<AccountRole>())
+                                            {
+                                                <option value="@role">@role</option>
+                                            }
+                                        </select>
+                                    </div>
+                                    <button class="btn btn-primary text-xs" data-testid="assign-submit"
+                                            @onclick="() => Assign(r)">Assign</button>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            }
+            </tbody>
+        </table>
+    </div>
+
+    <div class="flex gap-2 mt-3">
+        <button class="btn btn-outline" @onclick="PrevPage" disabled="@(_page == 1)">← Prev</button>
+        <span class="self-center text-gray-500 text-sm">Page @_page</span>
+        <button class="btn btn-outline" @onclick="NextPage" disabled="@(_rows.Count < PageSize)">Next →</button>
+    </div>
+}
+
+@code {
+    const int PageSize = 50;
+    int _page = 1;
+    bool _loaded;
+    List<AdminUserView> _rows = [];
+    List<AccountOption> _accounts = [];
+
+    Guid? _expanded;
+    string _assignAccountId = "";
+    AccountRole _assignRole = AccountRole.Member;
+
+    bool _showAdd;
+    string? _addError, _addedEmail;
+    readonly AddForm _addForm = new();
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    async Task LoadAsync()
+    {
+        _loaded = false;
+        await using (var db = await DbFactory.CreateDbContextAsync())
+        {
+            _accounts = await db.AccountEntities
+                .OrderBy(a => a.Name)
+                .Select(a => new AccountOption(a.Id, a.Name))
+                .ToListAsync();
+        }
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        var svc = scope.ServiceProvider.GetRequiredService<IUserAdminService>();
+        _rows = (await svc.ListUsersAsync(_page, PageSize)).ToList();
+        _loaded = true;
+    }
+
+    void Toggle(Guid id) => _expanded = _expanded == id ? null : id;
+
+    async Task AddUser()
+    {
+        _addError = null;
+        _addedEmail = null;
+        try
+        {
+            Guid? accountId = Guid.TryParse(_addForm.AccountId, out var aid) ? aid : null;
+            AccountRole? role = accountId is null ? null : _addForm.Role;
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var svc = scope.ServiceProvider.GetRequiredService<IUserAdminService>();
+            await svc.AddUserAsync(_addForm.Email!, accountId, role, _addForm.AccountName);
+            _addedEmail = _addForm.Email;
+            _addForm.Email = string.Empty;
+            _addForm.AccountName = string.Empty;
+            _showAdd = false;
+            await LoadAsync();
+        }
+        catch (KeyNotFoundException ex)
+        {
+            _addError = ex.Message;
+        }
+    }
+
+    async Task ToggleAdmin(AdminUserView r)
+    {
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        await scope.ServiceProvider.GetRequiredService<IUserAdminService>().SetSuperAdminAsync(r.Id, !r.IsAdmin);
+        await LoadAsync();
+    }
+
+    async Task SetActive(AdminUserView r, bool active)
+    {
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        await scope.ServiceProvider.GetRequiredService<IUserAdminService>().SetActiveAsync(r.Id, active);
+        await LoadAsync();
+    }
+
+    async Task AssignRole(AdminUserView r, Guid accountId, string? roleText)
+    {
+        if (!Enum.TryParse<AccountRole>(roleText, out var role)) return;
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        await scope.ServiceProvider.GetRequiredService<IUserAdminService>().AssignToAccountAsync(r.Id, accountId, role);
+        await LoadAsync();
+    }
+
+    async Task RemoveFromAccount(AdminUserView r, Guid accountId)
+    {
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        await scope.ServiceProvider.GetRequiredService<IUserAdminService>().RemoveFromAccountAsync(r.Id, accountId);
+        await LoadAsync();
+    }
+
+    async Task Assign(AdminUserView r)
+    {
+        if (!Guid.TryParse(_assignAccountId, out var accountId)) return;
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        await scope.ServiceProvider.GetRequiredService<IUserAdminService>().AssignToAccountAsync(r.Id, accountId, _assignRole);
+        _assignAccountId = "";
+        await LoadAsync();
+    }
+
+    async Task PrevPage()
+    {
+        if (_page > 1) { _page--; await LoadAsync(); }
+    }
+
+    async Task NextPage()
+    {
+        _page++;
+        await LoadAsync();
+    }
+
+    sealed class AddForm
+    {
+        [Required(ErrorMessage = "Email is required."), EmailAddress]
+        public string? Email { get; set; }
+        public string? AccountId { get; set; }
+        public AccountRole Role { get; set; } = AccountRole.Member;
+        public string? AccountName { get; set; }
+    }
+
+    sealed record AccountOption(Guid Id, string Name);
+}

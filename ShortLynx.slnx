@@ -1,0 +1,17 @@
+<Solution>
+  <Project Path="ShortLynx.Admin/ShortLynx.Admin.csproj" />
+  <Project Path="ShortLynx.Core/ShortLynx.Core.csproj">
+    <BuildDependency Project="ShortLynx.Data.PostgreSql/ShortLynx.Data.PostgreSql.csproj" />
+    <BuildDependency Project="ShortLynx.Data/ShortLynx.Data.csproj" />
+    <BuildDependency Project="ShortLynx.Models/ShortLynx.Models.csproj" />
+    <BuildDependency Project="ShortLynx.Repository/ShortLynx.Repository.csproj" />
+    <BuildDependency Project="ShortLynx.Services/ShortLynx.Services.csproj" />
+  </Project>
+  <Project Path="ShortLynx.Data.PostgreSql/ShortLynx.Data.PostgreSql.csproj" />
+  <Project Path="ShortLynx.Data/ShortLynx.Data.csproj" />
+  <Project Path="ShortLynx.Models/ShortLynx.Models.csproj" />
+  <Project Path="ShortLynx.Repository/ShortLynx.Repository.csproj" />
+  <Project Path="ShortLynx.Services/ShortLynx.Services.csproj" />
+  <Project Path="ShortLynx.Tests/ShortLynx.Tests.csproj" />
+  <Project Path="ShortLynx.Web/ShortLynx.Web.csproj" />
+</Solution>

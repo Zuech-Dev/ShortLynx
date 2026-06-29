@@ -1,0 +1,187 @@
+@page "/domains"
+@attribute [Authorize]
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.Extensions.DependencyInjection
+@using Microsoft.Extensions.Options
+@using ShortLynx.Data.Enums
+@using ShortLynx.Services.Domains
+@inject IServiceScopeFactory ScopeFactory
+@inject IOptions<CustomDomainOptions> DomainOpts
+
+<PageTitle>Custom Domains — ShortLynx Admin</PageTitle>
+
+<div class="flex justify-between items-center mb-3">
+    <h1 class="text-2xl font-bold">Custom Domains</h1>
+    <button class="btn btn-primary" @onclick="() => _showAdd = !_showAdd">
+        @(_showAdd ? "Cancel" : "+ Add domain")
+    </button>
+</div>
+
+@if (_showAdd)
+{
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5 class="card-title">Add a domain</h5>
+            <EditForm Model="_form" OnValidSubmit="AddDomain">
+                <DataAnnotationsValidator/>
+                <div class="mb-3">
+                    <label class="field-label">Domain</label>
+                    <InputText class="field-input" @bind-Value="_form.Domain" placeholder="go.example.com" data-testid="domain-input"/>
+                    <ValidationMessage For="() => _form.Domain"/>
+                    @if (_addError is not null)
+                    {
+                        <div class="text-red-600 text-sm mt-1" data-testid="add-error">@_addError</div>
+                    }
+                </div>
+                <button type="submit" class="btn btn-primary" data-testid="add-submit">Add domain</button>
+            </EditForm>
+        </div>
+    </div>
+}
+
+@if (!_loaded)
+{
+    <p class="text-gray-500">Loading…</p>
+}
+else if (_domains.Count == 0)
+{
+    <p class="text-gray-500">No custom domains yet.</p>
+}
+else
+{
+    <div class="flex flex-col gap-3">
+        @foreach (var d in _domains)
+        {
+            <div class="card" data-testid="domain-row">
+                <div class="card-body">
+                    <div class="flex items-center gap-2 mb-2">
+                        <span class="font-semibold font-mono">@d.Domain</span>
+                        @switch (d.VerificationStatus)
+                        {
+                            case DomainVerificationStatus.Verified:
+                                <span class="badge badge-green">Verified</span>
+                                break;
+                            case DomainVerificationStatus.Failed:
+                                <span class="badge badge-red">Verification failed</span>
+                                break;
+                            default:
+                                <span class="badge badge-gray">Pending</span>
+                                break;
+                        }
+                        <div class="ml-auto flex gap-2">
+                            @if (d.VerificationStatus != DomainVerificationStatus.Verified)
+                            {
+                                <button class="btn btn-outline-primary" data-testid="verify-btn"
+                                        disabled="@_busy" @onclick="() => Verify(d.Id)">Verify</button>
+                            }
+                            <button class="btn btn-outline-danger" data-testid="remove-btn"
+                                    disabled="@_busy" @onclick="() => Remove(d.Id)">Remove</button>
+                        </div>
+                    </div>
+
+                    @if (d.VerificationStatus != DomainVerificationStatus.Verified)
+                    {
+                        <div class="text-sm text-gray-500">
+                            Create this DNS <strong>TXT</strong> record, then click Verify:
+                            <div class="bg-gray-50 rounded p-2 mt-1 font-mono">
+                                <div>Host: <code>@DomainOpts.Value.VerificationHost(d.Domain)</code></div>
+                                <div>Value: <code>@DomainOpts.Value.ExpectedTxtValue(d.VerificationToken)</code></div>
+                            </div>
+                            Then point <code>@d.Domain</code> at the ShortLynx redirect host.
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    bool _loaded, _resolved, _showAdd, _busy;
+    Guid _uid;
+    Guid _accountId;
+    List<DomainRow> _domains = [];
+    readonly AddDomainForm _form = new();
+    string? _addError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var principal = (await AuthState).User;
+        var userId = principal.GetUserId();
+        if (userId is null) { _loaded = true; return; }
+        _uid = userId.Value;
+        await using (var scope = ScopeFactory.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ShortLynxDbContext>();
+            _accountId = await AccountResolver.ResolveAccountIdAsync(db, _uid, principal.GetAccountId(), principal.Identity?.Name ?? "Personal");
+        }
+        _resolved = true;
+        await LoadAsync();
+    }
+
+    async Task LoadAsync()
+    {
+        if (!_resolved) return;
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        var svc = scope.ServiceProvider.GetRequiredService<ICustomDomainService>();
+        var domains = await svc.ListAsync(_accountId);
+        _domains = domains.Select(d => new DomainRow(
+            d.Id, d.Domain, d.VerificationStatus, d.VerificationToken)).ToList();
+        _loaded = true;
+    }
+
+    async Task AddDomain()
+    {
+        if (!_resolved) return;
+        _addError = null;
+        try
+        {
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var svc = scope.ServiceProvider.GetRequiredService<ICustomDomainService>();
+            await svc.AddAsync(_form.Domain!, _accountId, _uid);
+            _form.Domain = string.Empty;
+            _showAdd = false;
+            await LoadAsync();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
+        {
+            _addError = ex.Message;
+        }
+    }
+
+    async Task Verify(Guid id)
+    {
+        _busy = true;
+        try
+        {
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var svc = scope.ServiceProvider.GetRequiredService<ICustomDomainService>();
+            await svc.VerifyAsync(id, _accountId);
+            await LoadAsync();
+        }
+        finally { _busy = false; }
+    }
+
+    async Task Remove(Guid id)
+    {
+        _busy = true;
+        try
+        {
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var svc = scope.ServiceProvider.GetRequiredService<ICustomDomainService>();
+            await svc.RemoveAsync(id, _accountId);
+            await LoadAsync();
+        }
+        finally { _busy = false; }
+    }
+
+    sealed class AddDomainForm
+    {
+        [Required(ErrorMessage = "Domain is required.")]
+        public string? Domain { get; set; }
+    }
+
+    sealed record DomainRow(Guid Id, string Domain, DomainVerificationStatus VerificationStatus, string VerificationToken);
+}

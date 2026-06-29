@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using ShortLynx.Data.Operations;
@@ -26,6 +27,16 @@ public class BackgroundVisitWriterTests
         var sink = new InMemoryVisitEventSink(opts);
         var writer = new BackgroundVisitWriter(sink, scopeFactory, opts);
         return (sink, db, writer);
+    }
+
+    // Wait for the background writer to flush the expected rows instead of guessing a fixed delay,
+    // which flakes on slow/contended CI runners. Falls through on timeout so the assertion reports the
+    // real shortfall. Reads go through FakeDbOperations' locked counters (writer flushes on another thread).
+    private static async Task WaitUntilAsync(Func<bool> condition, int timeoutMs = 5000)
+    {
+        var sw = Stopwatch.StartNew();
+        while (!condition() && sw.ElapsedMilliseconds < timeoutMs)
+            await Task.Delay(15);
     }
 
     private static VisitEvent Mode1Event(string ip = "1.2.3.4") => new(
@@ -58,7 +69,7 @@ public class BackgroundVisitWriterTests
 
         await writer.StartAsync(cts.Token);
         for (var i = 0; i < 3; i++) await sink.EnqueueAsync(Mode1Event());
-        await Task.Delay(150); // allow drain interval to fire
+        await WaitUntilAsync(() => db.VisitCount >= 3);
         await cts.CancelAsync();
 
         Assert.Equal(3, db.InsertedVisits.Count);
@@ -73,7 +84,7 @@ public class BackgroundVisitWriterTests
 
         await writer.StartAsync(cts.Token);
         for (var i = 0; i < 4; i++) await sink.EnqueueAsync(Mode2Event());
-        await Task.Delay(150);
+        await WaitUntilAsync(() => db.UserVisitCount >= 4);
         await cts.CancelAsync();
 
         Assert.Empty(db.InsertedVisits);
@@ -90,7 +101,7 @@ public class BackgroundVisitWriterTests
         await sink.EnqueueAsync(Mode1Event());
         await sink.EnqueueAsync(Mode2Event());
         await sink.EnqueueAsync(Mode1Event());
-        await Task.Delay(150);
+        await WaitUntilAsync(() => db.VisitCount >= 2 && db.UserVisitCount >= 1);
         await cts.CancelAsync();
 
         Assert.Equal(2, db.InsertedVisits.Count);
@@ -106,7 +117,7 @@ public class BackgroundVisitWriterTests
 
         await writer.StartAsync(cts.Token);
         await sink.EnqueueAsync(Mode1Event(rawIp));
-        await Task.Delay(150);
+        await WaitUntilAsync(() => db.VisitCount >= 1);
         await cts.CancelAsync();
 
         var stored = db.InsertedVisits.Single();
@@ -124,7 +135,7 @@ public class BackgroundVisitWriterTests
         await writer.StartAsync(cts.Token);
         await sink.EnqueueAsync(Mode1Event(rawIp));
         await sink.EnqueueAsync(Mode1Event(rawIp));
-        await Task.Delay(150);
+        await WaitUntilAsync(() => db.VisitCount >= 2);
         await cts.CancelAsync();
 
         Assert.Equal(db.InsertedVisits[0].HashedIp, db.InsertedVisits[1].HashedIp);
@@ -139,7 +150,7 @@ public class BackgroundVisitWriterTests
         await writer.StartAsync(cts.Token);
         await sink.EnqueueAsync(Mode1Event("1.1.1.1"));
         await sink.EnqueueAsync(Mode1Event("2.2.2.2"));
-        await Task.Delay(150);
+        await WaitUntilAsync(() => db.VisitCount >= 2);
         await cts.CancelAsync();
 
         Assert.NotEqual(db.InsertedVisits[0].HashedIp, db.InsertedVisits[1].HashedIp);
@@ -162,7 +173,7 @@ public class BackgroundVisitWriterTests
 
         await writer.StartAsync(cts.Token);
         await sink.EnqueueAsync(evt);
-        await Task.Delay(150);
+        await WaitUntilAsync(() => db.VisitCount >= 1);
         await cts.CancelAsync();
 
         var stored = db.InsertedVisits.Single();
@@ -178,7 +189,7 @@ public class BackgroundVisitWriterTests
 
         await writer.StartAsync(cts.Token);
         for (var i = 0; i < 5; i++) await sink.EnqueueAsync(Mode1Event());
-        await Task.Delay(300);
+        await WaitUntilAsync(() => db.VisitCount >= 5);
         await cts.CancelAsync();
 
         Assert.Equal(5, db.InsertedVisits.Count);

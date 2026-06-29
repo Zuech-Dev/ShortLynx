@@ -88,6 +88,7 @@ All require a session and act on the JWT's **current account**.
 | `POST /me/links/{id}/codes` `{ userIds:[] }` | Provision user-attributed codes |
 | `PUT /me/links/{id}/domain` `{ customDomainId }` | Pin/unpin to a verified domain (null = unpin) |
 | `GET /me/links/{id}/analytics` | Click analytics |
+| `GET /me/links/{id}/qr` `?format=png\|svg&size=&code=` | Download a QR code of the link's short URL (PNG default; `code=` selects a recipient code for user-attributed links) |
 | `GET /me/api-keys` · `POST` `{ name, scopes }` · `DELETE /{id}` | Manage API keys (POST returns the plaintext once) |
 | `GET /me/domains` · `POST` `{ domain }` · `POST /{id}/verify` · `DELETE /{id}` | Manage custom domains |
 

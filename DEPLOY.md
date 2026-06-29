@@ -85,6 +85,10 @@ Resend__FromAddress            = noreply@<verified-domain>   Resend__FromName = 
 # Custom-domain re-verification cadence (optional; default 1440 = 24h)
 CustomDomain__ReverifyIntervalMinutes = 1440
 
+# Public base URL of the redirect site, used to build the full short URL a QR code encodes
+# (GET /me/links/{id}/qr). Empty = bare code; a pinned verified custom domain overrides it.
+Links__PublicBaseUrl = https://<short-domain>
+
 # Apply EF migrations on boot via the image's efbundle. Set on the CORE service ONLY.
 RUN_MIGRATIONS = true
 
@@ -105,7 +109,7 @@ Admin__SuperAdminEmails__0     = you@example.com
 MagicLink__ConfirmationUrlBase = https://<admin-domain>/auth/confirm
 Resend__ApiKey                 = <resend api key>
 Resend__FromAddress            = noreply@<verified-domain>   Resend__FromName = ShortLynx
-ShortLynx__PublicBaseUrl       = https://<short-domain>      # builds full short URLs in the UI
+Dashboard__PublicBaseUrl       = https://<short-domain>      # builds full short URLs in the UI (bound from the "Dashboard" section — NOT ShortLynx__)
 ```
 
 **Web only:** database block **plus** `VisitSink__IpHashPepper` (above). No email/admin secrets.

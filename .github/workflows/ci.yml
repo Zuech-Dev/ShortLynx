@@ -1,0 +1,33 @@
+name: CI
+
+# Run the full test suite on main so bugs are caught before they reach production.
+# Pull requests targeting main are gated on the same checks.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Build & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore ShortLynx.slnx
+
+      # Tests use in-memory SQLite, so no database service is required.
+      # The Tailwind build step is skipped on CI (no binary present) and falls
+      # back to the committed wwwroot/css/tailwind.css — a warning, not an error.
+      - name: Build
+        run: dotnet build ShortLynx.slnx --no-restore -c Release
+
+      - name: Test
+        run: dotnet test ShortLynx.slnx --no-build -c Release --verbosity normal

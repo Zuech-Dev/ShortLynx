@@ -42,8 +42,9 @@
 
 ## 🚧 Still to do before first prod deploy
 
-- [ ] **Migrations** — apps do **not** auto-migrate; apply the SQL script (see Migrations below). The
-  `RehomeOwnershipToAccounts` migration **backfills data** — verify it on a seeded copy before prod.
+- [ ] **Migrations** — the Core image can auto-apply them on boot (set `RUN_MIGRATIONS=true` on Core
+  only) or apply the SQL script manually (see Migrations below). The `RehomeOwnershipToAccounts`
+  migration **backfills data** — verify it on a seeded copy before prod.
 - [ ] **Set the new secrets/config** — `VisitSink__IpHashPepper` (Core + Web), `ShortLynx__PublicBaseUrl`
   (Admin), and **`Jwt__SigningKey` (Core — fail-fast; Core won't start without it)** plus
   `Cors__AllowedOrigins` if a separate frontend calls the API. See env vars below.
@@ -84,6 +85,9 @@ Resend__FromAddress            = noreply@<verified-domain>   Resend__FromName = 
 # Custom-domain re-verification cadence (optional; default 1440 = 24h)
 CustomDomain__ReverifyIntervalMinutes = 1440
 
+# Apply EF migrations on boot via the image's efbundle. Set on the CORE service ONLY.
+RUN_MIGRATIONS = true
+
 # User sessions (bring-your-own-frontend) — see docs/API_AUTH.md
 Jwt__SigningKey            = <32+ random chars>      # fail-fast: Core won't start without it
 Jwt__CookieSameSite        = Lax                     # None (with CookieSecure=true) for cross-site cookies
@@ -112,20 +116,27 @@ ShortLynx__PublicBaseUrl       = https://<short-domain>      # builds full short
 
 ## Migrations
 
-Apps don't migrate on startup. Current migrations (PostgreSQL):
+Current migrations (PostgreSQL):
 `Initial` → `AddLinkUserOwnership` → `AddUserLinkCodeRecipient` → `AddLinkCustomDomainPin` →
 `AddAccountsAndMemberships` → `RehomeOwnershipToAccounts` (**data backfill** — creates an account +
 Owner membership per existing user/key and re-homes resources; verify on a seeded DB) → `AddRefreshTokens`.
 Pick one:
 
-- **Recommended — idempotent SQL script** applied to Railway Postgres on each migration change:
+- **Recommended — migrations bundle in the Core image (automatic on deploy).** The `ShortLynx.Core`
+  Dockerfile builds a self-contained EF migrations bundle (`efbundle`) and its `docker-entrypoint.sh`
+  applies pending migrations **before** the API starts, but only when `RUN_MIGRATIONS=true`. Set that
+  variable on the **Core service only** (never on Admin/Web — they don't carry the bundle, and a single
+  owner avoids concurrent migration races). The bundle is idempotent — it applies only what the DB hasn't
+  seen, using `Database__ConnectionString`. Deploy Core first so the schema is ready before Admin/Web boot.
+  > The `RehomeOwnershipToAccounts` **data backfill** is the one migration to verify on a seeded copy
+  > before letting it run automatically in production.
+- **Alternative — idempotent SQL script** applied to Railway Postgres on each migration change:
   ```bash
   dotnet ef migrations script --idempotent \
     --project ShortLynx.Data.PostgreSql --startup-project ShortLynx.Data.PostgreSql \
     -o migrate.sql
   # then run migrate.sql against the Railway DB (psql / Railway data tab)
   ```
-- **Alternative — startup `Migrate()`**: add a `ProjectReference` to `ShortLynx.Data.PostgreSql` in one app and call `db.Database.Migrate()` at boot (guard so only one service does it).
 
 ---
 

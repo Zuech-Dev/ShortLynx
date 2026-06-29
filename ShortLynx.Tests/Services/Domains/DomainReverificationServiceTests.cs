@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -13,6 +14,19 @@ namespace ShortLynx.Tests.Services.Domains;
 
 public class DomainReverificationServiceTests
 {
+    // Wait for the background pass to take effect instead of a fixed delay, which flakes on slow CI.
+    // Tolerates transient SQLite errors during the service's brief startup pass (it then idles ~24h).
+    private static async Task WaitUntilAsync(Func<Task<bool>> condition, int timeoutMs = 5000)
+    {
+        var sw = Stopwatch.StartNew();
+        while (sw.ElapsedMilliseconds < timeoutMs)
+        {
+            try { if (await condition()) return; }
+            catch { /* DB momentarily busy during the pass; retry */ }
+            await Task.Delay(25);
+        }
+    }
+
     [Fact]
     public async Task BackgroundService_RunsStartupPass_DemotingDriftedDomain()
     {
@@ -59,8 +73,14 @@ public class DomainReverificationServiceTests
 
         using var cts = new CancellationTokenSource();
         await sut.StartAsync(cts.Token);
-        // The service runs a pass immediately at startup; give it a moment.
-        await Task.Delay(300);
+        // The service runs a pass immediately at startup; poll until the drifted domain is demoted.
+        await WaitUntilAsync(async () =>
+        {
+            await using var scope = provider.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<ShortLynxDbContext>();
+            var d = await db.CustomDomainEntities.FindAsync(domainId);
+            return d!.VerificationStatus == DomainVerificationStatus.Failed;
+        });
         await sut.StopAsync(cts.Token);
 
         await using (var scope = provider.CreateAsyncScope())

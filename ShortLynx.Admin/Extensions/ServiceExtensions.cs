@@ -75,6 +75,7 @@ public static class ServiceExtensions
         services.AddSingleton<IDnsResolver, DnsClientResolver>();
         services.AddScoped<IAccountService, AccountService>();
         services.AddScoped<ShortLynx.Services.Users.IUserAdminService, ShortLynx.Services.Users.UserAdminService>();
+        services.AddSingleton<ShortLynx.Services.Qr.IQrCodeService, ShortLynx.Services.Qr.QrCodeService>();
 
         return services;
     }

@@ -120,6 +120,40 @@ public class LinkDetailComponentTests : BunitContext
         Assert.Equal(_accountId, _links.DomainSet[0].AccountId);
     }
 
+    [Fact]
+    public void QrCard_RendersPngAndSvgDownloadLinks_ForAnonymousLink()
+    {
+        var id = SeedAnonymousLink();
+        var cut = Render<LinkDetail>(p => p.Add(c => c.Id, id));
+
+        Assert.Equal($"/qr/{id}?format=png", cut.Find("[data-testid=qr-png]").GetAttribute("href"));
+        Assert.Equal($"/qr/{id}?format=svg", cut.Find("[data-testid=qr-svg]").GetAttribute("href"));
+        Assert.NotNull(cut.Find("[data-testid=qr-preview]"));
+    }
+
+    private Guid SeedAnonymousLink()
+    {
+        var factory = Services.GetRequiredService<IDbContextFactory<ShortLynxDbContext>>();
+        using var db = factory.CreateDbContext();
+        var link = new LinkEntity
+        {
+            Id = Guid.CreateVersion7(),
+            OriginalUrl = "https://example.com",
+            Mode = LinkMode.Anonymous,
+            AccountId = _accountId,
+            CreatedAt = DateTimeOffset.UtcNow,
+            IsActive = true,
+        };
+        db.LinkEntities.Add(link);
+        db.ShortCodeEntities.Add(new ShortCodeEntity
+        {
+            Id = Guid.CreateVersion7(), LinkId = link.Id, Code = "abc12345",
+            CreatedAt = DateTimeOffset.UtcNow, IsActive = true,
+        });
+        db.SaveChanges();
+        return link.Id;
+    }
+
     private Guid SeedVerifiedDomain(string domain = "go.example.com")
     {
         var factory = Services.GetRequiredService<IDbContextFactory<ShortLynxDbContext>>();

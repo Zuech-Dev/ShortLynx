@@ -79,3 +79,8 @@ CodeCoverage/
 *.VisualState.xml
 TestResult.xml
 nunit-*.xml
+# Guard against Windows-style build dirs accidentally created on macOS/Linux as a single
+# literal-backslash directory name (e.g. "bin\\Debug"). One of these was committed and broke
+# MSBuild wildcard expansion on clean builds (CI + Docker). The escaped backslash matches the literal.
+**/bin\\Debug/
+**/obj\\Debug/

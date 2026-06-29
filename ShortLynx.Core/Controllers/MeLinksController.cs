@@ -1,16 +1,22 @@
+using System.Text;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using ShortLynx.Core.Models.Requests;
 using ShortLynx.Core.Models.Responses;
+using ShortLynx.Core.Options;
 using ShortLynx.Data.Context;
 using ShortLynx.Data.Entities;
 using ShortLynx.Data.Enums;
 using ShortLynx.Services.Links;
+using ShortLynx.Services.Qr;
 
 namespace ShortLynx.Core.Controllers;
 
 [Route("me/links")]
-public class MeLinksController(ILinkService linkService, ShortLynxDbContext db) : SessionControllerBase
+public class MeLinksController(
+    ILinkService linkService, ShortLynxDbContext db,
+    IQrCodeService qr, IOptions<LinkUrlOptions> linkOptions) : SessionControllerBase
 {
     // GET /me/links
     [HttpGet]
@@ -136,6 +142,49 @@ public class MeLinksController(ILinkService linkService, ShortLynxDbContext db) 
         }
 
         return Ok(new LinkAnalyticsResponse(id, link.OriginalUrl, link.Mode.ToString(), totalClicks, lastClickAt, codeStats));
+    }
+
+    // GET /me/links/{id}/qr?format=png|svg&size=<n>&code=<optional>
+    // Returns a downloadable QR code that encodes the link's full short URL. For user-attributed links
+    // (one code per recipient) pass ?code= to choose which code to encode.
+    [HttpGet("{id:guid}/qr")]
+    public async Task<IActionResult> Qr(
+        Guid id, [FromQuery] string format = "png", [FromQuery] int size = 10,
+        [FromQuery] string? code = null, CancellationToken ct = default)
+    {
+        var isPng = string.Equals(format, "png", StringComparison.OrdinalIgnoreCase);
+        var isSvg = string.Equals(format, "svg", StringComparison.OrdinalIgnoreCase);
+        if (!isPng && !isSvg)
+            return BadRequest(new { error = $"Unknown format '{format}'. Use 'png' or 'svg'." });
+
+        var link = await db.LinkEntities.FirstOrDefaultAsync(l => l.Id == id && l.AccountId == AccountId, ct);
+        if (link is null) return NotFound();
+
+        var targetCode = await ResolveCodeAsync(link, code, ct);
+        if (targetCode is null) return NotFound();
+
+        var url = await ShortUrlBuilder.BuildAsync(db, link, targetCode, linkOptions.Value.PublicBaseUrl, ct);
+
+        return isSvg
+            ? File(Encoding.UTF8.GetBytes(qr.GenerateSvg(url, size)), "image/svg+xml", $"{targetCode}.svg")
+            : File(qr.GeneratePng(url, size), "image/png", $"{targetCode}.png");
+    }
+
+    // Picks the code to encode: an explicit ?code= (validated against this link), else the anonymous
+    // link's single short code. User-attributed links have no single code, so they require ?code=.
+    private async Task<string?> ResolveCodeAsync(LinkEntity link, string? code, CancellationToken ct)
+    {
+        if (code is not null)
+        {
+            var belongs = link.Mode == LinkMode.Anonymous
+                ? await db.ShortCodeEntities.AnyAsync(sc => sc.LinkId == link.Id && sc.Code == code, ct)
+                : await db.UserLinkCodeEntities.AnyAsync(c => c.LinkId == link.Id && c.Code == code, ct);
+            return belongs ? code : null;
+        }
+
+        if (link.Mode != LinkMode.Anonymous) return null;
+        return await db.ShortCodeEntities.Where(sc => sc.LinkId == link.Id)
+            .Select(sc => sc.Code).FirstOrDefaultAsync(ct);
     }
 
     private static LinkResponse ToLinkResponse(LinkEntity link, string shortCode)

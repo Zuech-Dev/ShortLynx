@@ -8,6 +8,8 @@ using ShortLynx.Services.Domains;
 using ShortLynx.Services.Email;
 using ShortLynx.Services.Links;
 using ShortLynx.Services.MagicLinks;
+using ShortLynx.Core.Options;
+using ShortLynx.Services.Qr;
 using ShortLynx.Services.ShortCodes;
 using ShortLynx.Services.UrlValidation;
 using ShortLynx.Services.Users;
@@ -48,6 +50,8 @@ public static class ServiceExtensions
         services.AddHostedService<DomainReverificationService>();
         services.AddScoped<IAccountService, AccountService>();
         services.AddScoped<IUserAdminService, UserAdminService>();
+        services.AddSingleton<IQrCodeService, QrCodeService>();
+        services.Configure<LinkUrlOptions>(configuration.GetSection("Links"));
 
         // User sessions (magic-link → JWT + refresh) for bring-your-own-frontend clients.
         services.AddOptions<JwtOptions>()

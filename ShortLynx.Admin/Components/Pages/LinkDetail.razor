@@ -48,6 +48,24 @@ else
         </div>
     </div>
 
+    @if (_link.Mode == LinkMode.Anonymous && !string.IsNullOrEmpty(_shortCode))
+    {
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title">QR code</h5>
+                <p class="text-gray-500 text-sm">Download a QR code that opens this short link — PNG for embedding or print, SVG for scalable use.</p>
+                <div class="flex items-center gap-4">
+                    <img src="/qr/@Id?format=svg" alt="QR code for this link" width="140" height="140"
+                         class="border border-gray-200 rounded" data-testid="qr-preview"/>
+                    <div class="flex flex-col gap-2">
+                        <a class="btn btn-primary" href="/qr/@Id?format=png" download data-testid="qr-png">Download PNG</a>
+                        <a class="btn btn-outline" href="/qr/@Id?format=svg" download data-testid="qr-svg">Download SVG</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
     @if (_canPin)
     {
         <div class="card mb-4">
@@ -154,7 +172,7 @@ else
         {
             <table class="data-table">
                 <thead>
-                <tr><th>Recipient</th><th>Code</th><th class="text-right">Clicks</th></tr>
+                <tr><th>Recipient</th><th>Code</th><th class="text-right">Clicks</th><th>QR</th></tr>
                 </thead>
                 <tbody>
                 @foreach (var r in _userRows)
@@ -163,6 +181,11 @@ else
                         <td>@(r.Recipient ?? "—") @if (r.IsOneTimeUse) { <span class="badge badge-yellow">one-time</span> }</td>
                         <td><code>@r.Code</code></td>
                         <td class="text-right">@r.Clicks</td>
+                        <td class="whitespace-nowrap text-sm">
+                            <a class="text-blue-700 hover:underline" href="/qr/@Id?format=png&code=@r.Code" download data-testid="qr-code-png">PNG</a>
+                            <span class="text-gray-300">·</span>
+                            <a class="text-blue-700 hover:underline" href="/qr/@Id?format=svg&code=@r.Code" download>SVG</a>
+                        </td>
                     </tr>
                 }
                 </tbody>

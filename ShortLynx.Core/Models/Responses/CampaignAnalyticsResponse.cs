@@ -1,3 +1,5 @@
+using ShortLynx.Services.Analytics;
+
 namespace ShortLynx.Core.Models.Responses;
 
 /// <summary>Per-link totals within a campaign roll-up.</summary>

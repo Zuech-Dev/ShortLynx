@@ -121,6 +121,35 @@ public class LinkDetailComponentTests : BunitContext
     }
 
     [Fact]
+    public void Campaign_SelectingCampaign_CallsSetLinkCampaign()
+    {
+        var id = SeedUserAttributedLink();
+        var campaignId = SeedCampaign();
+        var cut = Render<LinkDetail>(p => p.Add(c => c.Id, id));
+
+        cut.Find("[data-testid=campaign-select]").Change(campaignId.ToString());
+        cut.Find("[data-testid=campaign-save]").Click();
+
+        Assert.Single(_links.CampaignSet);
+        Assert.Equal(id, _links.CampaignSet[0].LinkId);
+        Assert.Equal(campaignId, _links.CampaignSet[0].CampaignId);
+        Assert.Equal(_accountId, _links.CampaignSet[0].AccountId);
+    }
+
+    private Guid SeedCampaign(string name = "Launch")
+    {
+        var factory = Services.GetRequiredService<IDbContextFactory<ShortLynxDbContext>>();
+        using var db = factory.CreateDbContext();
+        var c = new CampaignEntity
+        {
+            Id = Guid.CreateVersion7(), AccountId = _accountId, Name = name, CreatedAt = DateTimeOffset.UtcNow,
+        };
+        db.CampaignEntities.Add(c);
+        db.SaveChanges();
+        return c.Id;
+    }
+
+    [Fact]
     public void QrCard_RendersPngAndSvgDownloadLinks_ForAnonymousLink()
     {
         var id = SeedAnonymousLink();

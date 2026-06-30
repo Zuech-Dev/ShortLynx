@@ -3,6 +3,7 @@
 @using Microsoft.Extensions.DependencyInjection
 @using Microsoft.Extensions.Options
 @using ShortLynx.Services.Analytics
+@using ShortLynx.Services.Campaigns
 @using ShortLynx.Services.Links
 @inject IDbContextFactory<ShortLynxDbContext> DbFactory
 @inject IServiceScopeFactory ScopeFactory
@@ -90,6 +91,34 @@ else
                 @if (_pinSaved)
                 {
                     <div class="text-green-600 text-sm mt-1" data-testid="pin-saved">Saved.</div>
+                }
+            </div>
+        </div>
+    }
+
+    @if (_canPin)
+    {
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title">Campaign</h5>
+                <p class="text-gray-500 text-sm">Group this link under a campaign for roll-up analytics and a shared UTM template.</p>
+                <div class="flex gap-2 items-center max-w-[520px]">
+                    <select class="field-input" @bind="_selectedCampaignKey" data-testid="campaign-select">
+                        <option value="">No campaign</option>
+                        @foreach (var c in _campaignOptions)
+                        {
+                            <option value="@c.Id">@c.Name</option>
+                        }
+                    </select>
+                    <button class="btn btn-primary" data-testid="campaign-save" @onclick="SaveCampaign">Save</button>
+                </div>
+                @if (_campaignOptions.Count == 0)
+                {
+                    <div class="text-sm text-gray-500 mt-1">No campaigns yet — create one under <a class="text-blue-700 hover:underline" href="/campaigns">Campaigns</a>.</div>
+                }
+                @if (_campaignSaved)
+                {
+                    <div class="text-green-600 text-sm mt-1" data-testid="campaign-saved">Saved.</div>
                 }
             </div>
         </div>
@@ -276,6 +305,11 @@ else
     List<DomainOption> _verifiedDomains = [];
     string _selectedDomainKey = string.Empty;
 
+    // Campaign assignment (current-account links only).
+    bool _campaignSaved;
+    List<CampaignOption> _campaignOptions = [];
+    string _selectedCampaignKey = string.Empty;
+
     protected override async Task OnParametersSetAsync()
     {
         if (!_authResolved)
@@ -369,10 +403,34 @@ else
                 .Select(d => new DomainOption(d.Id, d.Domain))
                 .ToListAsync();
             _selectedDomainKey = _link.CustomDomainId?.ToString() ?? string.Empty;
+
+            _campaignOptions = await db.CampaignEntities
+                .Where(c => c.AccountId == _accountId)
+                .OrderBy(c => c.Name)
+                .Select(c => new CampaignOption(c.Id, c.Name))
+                .ToListAsync();
+            _selectedCampaignKey = _link.CampaignId?.ToString() ?? string.Empty;
         }
 
         _loaded = true;
     }
+
+    async Task SaveCampaign()
+    {
+        if (!_canPin) return;
+        _campaignSaved = false;
+        Guid? campaignId = Guid.TryParse(_selectedCampaignKey, out var id) ? id : null;
+
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        var svc = scope.ServiceProvider.GetRequiredService<ILinkService>();
+        if (await svc.SetLinkCampaignAsync(Id, campaignId, _accountId))
+        {
+            _campaignSaved = true;
+            await LoadAsync();
+        }
+    }
+
+    sealed record CampaignOption(Guid Id, string Name);
 
     async Task SavePin()
     {

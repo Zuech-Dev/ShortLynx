@@ -31,6 +31,12 @@ public partial class ShortLynxDbContext
                           .WithMany()
                           .HasForeignKey(e => e.CustomDomainId)
                           .OnDelete(DeleteBehavior.SetNull);
+                    // Optional campaign grouping. Deleting a campaign unassigns its links (SetNull)
+                    // rather than cascading the delete to the links themselves.
+                    entity.HasOne(e => e.Campaign)
+                          .WithMany(c => c.Links)
+                          .HasForeignKey(e => e.CampaignId)
+                          .OnDelete(DeleteBehavior.SetNull);
                     // Owning account — deleting an account removes its links.
                     entity.HasOne(e => e.Account)
                           .WithMany()
@@ -64,6 +70,8 @@ public partial class ShortLynxDbContext
                     entity.HasKey(e => e.Id);
                     entity.HasOne<ShortCodeEntity>(e => e.ShortCode).WithMany();
                     entity.Property(e => e.Id).ValueGeneratedNever();
+                    entity.Property(e => e.Source).HasConversion<int>();
+                    entity.Property(e => e.Device).HasConversion<int>();
                 }
             )
            .Entity<UserVisitEntity>(entity =>
@@ -72,6 +80,8 @@ public partial class ShortLynxDbContext
                     entity.HasOne<UserLinkCodeEntity>(e => e.UserLinkCode).WithMany();
                     // TODO: UserId denormalized from UserLinkCode
                     entity.Property(e => e.Id).ValueGeneratedNever();
+                    entity.Property(e => e.Source).HasConversion<int>();
+                    entity.Property(e => e.Device).HasConversion<int>();
                 }
             )
            .Entity<ApiKeyEntity>(entity =>
@@ -133,6 +143,23 @@ public partial class ShortLynxDbContext
                     entity.HasKey(e => e.Id);
                     entity.Property(e => e.Id).ValueGeneratedNever();
                     entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
+                }
+            )
+           .Entity<CampaignEntity>(entity =>
+                {
+                    entity.HasKey(e => e.Id);
+                    entity.Property(e => e.Id).ValueGeneratedNever();
+                    entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
+                    // Owning account — deleting an account removes its campaigns.
+                    entity.HasOne(e => e.Account)
+                          .WithMany()
+                          .HasForeignKey(e => e.AccountId)
+                          .OnDelete(DeleteBehavior.Cascade);
+                    // Audit-only creator; deleting the user doesn't touch the campaign.
+                    entity.HasOne(e => e.UserAccount)
+                          .WithMany()
+                          .HasForeignKey(e => e.UserAccountId)
+                          .OnDelete(DeleteBehavior.NoAction);
                 }
             )
            .Entity<MembershipEntity>(entity =>

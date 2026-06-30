@@ -118,15 +118,19 @@ Tiers: **A (open, build first): Bluesky, Mastodon** · **B (official, gated): Th
 
 ## Phases
 
-### Phase 0 — Campaigns + source attribution (no external API; do first)
-- `Campaign` model + `/me/campaigns` CRUD + assign links to a campaign; UTM template.
-- **`Source` enum + detection logic** in the visit write path: map known referrer domains and in-app UAs
-  (`t.co`, `bsky.app`, `lnkd.in`, `out.reddit.com`, `l.facebook.com`, IG/Threads/Mastodon) → `Source`
-  column on the visit. "Clicks by platform" + per-campaign dashboards with zero approvals.
-- **Analytics API additions:** unique-click counts (`COUNT(DISTINCT HashedIp)`), source breakdown,
-  time-series click data, device/browser breakdown for existing `/me/links/{id}/analytics`.
-- **Campaign analytics endpoint:** `/me/campaigns/{id}/analytics` — roll-up of all the above across
-  all links in the campaign.
+### Phase 0 — Campaigns + source attribution (no external API; do first) — ✅ SHIPPED
+- ✅ `Campaign` model + `/me/campaigns` CRUD + `PUT /me/links/{id}/campaign` assignment; UTM template
+  applied to destinations at redirect time (`UtmTemplate`, non-clobbering).
+- ✅ **`ClickSource` + `DeviceType` enums + `SourceDetector`** run on the visit write path
+  (`BackgroundVisitWriter`): referrer host → platform, user-agent → coarse device, stored as int columns
+  on `Visits`/`UserVisits`. "Clicks by platform" + per-campaign dashboards with zero approvals.
+- ✅ **Analytics enrichment:** unique clicks (distinct hashed IP), first/last click, source breakdown,
+  device breakdown, daily timeline on `/me/links/{id}/analytics` (and the API-key endpoint), via a shared
+  in-memory `ClickAggregator`.
+- ✅ **Campaign analytics endpoint:** `/me/campaigns/{id}/analytics` — rolls the above up across all the
+  campaign's links (both modes) + a per-link table.
+- _Deferred to a follow-up:_ browser-family breakdown; decoding in-app (`android-app://`) referrers;
+  Admin UI surfacing of the new breakdowns (this phase shipped the Core API + data layer).
 
 ### Phase 1 — Tier-A publishing (Bluesky + Mastodon)
 - `SocialConnection` entity + migration + encrypted token storage; connect/disconnect under `/me/social`.
@@ -169,11 +173,11 @@ Tiers: **A (open, build first): Bluesky, Mastodon** · **B (official, gated): Th
 ## Open decisions
 - Token encryption: ASP.NET DataProtection (needs persisted keys — see the deploy note) vs external KMS.
 - Build vs. buy for fan-out (native connectors vs. an aggregator like Ayrshare for Tier-B reach).
-- Whether Phase 0 campaigns ship before or alongside Phase 1.
 
 ---
 
-## Suggested first step
-Phase 0 (Campaign + source attribution + analytics enrichment) — self-contained, no external dependency,
-and it creates the reporting surface everything else rolls up into. Then Phase 1 (Bluesky + Mastodon) to
-prove the connector/OAuth pattern on the open platforms before tackling gated review.
+## Status / next step
+**Phase 0 is shipped** (Core API + data layer): campaigns, source/device attribution, enriched link
+analytics, and the campaign roll-up — the reporting surface everything else rolls up into. Remaining
+before Phase 1: surface the new breakdowns in the Admin dashboard. Then **Phase 1 (Bluesky + Mastodon)**
+to prove the connector/OAuth pattern on the open platforms before tackling gated review.

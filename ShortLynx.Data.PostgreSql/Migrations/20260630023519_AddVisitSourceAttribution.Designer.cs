@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using ShortLynx.Data.Context;
@@ -11,9 +12,11 @@ using ShortLynx.Data.Context;
 namespace ShortLynx.Data.PostgreSql.Migrations
 {
     [DbContext(typeof(ShortLynxDbContext))]
-    partial class ShortLynxDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260630023519_AddVisitSourceAttribution")]
+    partial class AddVisitSourceAttribution
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -91,46 +94,6 @@ namespace ShortLynx.Data.PostgreSql.Migrations
                     b.ToTable("ApiKeys");
                 });
 
-            modelBuilder.Entity("ShortLynx.Data.Entities.CampaignEntity", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("AccountId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Description")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<Guid?>("UserAccountId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("UtmCampaign")
-                        .HasColumnType("text");
-
-                    b.Property<string>("UtmMedium")
-                        .HasColumnType("text");
-
-                    b.Property<string>("UtmSource")
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AccountId");
-
-                    b.HasIndex("UserAccountId");
-
-                    b.ToTable("Campaigns");
-                });
-
             modelBuilder.Entity("ShortLynx.Data.Entities.CustomDomainEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -185,9 +148,6 @@ namespace ShortLynx.Data.PostgreSql.Migrations
                     b.Property<Guid?>("ApiKeyId")
                         .HasColumnType("uuid");
 
-                    b.Property<Guid?>("CampaignId")
-                        .HasColumnType("uuid");
-
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -218,8 +178,6 @@ namespace ShortLynx.Data.PostgreSql.Migrations
                     b.HasIndex("AccountId");
 
                     b.HasIndex("ApiKeyId");
-
-                    b.HasIndex("CampaignId");
 
                     b.HasIndex("CustomDomainId");
 
@@ -518,24 +476,6 @@ namespace ShortLynx.Data.PostgreSql.Migrations
                     b.Navigation("UserAccount");
                 });
 
-            modelBuilder.Entity("ShortLynx.Data.Entities.CampaignEntity", b =>
-                {
-                    b.HasOne("ShortLynx.Data.Entities.AccountEntity", "Account")
-                        .WithMany()
-                        .HasForeignKey("AccountId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("ShortLynx.Data.Entities.UserAccountEntity", "UserAccount")
-                        .WithMany()
-                        .HasForeignKey("UserAccountId")
-                        .OnDelete(DeleteBehavior.NoAction);
-
-                    b.Navigation("Account");
-
-                    b.Navigation("UserAccount");
-                });
-
             modelBuilder.Entity("ShortLynx.Data.Entities.CustomDomainEntity", b =>
                 {
                     b.HasOne("ShortLynx.Data.Entities.AccountEntity", "Account")
@@ -566,11 +506,6 @@ namespace ShortLynx.Data.PostgreSql.Migrations
                         .WithMany("Links")
                         .HasForeignKey("ApiKeyId");
 
-                    b.HasOne("ShortLynx.Data.Entities.CampaignEntity", "Campaign")
-                        .WithMany("Links")
-                        .HasForeignKey("CampaignId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.HasOne("ShortLynx.Data.Entities.CustomDomainEntity", "CustomDomain")
                         .WithMany()
                         .HasForeignKey("CustomDomainId")
@@ -588,8 +523,6 @@ namespace ShortLynx.Data.PostgreSql.Migrations
                     b.Navigation("Account");
 
                     b.Navigation("ApiKey");
-
-                    b.Navigation("Campaign");
 
                     b.Navigation("CustomDomain");
 
@@ -693,11 +626,6 @@ namespace ShortLynx.Data.PostgreSql.Migrations
                 });
 
             modelBuilder.Entity("ShortLynx.Data.Entities.ApiKeyEntity", b =>
-                {
-                    b.Navigation("Links");
-                });
-
-            modelBuilder.Entity("ShortLynx.Data.Entities.CampaignEntity", b =>
                 {
                     b.Navigation("Links");
                 });

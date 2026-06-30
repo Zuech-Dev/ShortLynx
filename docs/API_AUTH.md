@@ -87,10 +87,46 @@ All require a session and act on the JWT's **current account**.
 | `GET /me/links/{id}` | One link |
 | `POST /me/links/{id}/codes` `{ userIds:[] }` | Provision user-attributed codes |
 | `PUT /me/links/{id}/domain` `{ customDomainId }` | Pin/unpin to a verified domain (null = unpin) |
-| `GET /me/links/{id}/analytics` | Click analytics |
+| `PUT /me/links/{id}/campaign` `{ campaignId }` | Assign/unassign the link to one of your campaigns (null = unassign) |
+| `GET /me/links/{id}/analytics` | Click analytics (see the shape below) |
 | `GET /me/links/{id}/qr` `?format=png\|svg&size=&code=` | Download a QR code of the link's short URL (PNG default; `code=` selects a recipient code for user-attributed links) |
+| `GET /me/campaigns` · `POST` `{ name, description?, utmSource?, utmMedium?, utmCampaign? }` | List / create campaigns |
+| `GET /me/campaigns/{id}` · `PUT` `{ name, … }` · `DELETE /{id}` | Get / update / delete a campaign (delete unassigns its links, doesn't delete them) |
+| `GET /me/campaigns/{id}/analytics` | Campaign roll-up: clicks across all its links + per-link table |
 | `GET /me/api-keys` · `POST` `{ name, scopes }` · `DELETE /{id}` | Manage API keys (POST returns the plaintext once) |
 | `GET /me/domains` · `POST` `{ domain }` · `POST /{id}/verify` · `DELETE /{id}` | Manage custom domains |
+
+### Analytics payload
+
+`GET /me/links/{id}/analytics` (and the API-key `GET /links/{id}/analytics`) return totals plus
+breakdowns derived from data already captured at click time — **no clicker identity is exposed**:
+
+```jsonc
+{
+  "totalClicks": 1240,
+  "uniqueClicks": 847,          // distinct hashed IPs (see caveat)
+  "firstClickAt": "…", "lastClickAt": "…",
+  "codes": [ { "code": "…", "userId": null, "clickCount": 1240 } ],
+  "sources":  [ { "source": "Twitter",  "count": 612 }, … ],   // platform from referrer
+  "devices":  [ { "device": "Mobile",   "count": 901 }, … ],   // coarse class from user-agent
+  "timeline": [ { "date": "2026-06-20", "count": 130 }, … ]    // clicks per UTC day
+}
+```
+
+`uniqueClicks` counts distinct hashed IPs. The IP hash **rotates hourly by design** (a privacy measure
+that limits cross-time linkage), so this is "distinct clickers per hour, summed" — it dedupes rapid
+repeat clicks within an hour, not lifetime unique visitors. `sources`/`devices` are low-cardinality
+buckets (`ClickSource`/`DeviceType`), not raw referrer or user-agent strings.
+
+`GET /me/campaigns/{id}/analytics` returns the same `sources`/`devices`/`timeline` aggregated across
+**every link in the campaign** (both anonymous and user-attributed), plus a `links[]` array of per-link
+`{ linkId, url, mode, totalClicks, uniqueClicks }`. Campaign-wide `uniqueClicks` dedupes across links
+(one visitor clicking two links in the campaign counts once).
+
+#### UTM template
+A campaign's optional `utmSource`/`utmMedium`/`utmCampaign` form a default template **merged into the
+destination** of each assigned link at redirect time. Existing query params are preserved and a UTM the
+destination URL already sets is never overwritten.
 
 > **Bootstrapping machine credentials:** after a user logs in, `POST /me/api-keys` mints an API key for
 > their account — that key then authenticates the existing key-scoped endpoints (`/links`, `/domains`, …).

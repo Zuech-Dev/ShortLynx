@@ -5,6 +5,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using ShortLynx.Data.Entities;
 using ShortLynx.Data.Operations;
+using ShortLynx.Services.Analytics;
 
 namespace ShortLynx.Services.Visits;
 
@@ -66,6 +67,8 @@ public sealed class BackgroundVisitWriter(
                 HashedIp = HashIp(e.RawIp, pepper),
                 Referrer = e.Referrer,
                 UserAgent = e.UserAgent,
+                Source = SourceDetector.DetectSource(e.Referrer),
+                Device = SourceDetector.DetectDevice(e.UserAgent),
             })
             .ToList();
 
@@ -80,6 +83,8 @@ public sealed class BackgroundVisitWriter(
                 HashedIp = HashIp(e.RawIp, pepper),
                 Referrer = e.Referrer,
                 UserAgent = e.UserAgent,
+                Source = SourceDetector.DetectSource(e.Referrer),
+                Device = SourceDetector.DetectDevice(e.UserAgent),
             })
             .ToList();
 

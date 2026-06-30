@@ -1,0 +1,68 @@
+@using ShortLynx.Services.Analytics
+
+@if (Breakdown is { TotalClicks: > 0 } b)
+{
+    <div class="card mb-4" data-testid="click-breakdown">
+        <div class="card-body">
+            <h5 class="card-title">@Title</h5>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                <div><div class="text-2xl font-bold" data-testid="total-clicks">@b.TotalClicks</div><div class="text-gray-500 text-sm">Total clicks</div></div>
+                <div>
+                    <div class="text-2xl font-bold" data-testid="unique-clicks">@b.UniqueClicks</div>
+                    <div class="text-gray-500 text-sm" title="Distinct hashed IPs. The hash rotates hourly for privacy, so this dedupes repeat clicks within an hour rather than counting lifetime-unique visitors.">Unique (per hr)</div>
+                </div>
+                <div><div class="text-sm font-medium">@(b.FirstClickAt?.ToString("yyyy-MM-dd") ?? "—")</div><div class="text-gray-500 text-sm">First click</div></div>
+                <div><div class="text-sm font-medium">@(b.LastClickAt?.ToString("yyyy-MM-dd") ?? "—")</div><div class="text-gray-500 text-sm">Last click</div></div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div data-testid="sources">
+                    <h6 class="font-semibold text-sm mb-2">By platform</h6>
+                    @foreach (var s in b.Sources)
+                    {
+                        <div class="flex items-center gap-2 text-sm mb-1">
+                            <span class="w-24 shrink-0 truncate">@s.Source</span>
+                            <span class="flex-1 bg-gray-100 rounded h-3"><span class="block bg-blue-500 h-3 rounded" style="width:@BarPct(s.Count, b.TotalClicks)%"></span></span>
+                            <span class="w-10 text-right text-gray-600">@s.Count</span>
+                        </div>
+                    }
+                </div>
+                <div data-testid="devices">
+                    <h6 class="font-semibold text-sm mb-2">By device</h6>
+                    @foreach (var d in b.Devices)
+                    {
+                        <div class="flex items-center gap-2 text-sm mb-1">
+                            <span class="w-24 shrink-0 truncate">@d.Device</span>
+                            <span class="flex-1 bg-gray-100 rounded h-3"><span class="block bg-green-500 h-3 rounded" style="width:@BarPct(d.Count, b.TotalClicks)%"></span></span>
+                            <span class="w-10 text-right text-gray-600">@d.Count</span>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            @if (b.Timeline.Count > 0)
+            {
+                var tlMax = b.Timeline.Max(t => t.Count);
+                <div class="mt-4" data-testid="timeline">
+                    <h6 class="font-semibold text-sm mb-2">Clicks by day (last 30)</h6>
+                    <div class="flex items-end gap-1 h-24">
+                        @foreach (var day in b.Timeline.TakeLast(30))
+                        {
+                            <div class="flex-1 bg-blue-400 rounded-t min-h-[2px]"
+                                 style="height:@BarPct(day.Count, tlMax)%"
+                                 title="@day.Date.ToString("yyyy-MM-dd"): @day.Count click(s)"></div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public ClickBreakdown? Breakdown { get; set; }
+    [Parameter] public string Title { get; set; } = "Click breakdown";
+
+    // Bar width as a percent of a basis (total clicks, or the busiest day for the timeline). Clamped 0–100.
+    static int BarPct(long count, long basis) => basis <= 0 ? 0 : (int)Math.Clamp(Math.Round(100.0 * count / basis), 0, 100);
+}

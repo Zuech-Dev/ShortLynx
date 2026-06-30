@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using ShortLynx.Core.Analytics;
 using ShortLynx.Core.Models.Requests;
 using ShortLynx.Core.Models.Responses;
 using ShortLynx.Data.Context;
@@ -66,6 +67,84 @@ public class MeCampaignsController(ICampaignService campaigns, ShortLynxDbContex
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Remove(Guid id, CancellationToken ct)
         => await campaigns.DeleteAsync(id, AccountId, ct) ? NoContent() : NotFound();
+
+    // GET /me/campaigns/{id}/analytics — clicks rolled up across every link in the campaign.
+    [HttpGet("{id:guid}/analytics")]
+    public async Task<IActionResult> Analytics(Guid id, CancellationToken ct)
+    {
+        var campaign = await campaigns.GetAsync(id, AccountId, ct);
+        if (campaign is null) return NotFound();
+
+        var links = await db.LinkEntities
+            .Where(l => l.CampaignId == id && l.AccountId == AccountId)
+            .Select(l => new { l.Id, l.OriginalUrl, l.Mode })
+            .ToListAsync(ct);
+
+        // (linkId, row) pairs across both link modes, so we can roll up campaign-wide and per-link.
+        var tagged = await GatherVisitsAsync(links.Select(l => l.Id).ToList(), ct);
+
+        var byLink = tagged.ToLookup(x => x.LinkId, x => x.Row);
+        var perLink = links
+            .Select(l =>
+            {
+                var rows = byLink[l.Id].ToList();
+                return new CampaignLinkClicks(
+                    l.Id, l.OriginalUrl, l.Mode.ToString(),
+                    rows.Count, rows.Select(r => r.HashedIp).Distinct().Count());
+            })
+            .OrderByDescending(l => l.TotalClicks)
+            .ToList();
+
+        var b = ClickAggregator.Summarize(tagged.Select(x => x.Row).ToList());
+        return Ok(new CampaignAnalyticsResponse(
+            campaign.Id, campaign.Name, links.Count,
+            b.TotalClicks, b.UniqueClicks, b.FirstClickAt, b.LastClickAt,
+            b.Sources, b.Devices, b.Timeline, perLink));
+    }
+
+    // Resolves every visit for the given links, tagged with its link id. Anonymous links resolve via
+    // their short code → Visits; user-attributed links via their per-recipient codes → UserVisits.
+    private async Task<List<(Guid LinkId, VisitRow Row)>> GatherVisitsAsync(List<Guid> linkIds, CancellationToken ct)
+    {
+        var tagged = new List<(Guid, VisitRow)>();
+        if (linkIds.Count == 0) return tagged;
+
+        // Mode 1: short code → link.
+        var shortCodeToLink = await db.ShortCodeEntities
+            .Where(sc => linkIds.Contains(sc.LinkId))
+            .Select(sc => new { sc.Id, sc.LinkId })
+            .ToDictionaryAsync(x => x.Id, x => x.LinkId, ct);
+
+        if (shortCodeToLink.Count > 0)
+        {
+            var scIds = shortCodeToLink.Keys.ToList();
+            var visits = await db.VisitEntities
+                .Where(v => scIds.Contains(v.ShortCodeId))
+                .Select(v => new { v.ShortCodeId, v.HashedIp, v.Source, v.Device, v.ClickedAt })
+                .ToListAsync(ct);
+            tagged.AddRange(visits.Select(v =>
+                (shortCodeToLink[v.ShortCodeId], new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt))));
+        }
+
+        // Mode 2: user-link code → link.
+        var codeToLink = await db.UserLinkCodeEntities
+            .Where(c => linkIds.Contains(c.LinkId))
+            .Select(c => new { c.Id, c.LinkId })
+            .ToDictionaryAsync(x => x.Id, x => x.LinkId, ct);
+
+        if (codeToLink.Count > 0)
+        {
+            var codeIds = codeToLink.Keys.ToList();
+            var userVisits = await db.UserVisitEntities
+                .Where(v => codeIds.Contains(v.UserLinkCodeId))
+                .Select(v => new { v.UserLinkCodeId, v.HashedIp, v.Source, v.Device, v.ClickedAt })
+                .ToListAsync(ct);
+            tagged.AddRange(userVisits.Select(v =>
+                (codeToLink[v.UserLinkCodeId], new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt))));
+        }
+
+        return tagged;
+    }
 
     private async Task<Dictionary<Guid, int>> LinkCountsAsync(CancellationToken ct)
         => await db.LinkEntities

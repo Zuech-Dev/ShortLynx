@@ -1,0 +1,186 @@
+@using ShortLynx.Data.Enums
+
+<div class="card mb-4" data-testid="clicks-table">
+    <div class="card-body">
+        <h5 class="card-title">Clicks</h5>
+
+        <div class="flex flex-wrap gap-3 items-end mb-3">
+            <div>
+                <label class="field-label text-xs">Time frame</label>
+                <div class="flex gap-1">
+                    @foreach (var (label, days) in Frames)
+                    {
+                        <button type="button" data-testid="frame-@label"
+                                class="px-2 py-0.5 text-xs rounded border @(_frame == label ? "bg-blue-600 text-white border-blue-600" : "border-gray-300 text-gray-600 hover:bg-gray-50")"
+                                @onclick="() => ApplyFrame(label, days)">@label</button>
+                    }
+                </div>
+            </div>
+            <div>
+                <label class="field-label text-xs">From</label>
+                <input type="date" class="field-input py-1 text-sm" value="@(_from?.ToString("yyyy-MM-dd"))"
+                       @onchange="OnFromChanged" data-testid="filter-from"/>
+            </div>
+            <div>
+                <label class="field-label text-xs">To</label>
+                <input type="date" class="field-input py-1 text-sm" value="@(_to?.ToString("yyyy-MM-dd"))"
+                       @onchange="OnToChanged" data-testid="filter-to"/>
+            </div>
+            <div>
+                <label class="field-label text-xs">Platform</label>
+                <select class="field-input py-1 text-sm" @bind="_source" @bind:after="ResetPage" data-testid="filter-source">
+                    <option value="">All</option>
+                    @foreach (var s in _sourcesPresent)
+                    {
+                        <option value="@s">@s</option>
+                    }
+                </select>
+            </div>
+            <div>
+                <label class="field-label text-xs">Device</label>
+                <select class="field-input py-1 text-sm" @bind="_device" @bind:after="ResetPage" data-testid="filter-device">
+                    <option value="">All</option>
+                    @foreach (var d in _devicesPresent)
+                    {
+                        <option value="@d">@d</option>
+                    }
+                </select>
+            </div>
+            <div class="flex-1 min-w-[160px]">
+                <label class="field-label text-xs">Referrer contains</label>
+                <input type="text" class="field-input py-1 text-sm" value="@_referrer" @oninput="OnReferrerChanged"
+                       placeholder="e.g. t.co" data-testid="filter-referrer"/>
+            </div>
+            <button type="button" class="btn btn-outline" @onclick="ClearFilters" data-testid="filter-clear">Clear</button>
+        </div>
+
+        @{
+            var rows = Filtered();
+            var total = rows.Count;
+            var maxPage = total == 0 ? 0 : (total - 1) / PageSize;
+            if (_page > maxPage) { _page = maxPage; }
+            var pageRows = rows.Skip(_page * PageSize).Take(PageSize).ToList();
+        }
+
+        @if (total == 0)
+        {
+            <p class="text-gray-500" data-testid="clicks-empty">No clicks match these filters.</p>
+        }
+        else
+        {
+            <table class="data-table">
+                <thead>
+                <tr>
+                    @SortHeader("Clicked At", SortCol.ClickedAt)
+                    @SortHeader("Platform", SortCol.Source)
+                    @SortHeader("Device", SortCol.Device)
+                    @SortHeader("Referrer", SortCol.Referrer)
+                </tr>
+                </thead>
+                <tbody>
+                @foreach (var c in pageRows)
+                {
+                    <tr>
+                        <td class="whitespace-nowrap">@c.ClickedAt.ToString("yyyy-MM-dd HH:mm") UTC</td>
+                        <td>@c.Source</td>
+                        <td>@c.Device</td>
+                        <td class="text-gray-500 text-sm truncate max-w-[320px]" title="@c.Referrer">@(string.IsNullOrEmpty(c.Referrer) ? "—" : c.Referrer)</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+
+            <div class="flex items-center gap-3 mt-2 text-sm text-gray-600">
+                <button class="btn btn-outline" disabled="@(_page == 0)" @onclick="() => _page--" data-testid="page-prev">Prev</button>
+                <span data-testid="page-status">@(_page * PageSize + 1)–@(Math.Min((_page + 1) * PageSize, total)) of @total</span>
+                <button class="btn btn-outline" disabled="@(_page >= maxPage)" @onclick="() => _page++" data-testid="page-next">Next</button>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public IReadOnlyList<ClickRow> Clicks { get; set; } = [];
+
+    const int PageSize = 25;
+    enum SortCol { ClickedAt, Source, Device, Referrer }
+
+    static readonly (string Label, int Days)[] Frames = [("24h", 1), ("7d", 7), ("30d", 30), ("All", 0)];
+
+    string _frame = "All";
+    DateOnly? _from, _to;
+    string _source = "", _device = "", _referrer = "";
+    SortCol _sort = SortCol.ClickedAt;
+    bool _desc = true;
+    int _page;
+
+    IReadOnlyList<string> _sourcesPresent = [];
+    IReadOnlyList<string> _devicesPresent = [];
+
+    protected override void OnParametersSet()
+    {
+        _sourcesPresent = Clicks.Select(c => c.Source.ToString()).Distinct().OrderBy(s => s).ToList();
+        _devicesPresent = Clicks.Select(c => c.Device.ToString()).Distinct().OrderBy(s => s).ToList();
+    }
+
+    void ApplyFrame(string label, int days)
+    {
+        _frame = label;
+        _page = 0;
+        if (days == 0) { _from = null; _to = null; }
+        else
+        {
+            _to = DateOnly.FromDateTime(DateTime.UtcNow);
+            _from = _to.Value.AddDays(-(days - 1));
+        }
+    }
+
+    void OnFromChanged(ChangeEventArgs e) { _from = ParseDate(e.Value?.ToString()); _frame = "Custom"; _page = 0; }
+    void OnToChanged(ChangeEventArgs e) { _to = ParseDate(e.Value?.ToString()); _frame = "Custom"; _page = 0; }
+    void OnReferrerChanged(ChangeEventArgs e) { _referrer = e.Value?.ToString() ?? ""; _page = 0; }
+    void ResetPage() => _page = 0;
+    static DateOnly? ParseDate(string? s) => DateOnly.TryParse(s, out var d) ? d : null;
+
+    void ClearFilters()
+    {
+        _frame = "All";
+        _from = _to = null;
+        _source = _device = _referrer = "";
+        _page = 0;
+    }
+
+    void Sort(SortCol col)
+    {
+        if (_sort == col) { _desc = !_desc; }
+        else { _sort = col; _desc = true; }
+        _page = 0;
+    }
+
+    IReadOnlyList<ClickRow> Filtered()
+    {
+        IEnumerable<ClickRow> q = Clicks;
+        if (_from is { } f) q = q.Where(c => DateOnly.FromDateTime(c.ClickedAt.UtcDateTime) >= f);
+        if (_to is { } t) q = q.Where(c => DateOnly.FromDateTime(c.ClickedAt.UtcDateTime) <= t);
+        if (!string.IsNullOrEmpty(_source)) q = q.Where(c => c.Source.ToString() == _source);
+        if (!string.IsNullOrEmpty(_device)) q = q.Where(c => c.Device.ToString() == _device);
+        if (!string.IsNullOrWhiteSpace(_referrer))
+            q = q.Where(c => (c.Referrer ?? "").Contains(_referrer, StringComparison.OrdinalIgnoreCase));
+
+        q = (_sort, _desc) switch
+        {
+            (SortCol.ClickedAt, true) => q.OrderByDescending(c => c.ClickedAt),
+            (SortCol.ClickedAt, false) => q.OrderBy(c => c.ClickedAt),
+            (SortCol.Source, true) => q.OrderByDescending(c => c.Source.ToString()),
+            (SortCol.Source, false) => q.OrderBy(c => c.Source.ToString()),
+            (SortCol.Device, true) => q.OrderByDescending(c => c.Device.ToString()),
+            (SortCol.Device, false) => q.OrderBy(c => c.Device.ToString()),
+            (SortCol.Referrer, true) => q.OrderByDescending(c => c.Referrer ?? ""),
+            _ => q.OrderBy(c => c.Referrer ?? ""),
+        };
+        return q.ToList();
+    }
+
+    RenderFragment SortHeader(string label, SortCol col) =>@<th class="cursor-pointer select-none whitespace-nowrap" @onclick="() => Sort(col)" data-testid="sort-@col">
+        @label <span class="text-gray-400">@(_sort == col ? (_desc ? "▼" : "▲") : "")</span>
+    </th>;
+}

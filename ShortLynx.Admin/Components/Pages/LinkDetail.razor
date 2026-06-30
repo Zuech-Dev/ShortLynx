@@ -142,33 +142,7 @@ else
 
     <ClickBreakdownCard Breakdown="_breakdown" />
 
-    @if (_link.Mode == LinkMode.Anonymous)
-    {
-        <h5 class="text-base font-semibold mb-2">Recent clicks</h5>
-
-        @if (_recentVisits.Count > 0)
-        {
-            <table class="data-table">
-                <thead>
-                <tr><th>Clicked At</th><th>Referrer</th></tr>
-                </thead>
-                <tbody>
-                @foreach (var v in _recentVisits)
-                {
-                    <tr>
-                        <td class="whitespace-nowrap">@v.ClickedAt.ToString("yyyy-MM-dd HH:mm") UTC</td>
-                        <td class="text-gray-500 text-sm truncate max-w-[300px]">@(v.Referrer ?? "—")</td>
-                    </tr>
-                }
-                </tbody>
-            </table>
-            @if (_totalClicks > 50)
-            {
-                <p class="text-gray-500 text-sm mt-1">Showing 50 most recent clicks.</p>
-            }
-        }
-    }
-    else
+    @if (_link.Mode == LinkMode.UserAttributed)
     {
         <div class="card mb-4">
             <div class="card-body">
@@ -239,6 +213,8 @@ else
             </table>
         }
     }
+
+    <ClicksTable Clicks="_clicks" />
 }
 
 @code {
@@ -252,8 +228,7 @@ else
     string _shortCode = string.Empty;
     string _shortUrl = string.Empty;
     bool _shortUrlCopied;
-    int _totalClicks;
-    List<VisitEntity> _recentVisits = [];
+    List<ClickRow> _clicks = [];
     List<UserCodeRow> _userRows = [];
     ClickBreakdown? _breakdown;
 
@@ -289,6 +264,7 @@ else
         _loaded = false;
         _notFound = false;
         _breakdown = null;
+        _clicks = [];
         _shortUrl = string.Empty;
         _shortUrlCopied = false;
 
@@ -318,16 +294,12 @@ else
             if (sc is not null)
             {
                 _shortUrl = await ShortUrlBuilder.BuildAsync(db, _link, sc.Code, DashboardOpts.Value.PublicBaseUrl);
-                _totalClicks = await db.VisitEntities.CountAsync(v => v.ShortCodeId == sc.Id);
-                _recentVisits = await db.VisitEntities
-                    .Where(v => v.ShortCodeId == sc.Id)
-                    .OrderByDescending(v => v.Id)
-                    .Take(50)
+                var raw = await db.VisitEntities.Where(v => v.ShortCodeId == sc.Id)
+                    .Select(v => new { v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Referrer })
                     .ToListAsync();
-                var rows = (await db.VisitEntities.Where(v => v.ShortCodeId == sc.Id)
-                        .Select(v => new { v.HashedIp, v.Source, v.Device, v.ClickedAt }).ToListAsync())
-                    .Select(v => new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt)).ToList();
-                _breakdown = ClickAggregator.Summarize(rows);
+                _breakdown = ClickAggregator.Summarize(
+                    raw.Select(v => new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt)).ToList());
+                _clicks = raw.Select(v => new ClickRow(v.ClickedAt, v.Source, v.Device, v.Referrer)).ToList();
             }
         }
         else
@@ -348,10 +320,12 @@ else
             _userRows = codes.Select(c => new UserCodeRow(c.Code, c.Recipient, c.IsOneTimeUse,
                 clickMap.GetValueOrDefault(c.Id, 0))).ToList();
 
-            var mrows = (await db.UserVisitEntities.Where(v => codeIds.Contains(v.UserLinkCodeId))
-                    .Select(v => new { v.HashedIp, v.Source, v.Device, v.ClickedAt }).ToListAsync())
-                .Select(v => new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt)).ToList();
-            _breakdown = ClickAggregator.Summarize(mrows);
+            var raw = await db.UserVisitEntities.Where(v => codeIds.Contains(v.UserLinkCodeId))
+                .Select(v => new { v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Referrer })
+                .ToListAsync();
+            _breakdown = ClickAggregator.Summarize(
+                raw.Select(v => new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt)).ToList());
+            _clicks = raw.Select(v => new ClickRow(v.ClickedAt, v.Source, v.Device, v.Referrer)).ToList();
         }
 
         // Pinning is offered for links in the current account (not when a super-admin views another's).

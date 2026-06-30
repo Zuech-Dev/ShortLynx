@@ -182,6 +182,31 @@ public class BackgroundVisitWriterTests
     }
 
     [Fact]
+    public async Task Writer_DerivesSourceAndDevice_FromReferrerAndUserAgent()
+    {
+        var (sink, db, writer) = MakeWriter(drainMs: 20);
+        using var cts = new CancellationTokenSource();
+
+        var evt = new VisitEvent(
+            ShortCodeId: Guid.CreateVersion7(),
+            UserLinkCodeId: null,
+            UserId: null,
+            RawIp: "1.2.3.4",
+            Referrer: "https://t.co/abc123",
+            UserAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile/15E148",
+            ClickedAt: DateTimeOffset.UtcNow);
+
+        await writer.StartAsync(cts.Token);
+        await sink.EnqueueAsync(evt);
+        await WaitUntilAsync(() => db.VisitCount >= 1);
+        await cts.CancelAsync();
+
+        var stored = db.InsertedVisits.Single();
+        Assert.Equal(ShortLynx.Data.Enums.ClickSource.Twitter, stored.Source);
+        Assert.Equal(ShortLynx.Data.Enums.DeviceType.Mobile, stored.Device);
+    }
+
+    [Fact]
     public async Task Writer_RespectsConfiguredBatchSize()
     {
         var (sink, db, writer) = MakeWriter(drainMs: 20, batchSize: 2);

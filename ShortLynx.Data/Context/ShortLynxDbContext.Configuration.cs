@@ -64,6 +64,8 @@ public partial class ShortLynxDbContext
                     entity.HasKey(e => e.Id);
                     entity.HasOne<ShortCodeEntity>(e => e.ShortCode).WithMany();
                     entity.Property(e => e.Id).ValueGeneratedNever();
+                    entity.Property(e => e.Source).HasConversion<int>();
+                    entity.Property(e => e.Device).HasConversion<int>();
                 }
             )
            .Entity<UserVisitEntity>(entity =>
@@ -72,6 +74,8 @@ public partial class ShortLynxDbContext
                     entity.HasOne<UserLinkCodeEntity>(e => e.UserLinkCode).WithMany();
                     // TODO: UserId denormalized from UserLinkCode
                     entity.Property(e => e.Id).ValueGeneratedNever();
+                    entity.Property(e => e.Source).HasConversion<int>();
+                    entity.Property(e => e.Device).HasConversion<int>();
                 }
             )
            .Entity<ApiKeyEntity>(entity =>

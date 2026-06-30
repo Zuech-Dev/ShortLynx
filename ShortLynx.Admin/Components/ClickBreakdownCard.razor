@@ -66,12 +66,19 @@
                         <span>0</span>
                     </div>
                     <div class="flex-1 min-w-0">
-                        <div class="flex items-end gap-px h-28 border-l border-b border-gray-200 pl-1">
+                        <div class="flex gap-px h-28 border-l border-b border-gray-200 pl-1">
                             @foreach (var day in window)
                             {
-                                <div class="flex-1 bg-blue-400 rounded-t @(day.Count > 0 ? "min-h-[2px]" : "")"
-                                     style="height:@BarPct(day.Count, winMax)%"
-                                     title="@day.Date.ToString("yyyy-MM-dd"): @day.Count click(s)"></div>
+                                <div class="flex-1 h-full flex items-end group relative" data-testid="bar">
+                                    <div class="w-full bg-blue-400 hover:bg-blue-600 rounded-t @(day.Count > 0 ? "min-h-[2px]" : "")"
+                                         style="height:@BarPct(day.Count, winMax)%"></div>
+                                    <div class="hidden group-hover:block absolute bottom-full left-1/2 -translate-x-1/2 mb-1 z-10 whitespace-nowrap rounded bg-gray-900 text-white text-[11px] leading-tight px-2 py-1 shadow-lg pointer-events-none"
+                                         data-testid="bar-tooltip">
+                                        <div class="font-semibold">@day.Date.ToString("MMM d, yyyy")</div>
+                                        <div>Total clicks: @day.Count</div>
+                                        <div>Unique clicks: @day.UniqueCount</div>
+                                    </div>
+                                </div>
                             }
                         </div>
                         @* X axis: start, midpoint, end dates. *@
@@ -103,14 +110,14 @@
 
     // A continuous daily series for the last _days days (UTC), zero-filling days with no clicks, so the
     // chart has a real, evenly-spaced date axis instead of only the days that happened to get a click.
-    IReadOnlyList<(DateOnly Date, long Count)> TimelineWindow(ClickBreakdown b)
+    IReadOnlyList<(DateOnly Date, long Count, long UniqueCount)> TimelineWindow(ClickBreakdown b)
     {
-        var counts = b.Timeline.ToDictionary(t => t.Date, t => t.Count);
+        var byDate = b.Timeline.ToDictionary(t => t.Date);
         var end = DateOnly.FromDateTime(DateTime.UtcNow);
         var start = end.AddDays(-(_days - 1));
-        var list = new List<(DateOnly, long)>(_days);
+        var list = new List<(DateOnly, long, long)>(_days);
         for (var d = start; d <= end; d = d.AddDays(1))
-            list.Add((d, counts.GetValueOrDefault(d, 0)));
+            list.Add(byDate.TryGetValue(d, out var dc) ? (d, dc.Count, dc.UniqueCount) : (d, 0L, 0L));
         return list;
     }
 }

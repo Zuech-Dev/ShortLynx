@@ -11,8 +11,9 @@ public sealed record SourceCount(string Source, long Count);
 /// <summary>Clicks from one device class (see <see cref="DeviceType"/>).</summary>
 public sealed record DeviceCount(string Device, long Count);
 
-/// <summary>Clicks on a single UTC calendar day, for the click-over-time series.</summary>
-public sealed record DailyClicks(DateOnly Date, long Count);
+/// <summary>Clicks on a single UTC calendar day, for the click-over-time series. <paramref name="UniqueCount"/>
+/// is distinct hashed IPs that day (subject to the same hourly-rotation caveat as the overall unique count).</summary>
+public sealed record DailyClicks(DateOnly Date, long Count, long UniqueCount);
 
 /// <summary>The platform/device/time breakdown shared by link and campaign analytics.</summary>
 public sealed record ClickBreakdown(
@@ -50,7 +51,7 @@ public static class ClickAggregator
         // Bucket by UTC calendar day so the series is stable regardless of server/viewer timezone.
         var timeline = rows
             .GroupBy(r => DateOnly.FromDateTime(r.ClickedAt.UtcDateTime))
-            .Select(g => new DailyClicks(g.Key, g.LongCount()))
+            .Select(g => new DailyClicks(g.Key, g.LongCount(), g.Select(r => r.HashedIp).Distinct().LongCount()))
             .OrderBy(t => t.Date)
             .ToList();
 

@@ -175,6 +175,10 @@ public class LinkDetailComponentTests : BunitContext
         // Range selector renders the four windows.
         Assert.NotNull(cut.Find("[data-testid=range-7]"));
         Assert.NotNull(cut.Find("[data-testid=range-30]"));
+        // Per-bar hover tooltip carries the date plus that day's total and unique counts (3 total, 2 unique).
+        Assert.NotEmpty(cut.FindAll("[data-testid=bar-tooltip]"));
+        Assert.Contains("Total clicks: 3", cut.Markup);
+        Assert.Contains("Unique clicks: 2", cut.Markup);
     }
 
     [Fact]

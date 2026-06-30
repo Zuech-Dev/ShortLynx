@@ -28,10 +28,15 @@ public class LinkEntity
     // resolves the link's codes under that host; when null, the link resolves on any host.
     public Guid? CustomDomainId { get; set; }
 
+    // Optional: group this link under a campaign for roll-up analytics + a shared UTM template.
+    // Null = ungrouped. Deleting the campaign unassigns (SetNull), never deletes the link.
+    public Guid? CampaignId { get; set; }
+
     public ICollection<VisitEntity> Visits { get; set; } = [];
     public UserLinkCodeEntity? UserLinkCode { get; set; } = null;
     public virtual AccountEntity Account { get; set; } = null!;
     public virtual ApiKeyEntity? ApiKey { get; set; }
     public virtual UserAccountEntity? UserAccount { get; set; }
     public virtual CustomDomainEntity? CustomDomain { get; set; }
+    public virtual CampaignEntity? Campaign { get; set; }
 }

@@ -99,6 +99,17 @@ public class MeLinksController(
         return ok ? NoContent() : BadRequest(new { error = "Domain not found, not in this account, or not verified." });
     }
 
+    // PUT /me/links/{id}/campaign — assign/unassign the link to one of the account's campaigns.
+    [HttpPut("{id:guid}/campaign")]
+    public async Task<IActionResult> SetCampaign(Guid id, [FromBody] SetLinkCampaignRequest request, CancellationToken ct)
+    {
+        if (!await db.LinkEntities.AnyAsync(l => l.Id == id && l.AccountId == AccountId, ct))
+            return NotFound();
+
+        var ok = await linkService.SetLinkCampaignAsync(id, request.CampaignId, AccountId, ct);
+        return ok ? NoContent() : BadRequest(new { error = "Campaign not found or not in this account." });
+    }
+
     // GET /me/links/{id}/analytics
     [HttpGet("{id:guid}/analytics")]
     public async Task<IActionResult> Analytics(Guid id, CancellationToken ct)

@@ -172,6 +172,21 @@ public class LinkDetailComponentTests : BunitContext
         Assert.Contains("Twitter", cut.Find("[data-testid=sources]").InnerHtml);
         Assert.Contains("Mobile", cut.Find("[data-testid=devices]").InnerHtml);
         Assert.NotNull(cut.Find("[data-testid=timeline]"));
+        // Range selector renders the four windows.
+        Assert.NotNull(cut.Find("[data-testid=range-7]"));
+        Assert.NotNull(cut.Find("[data-testid=range-30]"));
+    }
+
+    [Fact]
+    public void ShortUrl_RendersFullUrl_AndCopyButton_ForAnonymousLink()
+    {
+        var id = SeedAnonymousLink(); // code "abc12345"
+        var cut = Render<LinkDetail>(p => p.Add(c => c.Id, id));
+
+        var link = cut.Find("[data-testid=short-url]");
+        Assert.Equal("https://s.example/abc12345", link.GetAttribute("href"));
+        Assert.Contains("https://s.example/abc12345", link.TextContent);
+        Assert.NotNull(cut.Find("[data-testid=copy-short-url]"));
     }
 
     private Guid SeedAnonymousLinkWithVisits()

@@ -2,9 +2,11 @@
 @attribute [Authorize]
 @using System.ComponentModel.DataAnnotations
 @using Microsoft.Extensions.DependencyInjection
+@using Microsoft.Extensions.Options
 @using ShortLynx.Services.Links
 @inject IDbContextFactory<ShortLynxDbContext> DbFactory
 @inject IServiceScopeFactory ScopeFactory
+@inject IOptions<DashboardOptions> DashboardOpts
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 
@@ -22,9 +24,9 @@
     <div class="alert alert-success mb-4" role="alert" data-testid="new-link">
         <div class="font-semibold mb-1">Link created.</div>
         <div class="flex gap-2 items-center">
-            <span>Short code: <code>@_newShortCode</code></span>
-            <button class="btn btn-outline-success" @onclick="CopyNewCode">Copy</button>
-            <button type="button" class="ml-auto text-gray-400 hover:text-gray-600" aria-label="Dismiss" @onclick="() => _newShortCode = null">✕</button>
+            <a class="text-blue-700 hover:underline break-all font-mono" href="@_newShortUrl" target="_blank" rel="noopener" data-testid="new-link-url">@_newShortUrl</a>
+            <button class="btn btn-outline-success" @onclick="CopyNewCode" data-testid="new-link-copy">Copy</button>
+            <button type="button" class="ml-auto text-gray-400 hover:text-gray-600" aria-label="Dismiss" @onclick="DismissNew">✕</button>
         </div>
     </div>
 }
@@ -186,6 +188,7 @@ else
 
     bool _showCreate;
     string? _newShortCode;
+    string? _newShortUrl;
     string? _createError;
     CreateLinkForm _form = new();
 
@@ -210,6 +213,7 @@ else
 
             var result = await svc.CreateAnonymousLinkAsync(_form.Url!, _accountId, _uid);
             _newShortCode = result.ShortCode.Code;
+            _newShortUrl = DashboardOpts.Value.BuildShortUrl(result.ShortCode.Code);
             _form = new();
             _showCreate = false;
             await LoadAsync();
@@ -223,8 +227,14 @@ else
 
     async Task CopyNewCode()
     {
-        if (_newShortCode is not null)
-            await JS.InvokeVoidAsync("navigator.clipboard.writeText", _newShortCode);
+        if (_newShortUrl is not null)
+            await JS.InvokeVoidAsync("shortlynxCopy", _newShortUrl);
+    }
+
+    void DismissNew()
+    {
+        _newShortCode = null;
+        _newShortUrl = null;
     }
 
     sealed record LinkRow(Guid Id, string Url, string Mode, string ShortCode,

@@ -40,21 +40,53 @@
                 </div>
             </div>
 
-            @if (b.Timeline.Count > 0)
-            {
-                var tlMax = b.Timeline.Max(t => t.Count);
-                <div class="mt-4" data-testid="timeline">
-                    <h6 class="font-semibold text-sm mb-2">Clicks by day (last 30)</h6>
-                    <div class="flex items-end gap-1 h-24">
-                        @foreach (var day in b.Timeline.TakeLast(30))
+            @{
+                var window = TimelineWindow(b);
+                var winMax = Math.Max(1, window.Max(d => d.Count));
+                var start = window[0].Date;
+                var end = window[^1].Date;
+            }
+            <div class="mt-4" data-testid="timeline">
+                <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
+                    <h6 class="font-semibold text-sm">Clicks by day</h6>
+                    <div class="flex gap-1" role="group" aria-label="Timeline range">
+                        @foreach (var n in Ranges)
                         {
-                            <div class="flex-1 bg-blue-400 rounded-t min-h-[2px]"
-                                 style="height:@BarPct(day.Count, tlMax)%"
-                                 title="@day.Date.ToString("yyyy-MM-dd"): @day.Count click(s)"></div>
+                            <button type="button" data-testid="range-@n"
+                                    class="px-2 py-0.5 text-xs rounded border @(n == _days ? "bg-blue-600 text-white border-blue-600" : "border-gray-300 text-gray-600 hover:bg-gray-50")"
+                                    @onclick="() => _days = n">@n d</button>
                         }
                     </div>
                 </div>
-            }
+                <div class="flex gap-2">
+                    @* Y axis: scale (max ↔ 0) plus the "Clicks" key. *@
+                    <div class="flex flex-col items-end justify-between h-28 text-[10px] text-gray-400 leading-none">
+                        <span data-testid="y-max">@winMax</span>
+                        <span class="text-gray-500 font-medium" style="writing-mode:vertical-rl; transform:rotate(180deg);">Clicks</span>
+                        <span>0</span>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-end gap-px h-28 border-l border-b border-gray-200 pl-1">
+                            @foreach (var day in window)
+                            {
+                                <div class="flex-1 bg-blue-400 rounded-t @(day.Count > 0 ? "min-h-[2px]" : "")"
+                                     style="height:@BarPct(day.Count, winMax)%"
+                                     title="@day.Date.ToString("yyyy-MM-dd"): @day.Count click(s)"></div>
+                            }
+                        </div>
+                        @* X axis: start, midpoint, end dates. *@
+                        <div class="flex justify-between text-[10px] text-gray-400 mt-1">
+                            <span>@start.ToString("MMM d")</span>
+                            @if (_days >= 14)
+                            {
+                                <span>@window[window.Count / 2].Date.ToString("MMM d")</span>
+                            }
+                            <span>@end.ToString("MMM d")</span>
+                        </div>
+                        <div class="text-center text-[10px] text-gray-500 font-medium mt-0.5">Date (UTC)</div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 }
@@ -63,6 +95,22 @@
     [Parameter] public ClickBreakdown? Breakdown { get; set; }
     [Parameter] public string Title { get; set; } = "Click breakdown";
 
-    // Bar width as a percent of a basis (total clicks, or the busiest day for the timeline). Clamped 0–100.
+    static readonly int[] Ranges = [7, 14, 21, 30];
+    int _days = 30;
+
+    // Bar size as a percent of a basis (total clicks for source/device, busiest day for the timeline). Clamped 0–100.
     static int BarPct(long count, long basis) => basis <= 0 ? 0 : (int)Math.Clamp(Math.Round(100.0 * count / basis), 0, 100);
+
+    // A continuous daily series for the last _days days (UTC), zero-filling days with no clicks, so the
+    // chart has a real, evenly-spaced date axis instead of only the days that happened to get a click.
+    IReadOnlyList<(DateOnly Date, long Count)> TimelineWindow(ClickBreakdown b)
+    {
+        var counts = b.Timeline.ToDictionary(t => t.Date, t => t.Count);
+        var end = DateOnly.FromDateTime(DateTime.UtcNow);
+        var start = end.AddDays(-(_days - 1));
+        var list = new List<(DateOnly, long)>(_days);
+        for (var d = start; d <= end; d = d.AddDays(1))
+            list.Add((d, counts.GetValueOrDefault(d, 0)));
+        return list;
+    }
 }

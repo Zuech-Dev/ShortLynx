@@ -35,8 +35,24 @@ else
                 <dt class="font-medium text-gray-500">URL</dt>
                 <dd><a class="text-blue-700 hover:underline" href="@_link!.OriginalUrl" target="_blank" rel="noopener">@_link.OriginalUrl</a></dd>
 
-                <dt class="font-medium text-gray-500">Short Code</dt>
-                <dd><code>@_shortCode</code></dd>
+                <dt class="font-medium text-gray-500">Short URL</dt>
+                <dd>
+                    @if (!string.IsNullOrEmpty(_shortUrl))
+                    {
+                        <span class="inline-flex items-center gap-2 flex-wrap">
+                            <a class="text-blue-700 hover:underline break-all" href="@_shortUrl" target="_blank" rel="noopener" data-testid="short-url">@_shortUrl</a>
+                            <button class="btn btn-outline-success" @onclick="CopyShortUrl" data-testid="copy-short-url">Copy</button>
+                            @if (_shortUrlCopied)
+                            {
+                                <span class="text-green-600 text-sm" data-testid="short-url-copied">Copied.</span>
+                            }
+                        </span>
+                    }
+                    else
+                    {
+                        <span class="text-gray-500">— <span class="text-sm">(per-recipient codes below)</span></span>
+                    }
+                </dd>
 
                 <dt class="font-medium text-gray-500">Mode</dt>
                 <dd>@_link.Mode</dd>
@@ -234,6 +250,8 @@ else
     Guid _uid;
     LinkEntity? _link;
     string _shortCode = string.Empty;
+    string _shortUrl = string.Empty;
+    bool _shortUrlCopied;
     int _totalClicks;
     List<VisitEntity> _recentVisits = [];
     List<UserCodeRow> _userRows = [];
@@ -271,6 +289,8 @@ else
         _loaded = false;
         _notFound = false;
         _breakdown = null;
+        _shortUrl = string.Empty;
+        _shortUrlCopied = false;
 
         await using var db = await DbFactory.CreateDbContextAsync();
 
@@ -297,6 +317,7 @@ else
 
             if (sc is not null)
             {
+                _shortUrl = await ShortUrlBuilder.BuildAsync(db, _link, sc.Code, DashboardOpts.Value.PublicBaseUrl);
                 _totalClicks = await db.VisitEntities.CountAsync(v => v.ShortCodeId == sc.Id);
                 _recentVisits = await db.VisitEntities
                     .Where(v => v.ShortCodeId == sc.Id)
@@ -423,7 +444,14 @@ else
     async Task CopyAllMinted()
     {
         var text = string.Join('\n', _minted.Select(m => m.Url));
-        await JS.InvokeVoidAsync("navigator.clipboard.writeText", text);
+        await JS.InvokeVoidAsync("shortlynxCopy", text);
+    }
+
+    async Task CopyShortUrl()
+    {
+        if (string.IsNullOrEmpty(_shortUrl)) return;
+        await JS.InvokeVoidAsync("shortlynxCopy", _shortUrl);
+        _shortUrlCopied = true;
     }
 
     sealed class ProvisionForm

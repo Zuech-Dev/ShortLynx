@@ -18,6 +18,30 @@
 <Routes @rendermode="InteractiveServer"/>
 <ReconnectModal/>
 <script src="@Assets["_framework/blazor.web.js"]"></script>
+<script>
+    // Copy helper with a fallback: navigator.clipboard is unavailable in non-secure contexts and some
+    // embedded browsers, where the async API silently fails. Fall back to a hidden textarea + execCommand.
+    window.shortlynxCopy = (text) => {
+        if (navigator.clipboard && window.isSecureContext) {
+            return navigator.clipboard.writeText(text).then(() => true).catch(() => fallbackCopy(text));
+        }
+        return Promise.resolve(fallbackCopy(text));
+        function fallbackCopy(value) {
+            try {
+                const ta = document.createElement('textarea');
+                ta.value = value;
+                ta.style.position = 'fixed';
+                ta.style.opacity = '0';
+                document.body.appendChild(ta);
+                ta.focus();
+                ta.select();
+                const ok = document.execCommand('copy');
+                document.body.removeChild(ta);
+                return ok;
+            } catch { return false; }
+        }
+    };
+</script>
 </body>
 
 </html>

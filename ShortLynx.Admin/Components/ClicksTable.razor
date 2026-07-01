@@ -74,6 +74,10 @@
                     @SortHeader("Clicked At", SortCol.ClickedAt)
                     @SortHeader("Platform", SortCol.Source)
                     @SortHeader("Device", SortCol.Device)
+                    @SortHeader("Browser", SortCol.Browser)
+                    @SortHeader("OS", SortCol.Os)
+                    @SortHeader("Lang", SortCol.Language)
+                    @SortHeader("Country", SortCol.Country)
                     @SortHeader("Referrer host", SortCol.Referrer)
                 </tr>
                 </thead>
@@ -84,7 +88,11 @@
                         <td class="whitespace-nowrap">@c.ClickedAt.ToString("yyyy-MM-dd HH:mm") UTC</td>
                         <td>@c.Source</td>
                         <td>@c.Device</td>
-                        <td class="text-gray-500 text-sm truncate max-w-[320px]" title="@c.ReferrerHost">@(string.IsNullOrEmpty(c.ReferrerHost) ? "—" : c.ReferrerHost)</td>
+                        <td>@Dash(c.Browser)</td>
+                        <td>@Dash(c.Os)</td>
+                        <td>@Dash(c.Language)</td>
+                        <td>@Dash(c.Country)</td>
+                        <td class="text-gray-500 text-sm truncate max-w-[320px]" title="@c.ReferrerHost">@Dash(c.ReferrerHost)</td>
                     </tr>
                 }
                 </tbody>
@@ -103,7 +111,9 @@
     [Parameter] public IReadOnlyList<ClickRow> Clicks { get; set; } = [];
 
     const int PageSize = 25;
-    enum SortCol { ClickedAt, Source, Device, Referrer }
+    enum SortCol { ClickedAt, Source, Device, Browser, Os, Language, Country, Referrer }
+
+    private static string Dash(string? value) => string.IsNullOrEmpty(value) ? "—" : value;
 
     static readonly (string Label, int Days)[] Frames = [("24h", 1), ("7d", 7), ("30d", 30), ("All", 0)];
 
@@ -174,6 +184,14 @@
             (SortCol.Source, false) => q.OrderBy(c => c.Source.ToString()),
             (SortCol.Device, true) => q.OrderByDescending(c => c.Device.ToString()),
             (SortCol.Device, false) => q.OrderBy(c => c.Device.ToString()),
+            (SortCol.Browser, true) => q.OrderByDescending(c => c.Browser ?? ""),
+            (SortCol.Browser, false) => q.OrderBy(c => c.Browser ?? ""),
+            (SortCol.Os, true) => q.OrderByDescending(c => c.Os ?? ""),
+            (SortCol.Os, false) => q.OrderBy(c => c.Os ?? ""),
+            (SortCol.Language, true) => q.OrderByDescending(c => c.Language ?? ""),
+            (SortCol.Language, false) => q.OrderBy(c => c.Language ?? ""),
+            (SortCol.Country, true) => q.OrderByDescending(c => c.Country ?? ""),
+            (SortCol.Country, false) => q.OrderBy(c => c.Country ?? ""),
             (SortCol.Referrer, true) => q.OrderByDescending(c => c.ReferrerHost ?? ""),
             _ => q.OrderBy(c => c.ReferrerHost ?? ""),
         };

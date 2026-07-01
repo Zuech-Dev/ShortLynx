@@ -295,11 +295,11 @@ else
             {
                 _shortUrl = await ShortUrlBuilder.BuildAsync(db, _link, sc.Code, DashboardOpts.Value.PublicBaseUrl);
                 var raw = await db.VisitEntities.Where(v => v.ShortCodeId == sc.Id)
-                    .Select(v => new { v.HashedIp, v.Source, v.Device, v.ClickedAt, v.ReferrerHost })
+                    .Select(v => new { v.HashedIp, v.Source, v.Device, v.ClickedAt, v.ReferrerHost, v.Browser, v.Os, v.Country, v.Language })
                     .ToListAsync();
                 _breakdown = ClickAggregator.Summarize(
-                    raw.Select(v => new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt)).ToList());
-                _clicks = raw.Select(v => new ClickRow(v.ClickedAt, v.Source, v.Device, v.ReferrerHost)).ToList();
+                    raw.Select(v => new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Browser, v.Os, v.Country, v.Language)).ToList());
+                _clicks = raw.Select(v => new ClickRow(v.ClickedAt, v.Source, v.Device, v.ReferrerHost, v.Browser, v.Os, v.Country, v.Language)).ToList();
             }
         }
         else
@@ -321,11 +321,11 @@ else
                 clickMap.GetValueOrDefault(c.Id, 0))).ToList();
 
             var raw = await db.UserVisitEntities.Where(v => codeIds.Contains(v.UserLinkCodeId))
-                .Select(v => new { v.HashedIp, v.Source, v.Device, v.ClickedAt, v.ReferrerHost })
+                .Select(v => new { v.HashedIp, v.Source, v.Device, v.ClickedAt, v.ReferrerHost, v.Browser, v.Os, v.Country, v.Language })
                 .ToListAsync();
             _breakdown = ClickAggregator.Summarize(
-                raw.Select(v => new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt)).ToList());
-            _clicks = raw.Select(v => new ClickRow(v.ClickedAt, v.Source, v.Device, v.ReferrerHost)).ToList();
+                raw.Select(v => new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Browser, v.Os, v.Country, v.Language)).ToList());
+            _clicks = raw.Select(v => new ClickRow(v.ClickedAt, v.Source, v.Device, v.ReferrerHost, v.Browser, v.Os, v.Country, v.Language)).ToList();
         }
 
         // Pinning is offered for links in the current account (not when a super-admin views another's).

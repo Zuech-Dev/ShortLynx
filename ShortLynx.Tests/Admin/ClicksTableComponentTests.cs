@@ -24,6 +24,25 @@ public class ClicksTableComponentTests : BunitContext
     }
 
     [Fact]
+    public void Renders_BrowserOsLanguageCountry_Columns()
+    {
+        IReadOnlyList<ClickRow> rows =
+        [
+            new(new(2026, 6, 20, 10, 0, 0, TimeSpan.Zero), ClickSource.Twitter, DeviceType.Mobile,
+                "t.co", Browser: "Safari", Os: "iOS", Country: "US", Language: "en"),
+        ];
+        var cut = Render<ClicksTable>(p => p.Add(c => c.Clicks, rows));
+
+        Assert.NotNull(cut.Find("[data-testid=sort-Browser]"));
+        Assert.NotNull(cut.Find("[data-testid=sort-Country]"));
+        var row = cut.Find("tbody tr").InnerHtml;
+        Assert.Contains("Safari", row);
+        Assert.Contains("iOS", row);
+        Assert.Contains("US", row);
+        Assert.Contains("en", row);
+    }
+
+    [Fact]
     public void Filter_ByPlatform_ReducesRows()
     {
         var cut = Render<ClicksTable>(p => p.Add(c => c.Clicks, Sample()));

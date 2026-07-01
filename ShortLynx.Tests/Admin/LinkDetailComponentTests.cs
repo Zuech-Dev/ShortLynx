@@ -179,6 +179,13 @@ public class LinkDetailComponentTests : BunitContext
         Assert.NotEmpty(cut.FindAll("[data-testid=bar-tooltip]"));
         Assert.Contains("Total clicks: 3", cut.Markup);
         Assert.Contains("Unique clicks: 2", cut.Markup);
+        // New Phase 0.5 dimensions surface in the breakdown card...
+        Assert.Contains("Safari", cut.Find("[data-testid=browsers]").InnerHtml);
+        Assert.Contains("iOS", cut.Find("[data-testid=operating-systems]").InnerHtml);
+        Assert.Contains("en", cut.Find("[data-testid=languages]").InnerHtml);
+        // ...and the clicks table gains a sortable Browser column.
+        Assert.NotNull(cut.Find("[data-testid=sort-Browser]"));
+        Assert.Contains("Chrome", cut.Find("[data-testid=clicks-table]").InnerHtml);
     }
 
     [Fact]
@@ -210,16 +217,18 @@ public class LinkDetailComponentTests : BunitContext
         db.LinkEntities.Add(link);
         db.ShortCodeEntities.Add(sc);
         db.VisitEntities.AddRange(
-            Visit(sc.Id, "ip1", ClickSource.Twitter, DeviceType.Mobile),
-            Visit(sc.Id, "ip1", ClickSource.Twitter, DeviceType.Mobile),
-            Visit(sc.Id, "ip2", ClickSource.Direct, DeviceType.Desktop));
+            Visit(sc.Id, "ip1", ClickSource.Twitter, DeviceType.Mobile, "Safari", "iOS", "en"),
+            Visit(sc.Id, "ip1", ClickSource.Twitter, DeviceType.Mobile, "Safari", "iOS", "en"),
+            Visit(sc.Id, "ip2", ClickSource.Direct, DeviceType.Desktop, "Chrome", "Windows", "fr"));
         db.SaveChanges();
         return link.Id;
 
-        static VisitEntity Visit(Guid scId, string ip, ClickSource source, DeviceType device) => new()
+        static VisitEntity Visit(Guid scId, string ip, ClickSource source, DeviceType device,
+            string? browser = null, string? os = null, string? language = null) => new()
         {
             Id = Guid.CreateVersion7(), ShortCodeId = scId, HashedIp = ip,
             Source = source, Device = device, ClickedAt = DateTimeOffset.UtcNow,
+            Browser = browser, Os = os, Language = language,
         };
     }
 

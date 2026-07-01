@@ -28,7 +28,8 @@ public class BackgroundVisitWriterTests
         var writer = new BackgroundVisitWriter(sink, scopeFactory, opts,
             new ShortLynx.Services.Analytics.UserAgentParser(),
             new ShortLynx.Services.Analytics.ReferrerReducer(),
-            new ShortLynx.Services.Analytics.LanguageReducer());
+            new ShortLynx.Services.Analytics.LanguageReducer(),
+            new ShortLynx.Services.Analytics.NullGeoIpResolver());
         return (sink, db, writer);
     }
 

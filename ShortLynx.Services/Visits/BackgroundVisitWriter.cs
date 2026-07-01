@@ -16,7 +16,8 @@ public sealed class BackgroundVisitWriter(
     IOptions<VisitSinkOptions> options,
     IUserAgentParser uaParser,
     IReferrerReducer referrerReducer,
-    ILanguageReducer languageReducer) : BackgroundService
+    ILanguageReducer languageReducer,
+    IGeoIpResolver geoIp) : BackgroundService
 {
     private readonly VisitSinkOptions _opts = options.Value;
 
@@ -77,6 +78,7 @@ public sealed class BackgroundVisitWriter(
                     Browser = d.Browser,
                     Os = d.Os,
                     ReferrerHost = d.ReferrerHost,
+                    Country = d.Country,
                     Language = d.Language,
                     NavigationType = d.NavigationType,
                 };
@@ -100,6 +102,7 @@ public sealed class BackgroundVisitWriter(
                     Browser = d.Browser,
                     Os = d.Os,
                     ReferrerHost = d.ReferrerHost,
+                    Country = d.Country,
                     Language = d.Language,
                     NavigationType = d.NavigationType,
                 };
@@ -111,13 +114,12 @@ public sealed class BackgroundVisitWriter(
     }
 
     // Reduces a visit's raw signals to the stored low-entropy dimensions. A privacy signal (DNT / Sec-GPC)
-    // suppresses every derived dimension — the click still counts, but carries no profile. Country is left
-    // null here; a GeoIP resolver populates it separately.
+    // suppresses every derived dimension — the click still counts, but carries no profile.
     private (ClickSource Source, DeviceType Device, string? Browser, string? Os, string? ReferrerHost,
-        string? Language, string? NavigationType) Derive(VisitEvent e)
+        string? Country, string? Language, string? NavigationType) Derive(VisitEvent e)
     {
         if (e.PrivacySignal)
-            return (ClickSource.Direct, DeviceType.Unknown, null, null, null, null, null);
+            return (ClickSource.Direct, DeviceType.Unknown, null, null, null, null, null, null);
 
         var ua = uaParser.Parse(e.UserAgent);
         var nav = string.IsNullOrWhiteSpace(e.SecFetchSite) ? null : e.SecFetchSite.Trim().ToLowerInvariant();
@@ -127,6 +129,7 @@ public sealed class BackgroundVisitWriter(
             ua.Browser,
             ua.Os,
             referrerReducer.Host(e.Referrer),
+            geoIp.ResolveCountry(e.RawIp),
             languageReducer.Primary(e.AcceptLanguage),
             nav);
     }

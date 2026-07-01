@@ -54,6 +54,7 @@ public static class ServiceExtensions
         services.AddSingleton<ShortLynx.Services.Analytics.IUserAgentParser, ShortLynx.Services.Analytics.UserAgentParser>();
         services.AddSingleton<ShortLynx.Services.Analytics.IReferrerReducer, ShortLynx.Services.Analytics.ReferrerReducer>();
         services.AddSingleton<ShortLynx.Services.Analytics.ILanguageReducer, ShortLynx.Services.Analytics.LanguageReducer>();
+        services.AddSingleton<ShortLynx.Services.Analytics.IGeoIpResolver, ShortLynx.Services.Analytics.NullGeoIpResolver>();
         services.AddSingleton<InMemoryVisitEventSink>();
         services.AddSingleton<IVisitEventSink>(sp => sp.GetRequiredService<InMemoryVisitEventSink>());
         services.AddHostedService<BackgroundVisitWriter>();

@@ -11,15 +11,20 @@ public interface ILinkService
 {
     Task<AnonymousLinkResult> CreateAnonymousLinkAsync(string url, ApiKeyEntity owner, CancellationToken ct = default);
 
-    /// <summary>Creates a link owned by an account (admin dashboard); no owning API key.</summary>
-    Task<AnonymousLinkResult> CreateAnonymousLinkAsync(string url, Guid accountId, Guid? createdByUserAccountId = null, CancellationToken ct = default);
+    /// <summary>
+    /// Creates a link owned by an account (admin dashboard); no owning API key. Optionally assigns it to
+    /// one of the account's campaigns at creation — throws <see cref="ArgumentException"/> if the campaign
+    /// isn't the account's.
+    /// </summary>
+    Task<AnonymousLinkResult> CreateAnonymousLinkAsync(string url, Guid accountId, Guid? createdByUserAccountId = null, Guid? campaignId = null, CancellationToken ct = default);
 
     /// <summary>
     /// Creates an account-owned, user-attributed (Mode 2) link. The link gets no anonymous short code —
     /// it resolves only through the per-recipient codes minted via the recipient overload of
     /// <see cref="CreateUserLinkCodesAsync(Guid, IReadOnlyCollection{CodeRecipient}, bool, CancellationToken)"/>.
+    /// Optionally assigns it to one of the account's campaigns at creation.
     /// </summary>
-    Task<LinkEntity> CreateUserAttributedLinkAsync(string url, Guid accountId, Guid? createdByUserAccountId = null, CancellationToken ct = default);
+    Task<LinkEntity> CreateUserAttributedLinkAsync(string url, Guid accountId, Guid? createdByUserAccountId = null, Guid? campaignId = null, CancellationToken ct = default);
 
     /// <summary>
     /// Bulk-mints one UserLinkCode per userId. Idempotent: returns the existing code

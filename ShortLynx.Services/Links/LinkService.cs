@@ -19,16 +19,16 @@ public sealed class LinkService(
     /// <summary>Creates an API-key-owned link (REST API path) for the key's account.</summary>
     public Task<AnonymousLinkResult> CreateAnonymousLinkAsync(
         string url, ApiKeyEntity owner, CancellationToken ct = default)
-        => CreateLinkAsync(url, owner.AccountId, link => link.ApiKeyId = owner.Id, ct);
+        => CreateLinkAsync(url, owner.AccountId, link => link.ApiKeyId = owner.Id, campaignId: null, ct);
 
     /// <summary>Creates a link owned by an account (admin dashboard path).</summary>
     public Task<AnonymousLinkResult> CreateAnonymousLinkAsync(
-        string url, Guid accountId, Guid? createdByUserAccountId = null, CancellationToken ct = default)
-        => CreateLinkAsync(url, accountId, link => link.UserAccountId = createdByUserAccountId, ct);
+        string url, Guid accountId, Guid? createdByUserAccountId = null, Guid? campaignId = null, CancellationToken ct = default)
+        => CreateLinkAsync(url, accountId, link => link.UserAccountId = createdByUserAccountId, campaignId, ct);
 
     /// <summary>Creates an account-owned, user-attributed (Mode 2) link with no anonymous short code.</summary>
     public async Task<LinkEntity> CreateUserAttributedLinkAsync(
-        string url, Guid accountId, Guid? createdByUserAccountId = null, CancellationToken ct = default)
+        string url, Guid accountId, Guid? createdByUserAccountId = null, Guid? campaignId = null, CancellationToken ct = default)
     {
         if (!await entitlements.CanCreateLinkAsync(accountId, ct))
             throw new EntitlementException("Your plan's link limit has been reached.");
@@ -38,6 +38,7 @@ public sealed class LinkService(
         var validation = await urlValidator.ValidateAsync(url);
         if (!validation.IsValid)
             throw new ArgumentException(validation.Reason, nameof(url));
+        await ValidateCampaignAsync(campaignId, accountId, ct);
 
         var link = new LinkEntity
         {
@@ -48,6 +49,7 @@ public sealed class LinkService(
             IsActive = true,
             AccountId = accountId,
             UserAccountId = createdByUserAccountId,
+            CampaignId = campaignId,
         };
         db.LinkEntities.Add(link);
         await db.SaveChangesAsync(ct);
@@ -55,7 +57,7 @@ public sealed class LinkService(
     }
 
     private async Task<AnonymousLinkResult> CreateLinkAsync(
-        string url, Guid accountId, Action<LinkEntity> assignProvenance, CancellationToken ct)
+        string url, Guid accountId, Action<LinkEntity> assignProvenance, Guid? campaignId, CancellationToken ct)
     {
         if (!await entitlements.CanCreateLinkAsync(accountId, ct))
             throw new EntitlementException("Your plan's link limit has been reached.");
@@ -63,6 +65,7 @@ public sealed class LinkService(
         var validation = await urlValidator.ValidateAsync(url);
         if (!validation.IsValid)
             throw new ArgumentException(validation.Reason, nameof(url));
+        await ValidateCampaignAsync(campaignId, accountId, ct);
 
         var link = new LinkEntity
         {
@@ -72,12 +75,21 @@ public sealed class LinkService(
             CreatedAt = DateTimeOffset.UtcNow,
             IsActive = true,
             AccountId = accountId,
+            CampaignId = campaignId,
         };
         assignProvenance(link);
         db.LinkEntities.Add(link);
         await db.SaveChangesAsync(ct);
 
         return await MintShortCodeAsync(link, ct);
+    }
+
+    // Ensures a chosen campaign belongs to the same account before a link is stamped with it.
+    private async Task ValidateCampaignAsync(Guid? campaignId, Guid accountId, CancellationToken ct)
+    {
+        if (campaignId is { } cid &&
+            !await db.CampaignEntities.AnyAsync(c => c.Id == cid && c.AccountId == accountId, ct))
+            throw new ArgumentException("Campaign not found or not in this account.", nameof(campaignId));
     }
 
     // Mints a unique short code for a freshly-created link, retrying on the (rare) code collision.

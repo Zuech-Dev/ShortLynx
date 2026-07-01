@@ -204,7 +204,7 @@ else
     async Task CopyNewKey()
     {
         if (_newPlaintextKey is not null)
-            await JS.InvokeVoidAsync("navigator.clipboard.writeText", _newPlaintextKey);
+            await JS.InvokeVoidAsync("shortlynxCopy", _newPlaintextKey);
     }
 
     sealed record ApiKeyRow(Guid Id, string Name, string Prefix, string[] Scopes, bool IsActive, DateTimeOffset CreatedAt);

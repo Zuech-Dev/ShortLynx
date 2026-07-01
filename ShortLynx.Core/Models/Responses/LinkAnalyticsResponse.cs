@@ -1,18 +1,11 @@
+using ShortLynx.Services.Analytics;
+
 namespace ShortLynx.Core.Models.Responses;
 
 public sealed record CodeClickStats(
     string Code,
     Guid? UserId,
     long ClickCount);
-
-/// <summary>Clicks attributed to one platform (see <c>ClickSource</c>).</summary>
-public sealed record SourceCount(string Source, long Count);
-
-/// <summary>Clicks from one device class (see <c>DeviceType</c>).</summary>
-public sealed record DeviceCount(string Device, long Count);
-
-/// <summary>Clicks on a single UTC calendar day, for the click-over-time series.</summary>
-public sealed record DailyClicks(DateOnly Date, long Count);
 
 public sealed record LinkAnalyticsResponse(
     Guid LinkId,

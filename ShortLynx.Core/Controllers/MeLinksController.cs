@@ -2,7 +2,7 @@ using System.Text;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
-using ShortLynx.Core.Analytics;
+using ShortLynx.Services.Analytics;
 using ShortLynx.Core.Models.Requests;
 using ShortLynx.Core.Models.Responses;
 using ShortLynx.Core.Options;

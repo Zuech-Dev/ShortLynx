@@ -2,6 +2,8 @@
 @attribute [Authorize]
 @using Microsoft.Extensions.DependencyInjection
 @using Microsoft.Extensions.Options
+@using ShortLynx.Services.Analytics
+@using ShortLynx.Services.Campaigns
 @using ShortLynx.Services.Links
 @inject IDbContextFactory<ShortLynxDbContext> DbFactory
 @inject IServiceScopeFactory ScopeFactory
@@ -33,8 +35,24 @@ else
                 <dt class="font-medium text-gray-500">URL</dt>
                 <dd><a class="text-blue-700 hover:underline" href="@_link!.OriginalUrl" target="_blank" rel="noopener">@_link.OriginalUrl</a></dd>
 
-                <dt class="font-medium text-gray-500">Short Code</dt>
-                <dd><code>@_shortCode</code></dd>
+                <dt class="font-medium text-gray-500">Short URL</dt>
+                <dd>
+                    @if (!string.IsNullOrEmpty(_shortUrl))
+                    {
+                        <span class="inline-flex items-center gap-2 flex-wrap">
+                            <a class="text-blue-700 hover:underline break-all" href="@_shortUrl" target="_blank" rel="noopener" data-testid="short-url">@_shortUrl</a>
+                            <button class="btn btn-outline-success" @onclick="CopyShortUrl" data-testid="copy-short-url">Copy</button>
+                            @if (_shortUrlCopied)
+                            {
+                                <span class="text-green-600 text-sm" data-testid="short-url-copied">Copied.</span>
+                            }
+                        </span>
+                    }
+                    else
+                    {
+                        <span class="text-gray-500">— <span class="text-sm">(per-recipient codes below)</span></span>
+                    }
+                </dd>
 
                 <dt class="font-medium text-gray-500">Mode</dt>
                 <dd>@_link.Mode</dd>
@@ -94,34 +112,37 @@ else
         </div>
     }
 
-    @if (_link.Mode == LinkMode.Anonymous)
+    @if (_canPin)
     {
-        <h5 class="text-base font-semibold mb-2">Click Analytics</h5>
-        <p class="text-gray-500">Total clicks: <strong>@_totalClicks</strong></p>
-
-        @if (_recentVisits.Count > 0)
-        {
-            <table class="data-table">
-                <thead>
-                <tr><th>Clicked At</th><th>Referrer</th></tr>
-                </thead>
-                <tbody>
-                @foreach (var v in _recentVisits)
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title">Campaign</h5>
+                <p class="text-gray-500 text-sm">Group this link under a campaign for roll-up analytics and a shared UTM template.</p>
+                <div class="flex gap-2 items-center max-w-[520px]">
+                    <select class="field-input" @bind="_selectedCampaignKey" data-testid="campaign-select">
+                        <option value="">No campaign</option>
+                        @foreach (var c in _campaignOptions)
+                        {
+                            <option value="@c.Id">@c.Name</option>
+                        }
+                    </select>
+                    <button class="btn btn-primary" data-testid="campaign-save" @onclick="SaveCampaign">Save</button>
+                </div>
+                @if (_campaignOptions.Count == 0)
                 {
-                    <tr>
-                        <td class="whitespace-nowrap">@v.ClickedAt.ToString("yyyy-MM-dd HH:mm") UTC</td>
-                        <td class="text-gray-500 text-sm truncate max-w-[300px]">@(v.Referrer ?? "—")</td>
-                    </tr>
+                    <div class="text-sm text-gray-500 mt-1">No campaigns yet — create one under <a class="text-blue-700 hover:underline" href="/campaigns">Campaigns</a>.</div>
                 }
-                </tbody>
-            </table>
-            @if (_totalClicks > 50)
-            {
-                <p class="text-gray-500 text-sm mt-1">Showing 50 most recent clicks.</p>
-            }
-        }
+                @if (_campaignSaved)
+                {
+                    <div class="text-green-600 text-sm mt-1" data-testid="campaign-saved">Saved.</div>
+                }
+            </div>
+        </div>
     }
-    else
+
+    <ClickBreakdownCard Breakdown="_breakdown" />
+
+    @if (_link.Mode == LinkMode.UserAttributed)
     {
         <div class="card mb-4">
             <div class="card-body">
@@ -192,6 +213,8 @@ else
             </table>
         }
     }
+
+    <ClicksTable Clicks="_clicks" />
 }
 
 @code {
@@ -203,15 +226,22 @@ else
     Guid _uid;
     LinkEntity? _link;
     string _shortCode = string.Empty;
-    int _totalClicks;
-    List<VisitEntity> _recentVisits = [];
+    string _shortUrl = string.Empty;
+    bool _shortUrlCopied;
+    List<ClickRow> _clicks = [];
     List<UserCodeRow> _userRows = [];
+    ClickBreakdown? _breakdown;
 
     // Custom-domain pinning (current-account links only).
     bool _canPin, _pinSaved;
     Guid _accountId;
     List<DomainOption> _verifiedDomains = [];
     string _selectedDomainKey = string.Empty;
+
+    // Campaign assignment (current-account links only).
+    bool _campaignSaved;
+    List<CampaignOption> _campaignOptions = [];
+    string _selectedCampaignKey = string.Empty;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -233,6 +263,10 @@ else
     {
         _loaded = false;
         _notFound = false;
+        _breakdown = null;
+        _clicks = [];
+        _shortUrl = string.Empty;
+        _shortUrlCopied = false;
 
         await using var db = await DbFactory.CreateDbContextAsync();
 
@@ -259,12 +293,13 @@ else
 
             if (sc is not null)
             {
-                _totalClicks = await db.VisitEntities.CountAsync(v => v.ShortCodeId == sc.Id);
-                _recentVisits = await db.VisitEntities
-                    .Where(v => v.ShortCodeId == sc.Id)
-                    .OrderByDescending(v => v.Id)
-                    .Take(50)
+                _shortUrl = await ShortUrlBuilder.BuildAsync(db, _link, sc.Code, DashboardOpts.Value.PublicBaseUrl);
+                var raw = await db.VisitEntities.Where(v => v.ShortCodeId == sc.Id)
+                    .Select(v => new { v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Referrer })
                     .ToListAsync();
+                _breakdown = ClickAggregator.Summarize(
+                    raw.Select(v => new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt)).ToList());
+                _clicks = raw.Select(v => new ClickRow(v.ClickedAt, v.Source, v.Device, v.Referrer)).ToList();
             }
         }
         else
@@ -284,6 +319,13 @@ else
             var clickMap = clicks.ToDictionary(x => x.Id, x => x.Count);
             _userRows = codes.Select(c => new UserCodeRow(c.Code, c.Recipient, c.IsOneTimeUse,
                 clickMap.GetValueOrDefault(c.Id, 0))).ToList();
+
+            var raw = await db.UserVisitEntities.Where(v => codeIds.Contains(v.UserLinkCodeId))
+                .Select(v => new { v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Referrer })
+                .ToListAsync();
+            _breakdown = ClickAggregator.Summarize(
+                raw.Select(v => new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt)).ToList());
+            _clicks = raw.Select(v => new ClickRow(v.ClickedAt, v.Source, v.Device, v.Referrer)).ToList();
         }
 
         // Pinning is offered for links in the current account (not when a super-admin views another's).
@@ -296,10 +338,34 @@ else
                 .Select(d => new DomainOption(d.Id, d.Domain))
                 .ToListAsync();
             _selectedDomainKey = _link.CustomDomainId?.ToString() ?? string.Empty;
+
+            _campaignOptions = await db.CampaignEntities
+                .Where(c => c.AccountId == _accountId)
+                .OrderBy(c => c.Name)
+                .Select(c => new CampaignOption(c.Id, c.Name))
+                .ToListAsync();
+            _selectedCampaignKey = _link.CampaignId?.ToString() ?? string.Empty;
         }
 
         _loaded = true;
     }
+
+    async Task SaveCampaign()
+    {
+        if (!_canPin) return;
+        _campaignSaved = false;
+        Guid? campaignId = Guid.TryParse(_selectedCampaignKey, out var id) ? id : null;
+
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        var svc = scope.ServiceProvider.GetRequiredService<ILinkService>();
+        if (await svc.SetLinkCampaignAsync(Id, campaignId, _accountId))
+        {
+            _campaignSaved = true;
+            await LoadAsync();
+        }
+    }
+
+    sealed record CampaignOption(Guid Id, string Name);
 
     async Task SavePin()
     {
@@ -352,7 +418,14 @@ else
     async Task CopyAllMinted()
     {
         var text = string.Join('\n', _minted.Select(m => m.Url));
-        await JS.InvokeVoidAsync("navigator.clipboard.writeText", text);
+        await JS.InvokeVoidAsync("shortlynxCopy", text);
+    }
+
+    async Task CopyShortUrl()
+    {
+        if (string.IsNullOrEmpty(_shortUrl)) return;
+        await JS.InvokeVoidAsync("shortlynxCopy", _shortUrl);
+        _shortUrlCopied = true;
     }
 
     sealed class ProvisionForm

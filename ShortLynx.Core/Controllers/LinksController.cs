@@ -9,6 +9,7 @@ using ShortLynx.Data.Context;
 using ShortLynx.Data.Entities;
 using ShortLynx.Data.Enums;
 using ShortLynx.Services.ApiKeys;
+using ShortLynx.Services.Entitlements;
 using ShortLynx.Services.Links;
 
 namespace ShortLynx.Core.Controllers;
@@ -36,6 +37,10 @@ public class LinksController(ILinkService linkService, ShortLynxDbContext db) : 
         catch (ArgumentException ex)
         {
             return BadRequest(new { error = ex.Message });
+        }
+        catch (EntitlementException ex)
+        {
+            return StatusCode(StatusCodes.Status402PaymentRequired, new { error = ex.Message });
         }
     }
 

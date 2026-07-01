@@ -34,7 +34,7 @@ public class PostgresDbOperations(ShortLynxDbContext db) : IDbOperations
     {
         var conn = GetConnection();
         await using var writer = await conn.BeginBinaryImportAsync(
-            """COPY "Visits" ("Id","ShortCodeId","ClickedAt","HashedIp","Referrer","UserAgent") FROM STDIN (FORMAT BINARY)""",
+            """COPY "Visits" ("Id","ShortCodeId","ClickedAt","HashedIp","Source","Device","Browser","Os","ReferrerHost","Country","Language","NavigationType") FROM STDIN (FORMAT BINARY)""",
             ct);
         foreach (var v in visits)
         {
@@ -43,10 +43,14 @@ public class PostgresDbOperations(ShortLynxDbContext db) : IDbOperations
             await writer.WriteAsync(v.ShortCodeId, NpgsqlDbType.Uuid, ct);
             await writer.WriteAsync(v.ClickedAt, NpgsqlDbType.TimestampTz, ct);
             await writer.WriteAsync(v.HashedIp, NpgsqlDbType.Text, ct);
-            if (v.Referrer is null) await writer.WriteNullAsync(ct);
-            else await writer.WriteAsync(v.Referrer, NpgsqlDbType.Text, ct);
-            if (v.UserAgent is null) await writer.WriteNullAsync(ct);
-            else await writer.WriteAsync(v.UserAgent, NpgsqlDbType.Text, ct);
+            await writer.WriteAsync((int)v.Source, NpgsqlDbType.Integer, ct);
+            await writer.WriteAsync((int)v.Device, NpgsqlDbType.Integer, ct);
+            await WriteNullableTextAsync(writer, v.Browser, ct);
+            await WriteNullableTextAsync(writer, v.Os, ct);
+            await WriteNullableTextAsync(writer, v.ReferrerHost, ct);
+            await WriteNullableTextAsync(writer, v.Country, ct);
+            await WriteNullableTextAsync(writer, v.Language, ct);
+            await WriteNullableTextAsync(writer, v.NavigationType, ct);
         }
         await writer.CompleteAsync(ct);
     }
@@ -55,7 +59,7 @@ public class PostgresDbOperations(ShortLynxDbContext db) : IDbOperations
     {
         var conn = GetConnection();
         await using var writer = await conn.BeginBinaryImportAsync(
-            """COPY "UserVisits" ("Id","UserLinkCodeId","UserId","ClickedAt","HashedIp","Referrer","UserAgent") FROM STDIN (FORMAT BINARY)""",
+            """COPY "UserVisits" ("Id","UserLinkCodeId","UserId","ClickedAt","HashedIp","Source","Device","Browser","Os","ReferrerHost","Country","Language","NavigationType") FROM STDIN (FORMAT BINARY)""",
             ct);
         foreach (var v in visits)
         {
@@ -66,12 +70,22 @@ public class PostgresDbOperations(ShortLynxDbContext db) : IDbOperations
             else await writer.WriteAsync(v.UserId.Value, NpgsqlDbType.Uuid, ct);
             await writer.WriteAsync(v.ClickedAt, NpgsqlDbType.TimestampTz, ct);
             await writer.WriteAsync(v.HashedIp, NpgsqlDbType.Text, ct);
-            if (v.Referrer is null) await writer.WriteNullAsync(ct);
-            else await writer.WriteAsync(v.Referrer, NpgsqlDbType.Text, ct);
-            if (v.UserAgent is null) await writer.WriteNullAsync(ct);
-            else await writer.WriteAsync(v.UserAgent, NpgsqlDbType.Text, ct);
+            await writer.WriteAsync((int)v.Source, NpgsqlDbType.Integer, ct);
+            await writer.WriteAsync((int)v.Device, NpgsqlDbType.Integer, ct);
+            await WriteNullableTextAsync(writer, v.Browser, ct);
+            await WriteNullableTextAsync(writer, v.Os, ct);
+            await WriteNullableTextAsync(writer, v.ReferrerHost, ct);
+            await WriteNullableTextAsync(writer, v.Country, ct);
+            await WriteNullableTextAsync(writer, v.Language, ct);
+            await WriteNullableTextAsync(writer, v.NavigationType, ct);
         }
         await writer.CompleteAsync(ct);
+    }
+
+    private static async Task WriteNullableTextAsync(NpgsqlBinaryImporter writer, string? value, CancellationToken ct)
+    {
+        if (value is null) await writer.WriteNullAsync(ct);
+        else await writer.WriteAsync(value, NpgsqlDbType.Text, ct);
     }
 
     private NpgsqlConnection GetConnection()

@@ -9,6 +9,7 @@ using ShortLynx.Core.Options;
 using ShortLynx.Data.Context;
 using ShortLynx.Data.Entities;
 using ShortLynx.Data.Enums;
+using ShortLynx.Services.Entitlements;
 using ShortLynx.Services.Links;
 using ShortLynx.Services.Qr;
 
@@ -64,6 +65,11 @@ public class MeLinksController(
         catch (ArgumentException ex)
         {
             return BadRequest(new { error = ex.Message });
+        }
+        catch (EntitlementException ex)
+        {
+            // Plan limit / feature not in tier — "Payment Required" signals an upgrade is needed.
+            return StatusCode(StatusCodes.Status402PaymentRequired, new { error = ex.Message });
         }
     }
 

@@ -223,6 +223,11 @@ else
             // URL validation / SSRF rejection.
             _createError = ex.Message;
         }
+        catch (ShortLynx.Services.Entitlements.EntitlementException ex)
+        {
+            // Plan limit / feature not in tier (never thrown under the OSS UnlimitedEntitlements default).
+            _createError = ex.Message;
+        }
     }
 
     async Task CopyNewCode()

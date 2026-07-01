@@ -9,6 +9,7 @@ using ShortLynx.Services.ApiKeys;
 using ShortLynx.Services.Auth;
 using ShortLynx.Services.Campaigns;
 using ShortLynx.Services.Domains;
+using ShortLynx.Services.Entitlements;
 using ShortLynx.Services.Email;
 using ShortLynx.Services.Links;
 using ShortLynx.Services.MagicLinks;
@@ -68,6 +69,9 @@ public static class ServiceExtensions
         services.AddScoped<IApiKeyService, ApiKeyService>();
         services.AddScoped<IMagicLinkService, MagicLinkService>();
         // Link creation from the dashboard (user-owned links).
+        // Open-source default: unlimited at every tier, so self-hosting is fully featured and free.
+        // A hosted deployment replaces this with a billing-backed policy (outside this repo).
+        services.AddSingleton<IEntitlements, UnlimitedEntitlements>();
         services.AddScoped<ILinkService, LinkService>();
         services.AddScoped<ICampaignService, CampaignService>();
         services.AddScoped<IShortCodeGenerator, HashBase62Generator>();

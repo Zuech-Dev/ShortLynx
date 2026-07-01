@@ -6,6 +6,7 @@ using ShortLynx.Services.ApiKeys;
 using ShortLynx.Services.Auth;
 using ShortLynx.Services.Campaigns;
 using ShortLynx.Services.Domains;
+using ShortLynx.Services.Entitlements;
 using ShortLynx.Services.Email;
 using ShortLynx.Services.Links;
 using ShortLynx.Services.MagicLinks;
@@ -44,6 +45,9 @@ public static class ServiceExtensions
         services.AddScoped<IApiKeyService, ApiKeyService>();
         services.AddScoped<IShortCodeGenerator, HashBase62Generator>();
         services.AddSingleton<IUrlValidationService, UrlValidationService>();
+        // Open-source default: unlimited at every tier, so self-hosting is fully featured and free.
+        // A hosted deployment replaces this with a billing-backed policy (outside this repo).
+        services.AddSingleton<IEntitlements, UnlimitedEntitlements>();
         services.AddScoped<ILinkService, LinkService>();
         services.AddScoped<ICampaignService, CampaignService>();
         services.AddScoped<IMagicLinkService, MagicLinkService>();
@@ -63,6 +67,11 @@ public static class ServiceExtensions
         services.Configure<AccessControlOptions>(configuration.GetSection("Admin"));
         services.AddScoped<IUserSessionService, UserSessionService>();
 
+        // Pure reducers the writer uses to derive low-entropy dimensions from raw signals at ingest.
+        services.AddSingleton<ShortLynx.Services.Analytics.IUserAgentParser, ShortLynx.Services.Analytics.UserAgentParser>();
+        services.AddSingleton<ShortLynx.Services.Analytics.IReferrerReducer, ShortLynx.Services.Analytics.ReferrerReducer>();
+        services.AddSingleton<ShortLynx.Services.Analytics.ILanguageReducer, ShortLynx.Services.Analytics.LanguageReducer>();
+        services.AddSingleton<ShortLynx.Services.Analytics.IGeoIpResolver, ShortLynx.Services.Analytics.NullGeoIpResolver>();
         services.AddSingleton<InMemoryVisitEventSink>();
         services.AddSingleton<IVisitEventSink>(sp => sp.GetRequiredService<InMemoryVisitEventSink>());
         services.AddHostedService<BackgroundVisitWriter>();

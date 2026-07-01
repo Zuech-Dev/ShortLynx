@@ -88,6 +88,16 @@ GET /{code}
 - **Known tradeoff**: in-process channel means visit events in-flight at crash time are lost. Acceptable for most self-hosted use cases.
 - A pluggable `IVisitEventSink` interface will allow contributors to swap in persistent queue implementations (Hangfire, RabbitMQ, Azure Service Bus, etc.)
 
+### Privacy posture — derive at ingest, discard the raw
+Every request signal is reduced to a low-entropy dimension in the writer, and the raw value is **never persisted**:
+- **IP** → keyed HMAC hash (secret pepper + hourly-rotating component); optional country via a GeoIP resolver. Raw IP never stored.
+- **User-Agent** → `{ Browser, Os, Device }` buckets (`IUserAgentParser`). Raw UA never stored — it is a fingerprint vector.
+- **Referer** → registrable host only (`IReferrerReducer`); path + query dropped (they can carry search terms / tokens).
+- **Accept-Language** → primary subtag; **Sec-Fetch-Site** → navigation type.
+- **DNT / Sec-GPC = 1** → the click is counted but **all derived dimensions are left null** (no per-row profile).
+
+**Non-goals (deliberately rejected):** no high-entropy Client Hints, no JS interstitial to harvest screen/timezone/canvas, no tracking cookie on the redirect, no city-level geo or ISP/ASN retention. A 302 is inherently low-surveillance; the pipeline keeps it that way.
+
 ---
 
 ## Decided: Database & Provider Strategy

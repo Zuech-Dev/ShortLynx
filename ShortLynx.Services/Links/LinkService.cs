@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using ShortLynx.Data.Context;
 using ShortLynx.Data.Entities;
 using ShortLynx.Data.Enums;
+using ShortLynx.Services.Entitlements;
 using ShortLynx.Services.ShortCodes;
 using ShortLynx.Services.UrlValidation;
 
@@ -10,7 +11,8 @@ namespace ShortLynx.Services.Links;
 public sealed class LinkService(
     ShortLynxDbContext db,
     IShortCodeGenerator codeGenerator,
-    IUrlValidationService urlValidator) : ILinkService
+    IUrlValidationService urlValidator,
+    IEntitlements entitlements) : ILinkService
 {
     private const int MaxCodeAttempts = 5;
 
@@ -28,6 +30,11 @@ public sealed class LinkService(
     public async Task<LinkEntity> CreateUserAttributedLinkAsync(
         string url, Guid accountId, Guid? createdByUserAccountId = null, CancellationToken ct = default)
     {
+        if (!await entitlements.CanCreateLinkAsync(accountId, ct))
+            throw new EntitlementException("Your plan's link limit has been reached.");
+        if (!await entitlements.IsFeatureEnabledAsync(accountId, PlanFeature.UserAttributedLinks, ct))
+            throw new EntitlementException("User-attributed links are not available on your plan.");
+
         var validation = await urlValidator.ValidateAsync(url);
         if (!validation.IsValid)
             throw new ArgumentException(validation.Reason, nameof(url));
@@ -50,6 +57,9 @@ public sealed class LinkService(
     private async Task<AnonymousLinkResult> CreateLinkAsync(
         string url, Guid accountId, Action<LinkEntity> assignProvenance, CancellationToken ct)
     {
+        if (!await entitlements.CanCreateLinkAsync(accountId, ct))
+            throw new EntitlementException("Your plan's link limit has been reached.");
+
         var validation = await urlValidator.ValidateAsync(url);
         if (!validation.IsValid)
             throw new ArgumentException(validation.Reason, nameof(url));

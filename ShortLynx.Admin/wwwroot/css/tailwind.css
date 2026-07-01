@@ -270,6 +270,9 @@
   .mt-4 {
     margin-top: calc(var(--spacing) * 4);
   }
+  .mr-1 {
+    margin-right: var(--spacing);
+  }
   .mb-0 {
     margin-bottom: 0;
   }

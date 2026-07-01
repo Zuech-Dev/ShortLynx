@@ -2,6 +2,7 @@ using System.Text;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using ShortLynx.Services.Analytics;
 using ShortLynx.Core.Models.Requests;
 using ShortLynx.Core.Models.Responses;
 using ShortLynx.Core.Options;
@@ -98,6 +99,17 @@ public class MeLinksController(
         return ok ? NoContent() : BadRequest(new { error = "Domain not found, not in this account, or not verified." });
     }
 
+    // PUT /me/links/{id}/campaign — assign/unassign the link to one of the account's campaigns.
+    [HttpPut("{id:guid}/campaign")]
+    public async Task<IActionResult> SetCampaign(Guid id, [FromBody] SetLinkCampaignRequest request, CancellationToken ct)
+    {
+        if (!await db.LinkEntities.AnyAsync(l => l.Id == id && l.AccountId == AccountId, ct))
+            return NotFound();
+
+        var ok = await linkService.SetLinkCampaignAsync(id, request.CampaignId, AccountId, ct);
+        return ok ? NoContent() : BadRequest(new { error = "Campaign not found or not in this account." });
+    }
+
     // GET /me/links/{id}/analytics
     [HttpGet("{id:guid}/analytics")]
     public async Task<IActionResult> Analytics(Guid id, CancellationToken ct)
@@ -106,42 +118,50 @@ public class MeLinksController(
         if (link is null) return NotFound();
 
         List<CodeClickStats> codeStats;
-        long totalClicks;
-        DateTimeOffset? lastClickAt;
+        List<VisitRow> rows;
 
         if (link.Mode == LinkMode.Anonymous)
         {
             var sc = await db.ShortCodeEntities.FirstOrDefaultAsync(x => x.LinkId == id, ct);
             if (sc is null)
             {
-                codeStats = []; totalClicks = 0; lastClickAt = null;
+                codeStats = [];
+                rows = [];
             }
             else
             {
-                var visits = await db.VisitEntities.Where(v => v.ShortCodeId == sc.Id).ToListAsync(ct);
-                totalClicks = visits.Count;
-                lastClickAt = visits.Count > 0 ? visits.Max(v => v.ClickedAt) : null;
-                codeStats = [new CodeClickStats(sc.Code, null, visits.Count)];
+                rows = (await db.VisitEntities
+                        .Where(v => v.ShortCodeId == sc.Id)
+                        .Select(v => new { v.HashedIp, v.Source, v.Device, v.ClickedAt })
+                        .ToListAsync(ct))
+                    .Select(v => new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt))
+                    .ToList();
+                codeStats = [new CodeClickStats(sc.Code, null, rows.Count)];
             }
         }
         else
         {
             var codes = await db.UserLinkCodeEntities.Where(c => c.LinkId == id).ToListAsync(ct);
             var codeIds = codes.Select(c => c.Id).ToList();
-            var clicksByCode = await db.UserVisitEntities
+            var visits = await db.UserVisitEntities
                 .Where(v => codeIds.Contains(v.UserLinkCodeId))
-                .GroupBy(v => v.UserLinkCodeId)
-                .Select(g => new { g.Key, Count = (long)g.Count(), Last = g.Max(v => v.ClickedAt) })
+                .Select(v => new { v.UserLinkCodeId, v.HashedIp, v.Source, v.Device, v.ClickedAt })
                 .ToListAsync(ct);
 
-            var countMap = clicksByCode.ToDictionary(x => x.Key, x => x.Count);
-            var lastMap = clicksByCode.ToDictionary(x => x.Key, x => x.Last);
-            codeStats = codes.Select(c => new CodeClickStats(c.Code, c.UserId, countMap.GetValueOrDefault(c.Id, 0))).ToList();
-            totalClicks = codeStats.Sum(s => s.ClickCount);
-            lastClickAt = lastMap.Count > 0 ? lastMap.Values.Max() : null;
+            var countByCode = visits
+                .GroupBy(v => v.UserLinkCodeId)
+                .ToDictionary(g => g.Key, g => g.LongCount());
+            codeStats = codes
+                .Select(c => new CodeClickStats(c.Code, c.UserId, countByCode.GetValueOrDefault(c.Id, 0)))
+                .ToList();
+            rows = visits.Select(v => new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt)).ToList();
         }
 
-        return Ok(new LinkAnalyticsResponse(id, link.OriginalUrl, link.Mode.ToString(), totalClicks, lastClickAt, codeStats));
+        var b = ClickAggregator.Summarize(rows);
+        return Ok(new LinkAnalyticsResponse(
+            id, link.OriginalUrl, link.Mode.ToString(),
+            b.TotalClicks, b.UniqueClicks, b.FirstClickAt, b.LastClickAt,
+            codeStats, b.Sources, b.Devices, b.Timeline));
     }
 
     // GET /me/links/{id}/qr?format=png|svg&size=<n>&code=<optional>

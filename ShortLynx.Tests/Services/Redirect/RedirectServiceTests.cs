@@ -426,4 +426,37 @@ public class RedirectServiceTests
         var second = await MakeSvc(db.CreateContext(), sizedCache).LookupAsync("sizecap0");
         Assert.NotNull(second);
     }
+
+    // ── Campaign UTM template ────────────────────────────────────────────────
+
+    [Fact]
+    public async Task LookupAsync_LinkInCampaign_AppliesUtmTemplateToDestination()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+        var account = EntityFactory.Account();
+        var link = EntityFactory.AnonymousLink(account.Id); // OriginalUrl = https://example.com
+        var campaign = new ShortLynx.Data.Entities.CampaignEntity
+        {
+            Id = Guid.CreateVersion7(),
+            AccountId = account.Id,
+            Name = "Launch",
+            UtmSource = "newsletter",
+            UtmMedium = "email",
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+        link.CampaignId = campaign.Id;
+
+        await using (var ctx = db.CreateContext())
+        {
+            ctx.AddRange(account, campaign, link);
+            ctx.ShortCodeEntities.Add(EntityFactory.ShortCode(link.Id, "camp1234"));
+            await ctx.SaveChangesAsync();
+        }
+
+        var result = await MakeSvc(db.CreateContext()).LookupAsync("camp1234");
+
+        Assert.NotNull(result);
+        Assert.Contains("utm_source=newsletter", result!.OriginalUrl);
+        Assert.Contains("utm_medium=email", result.OriginalUrl);
+    }
 }

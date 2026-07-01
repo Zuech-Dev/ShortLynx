@@ -1,0 +1,123 @@
+@using ShortLynx.Services.Analytics
+
+@if (Breakdown is { TotalClicks: > 0 } b)
+{
+    <div class="card mb-4" data-testid="click-breakdown">
+        <div class="card-body">
+            <h5 class="card-title">@Title</h5>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                <div><div class="text-2xl font-bold" data-testid="total-clicks">@b.TotalClicks</div><div class="text-gray-500 text-sm">Total clicks</div></div>
+                <div>
+                    <div class="text-2xl font-bold" data-testid="unique-clicks">@b.UniqueClicks</div>
+                    <div class="text-gray-500 text-sm" title="Distinct hashed IPs. The hash rotates hourly for privacy, so this dedupes repeat clicks within an hour rather than counting lifetime-unique visitors.">Unique (per hr)</div>
+                </div>
+                <div><div class="text-sm font-medium">@(b.FirstClickAt?.ToString("yyyy-MM-dd") ?? "—")</div><div class="text-gray-500 text-sm">First click</div></div>
+                <div><div class="text-sm font-medium">@(b.LastClickAt?.ToString("yyyy-MM-dd") ?? "—")</div><div class="text-gray-500 text-sm">Last click</div></div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div data-testid="sources">
+                    <h6 class="font-semibold text-sm mb-2">By platform</h6>
+                    @foreach (var s in b.Sources)
+                    {
+                        <div class="flex items-center gap-2 text-sm mb-1">
+                            <span class="w-24 shrink-0 truncate">@s.Source</span>
+                            <span class="flex-1 bg-gray-100 rounded h-3"><span class="block bg-blue-500 h-3 rounded" style="width:@BarPct(s.Count, b.TotalClicks)%"></span></span>
+                            <span class="w-10 text-right text-gray-600">@s.Count</span>
+                        </div>
+                    }
+                </div>
+                <div data-testid="devices">
+                    <h6 class="font-semibold text-sm mb-2">By device</h6>
+                    @foreach (var d in b.Devices)
+                    {
+                        <div class="flex items-center gap-2 text-sm mb-1">
+                            <span class="w-24 shrink-0 truncate">@d.Device</span>
+                            <span class="flex-1 bg-gray-100 rounded h-3"><span class="block bg-green-500 h-3 rounded" style="width:@BarPct(d.Count, b.TotalClicks)%"></span></span>
+                            <span class="w-10 text-right text-gray-600">@d.Count</span>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            @{
+                var window = TimelineWindow(b);
+                var winMax = Math.Max(1, window.Max(d => d.Count));
+                var start = window[0].Date;
+                var end = window[^1].Date;
+            }
+            <div class="mt-4" data-testid="timeline">
+                <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
+                    <h6 class="font-semibold text-sm">Clicks by day</h6>
+                    <div class="flex gap-1" role="group" aria-label="Timeline range">
+                        @foreach (var n in Ranges)
+                        {
+                            <button type="button" data-testid="range-@n"
+                                    class="px-2 py-0.5 text-xs rounded border @(n == _days ? "bg-blue-600 text-white border-blue-600" : "border-gray-300 text-gray-600 hover:bg-gray-50")"
+                                    @onclick="() => _days = n">@n d</button>
+                        }
+                    </div>
+                </div>
+                <div class="flex gap-2">
+                    @* Y axis: scale (max ↔ 0) plus the "Clicks" key. *@
+                    <div class="flex flex-col items-end justify-between h-28 text-[10px] text-gray-400 leading-none">
+                        <span data-testid="y-max">@winMax</span>
+                        <span class="text-gray-500 font-medium" style="writing-mode:vertical-rl; transform:rotate(180deg);">Clicks</span>
+                        <span>0</span>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex gap-px h-28 border-l border-b border-gray-200 pl-1">
+                            @foreach (var day in window)
+                            {
+                                <div class="flex-1 h-full flex items-end group relative" data-testid="bar">
+                                    <div class="w-full bg-blue-400 hover:bg-blue-600 rounded-t @(day.Count > 0 ? "min-h-[2px]" : "")"
+                                         style="height:@BarPct(day.Count, winMax)%"></div>
+                                    <div class="hidden group-hover:block absolute bottom-full left-1/2 -translate-x-1/2 mb-1 z-10 whitespace-nowrap rounded bg-gray-900 text-white text-[11px] leading-tight px-2 py-1 shadow-lg pointer-events-none"
+                                         data-testid="bar-tooltip">
+                                        <div class="font-semibold">@day.Date.ToString("MMM d, yyyy")</div>
+                                        <div>Total clicks: @day.Count</div>
+                                        <div>Unique clicks: @day.UniqueCount</div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                        @* X axis: start, midpoint, end dates. *@
+                        <div class="flex justify-between text-[10px] text-gray-400 mt-1">
+                            <span>@start.ToString("MMM d")</span>
+                            @if (_days >= 14)
+                            {
+                                <span>@window[window.Count / 2].Date.ToString("MMM d")</span>
+                            }
+                            <span>@end.ToString("MMM d")</span>
+                        </div>
+                        <div class="text-center text-[10px] text-gray-500 font-medium mt-0.5">Date (UTC)</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public ClickBreakdown? Breakdown { get; set; }
+    [Parameter] public string Title { get; set; } = "Click breakdown";
+
+    static readonly int[] Ranges = [7, 14, 21, 30];
+    int _days = 30;
+
+    // Bar size as a percent of a basis (total clicks for source/device, busiest day for the timeline). Clamped 0–100.
+    static int BarPct(long count, long basis) => basis <= 0 ? 0 : (int)Math.Clamp(Math.Round(100.0 * count / basis), 0, 100);
+
+    // A continuous daily series for the last _days days (UTC), zero-filling days with no clicks, so the
+    // chart has a real, evenly-spaced date axis instead of only the days that happened to get a click.
+    IReadOnlyList<(DateOnly Date, long Count, long UniqueCount)> TimelineWindow(ClickBreakdown b)
+    {
+        var byDate = b.Timeline.ToDictionary(t => t.Date);
+        var end = DateOnly.FromDateTime(DateTime.UtcNow);
+        var start = end.AddDays(-(_days - 1));
+        var list = new List<(DateOnly, long, long)>(_days);
+        for (var d = start; d <= end; d = d.AddDays(1))
+            list.Add(byDate.TryGetValue(d, out var dc) ? (d, dc.Count, dc.UniqueCount) : (d, 0L, 0L));
+        return list;
+    }
+}

@@ -2,6 +2,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using ShortLynx.Data.Context;
+using ShortLynx.Data.Entities;
+using ShortLynx.Services.Campaigns;
 
 namespace ShortLynx.Services.Redirect;
 
@@ -33,12 +35,13 @@ public sealed class RedirectService(
         // Mode 1 — anonymous short code
         var sc = await db.ShortCodeEntities
             .Include(x => x.Link).ThenInclude(l => l.CustomDomain)
+            .Include(x => x.Link).ThenInclude(l => l.Campaign)
             .Where(x => x.Code == code && x.IsActive && x.Link.IsActive)
             .FirstOrDefaultAsync(ct);
 
         if (sc is not null)
         {
-            var entry = new RedirectCacheEntry(sc.Link.OriginalUrl, sc.Id, null, null, sc.Link.CustomDomain?.Domain);
+            var entry = new RedirectCacheEntry(BuildDestination(sc.Link), sc.Id, null, null, sc.Link.CustomDomain?.Domain);
             cache.Set(key, entry, _cacheOpts);
             return EnforceHost(entry, host);
         }
@@ -46,6 +49,7 @@ public sealed class RedirectService(
         // Mode 2 — user-attributed code
         var ulc = await db.UserLinkCodeEntities
             .Include(x => x.Link).ThenInclude(l => l.CustomDomain)
+            .Include(x => x.Link).ThenInclude(l => l.Campaign)
             .Where(x => x.Code == code && x.IsActive && x.Link.IsActive)
             .FirstOrDefaultAsync(ct);
 
@@ -75,7 +79,7 @@ public sealed class RedirectService(
             if (claimed == 0) return null;
         }
 
-        var mode2Entry = new RedirectCacheEntry(ulc.Link.OriginalUrl, null, ulc.Id, ulc.UserId, pinnedHost);
+        var mode2Entry = new RedirectCacheEntry(BuildDestination(ulc.Link), null, ulc.Id, ulc.UserId, pinnedHost);
 
         // Don't cache one-time-use codes — the IsUsed flag changes after first use.
         if (!ulc.IsOneTimeUse)
@@ -83,6 +87,13 @@ public sealed class RedirectService(
 
         return mode2Entry;
     }
+
+    // Resolves the click-through target: the link's destination with the campaign's UTM template merged
+    // in (if any). Computed once here and cached, so the hot redirect path doesn't re-merge per request.
+    private static string BuildDestination(LinkEntity link)
+        => link.Campaign is { } c
+            ? UtmTemplate.Apply(link.OriginalUrl, c.UtmSource, c.UtmMedium, c.UtmCampaign)
+            : link.OriginalUrl;
 
     // Pinned links resolve only under their host; unpinned links (null PinnedHost) resolve anywhere.
     private static RedirectCacheEntry? EnforceHost(RedirectCacheEntry entry, string? host)

@@ -232,6 +232,14 @@ internal sealed class FakeLinkService : ILinkService
         return Task.FromResult(true);
     }
 
+    public Task<bool> SetLinkCampaignAsync(Guid linkId, Guid? campaignId, Guid accountId, CancellationToken ct = default)
+    {
+        CampaignSet.Add((linkId, campaignId, accountId));
+        return Task.FromResult(true);
+    }
+
+    public readonly List<(Guid LinkId, Guid? CampaignId, Guid AccountId)> CampaignSet = [];
+
     public Task<IReadOnlyList<UserLinkCodeEntity>> CreateUserLinkCodesAsync(
         Guid linkId, IReadOnlyCollection<CodeRecipient> recipients, bool isOneTimeUse, CancellationToken ct = default)
     {

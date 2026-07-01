@@ -41,4 +41,10 @@ public interface ILinkService
     /// Returns false if the link isn't the account's, or the domain isn't the account's and verified.
     /// </summary>
     Task<bool> SetLinkDomainAsync(Guid linkId, Guid? customDomainId, Guid accountId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Assigns (or, with null, unassigns) an account's link to one of the account's campaigns.
+    /// Returns false if the link isn't the account's, or the campaign isn't the account's.
+    /// </summary>
+    Task<bool> SetLinkCampaignAsync(Guid linkId, Guid? campaignId, Guid accountId, CancellationToken ct = default);
 }

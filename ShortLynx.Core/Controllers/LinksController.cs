@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using ShortLynx.Services.Analytics;
 using ShortLynx.Core.Auth;
 using ShortLynx.Core.Models.Requests;
 using ShortLynx.Core.Models.Responses;
@@ -158,8 +159,7 @@ public class LinksController(ILinkService linkService, ShortLynxDbContext db) : 
         if (link is null) return NotFound();
 
         List<CodeClickStats> codeStats;
-        long totalClicks;
-        DateTimeOffset? lastClickAt;
+        List<VisitRow> rows;
 
         if (link.Mode == LinkMode.Anonymous)
         {
@@ -170,20 +170,17 @@ public class LinksController(ILinkService linkService, ShortLynxDbContext db) : 
             if (sc is null)
             {
                 codeStats = [];
-                totalClicks = 0;
-                lastClickAt = null;
+                rows = [];
             }
             else
             {
-                var visits = await db.VisitEntities
-                    .Where(v => v.ShortCodeId == sc.Id)
-                    .ToListAsync(ct);
-
-                totalClicks = visits.Count;
-                lastClickAt = visits.Count > 0
-                    ? visits.Max(v => v.ClickedAt)
-                    : null;
-                codeStats = [new CodeClickStats(sc.Code, null, visits.Count)];
+                rows = (await db.VisitEntities
+                        .Where(v => v.ShortCodeId == sc.Id)
+                        .Select(v => new { v.HashedIp, v.Source, v.Device, v.ClickedAt })
+                        .ToListAsync(ct))
+                    .Select(v => new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt))
+                    .ToList();
+                codeStats = [new CodeClickStats(sc.Code, null, rows.Count)];
             }
         }
         else
@@ -193,24 +190,25 @@ public class LinksController(ILinkService linkService, ShortLynxDbContext db) : 
                 .ToListAsync(ct);
 
             var codeIds = codes.Select(c => c.Id).ToList();
-            var clicksByCode = await db.UserVisitEntities
+            var visits = await db.UserVisitEntities
                 .Where(v => codeIds.Contains(v.UserLinkCodeId))
-                .GroupBy(v => v.UserLinkCodeId)
-                .Select(g => new { g.Key, Count = (long)g.Count(), Last = g.Max(v => v.ClickedAt) })
+                .Select(v => new { v.UserLinkCodeId, v.HashedIp, v.Source, v.Device, v.ClickedAt })
                 .ToListAsync(ct);
 
-            var countMap = clicksByCode.ToDictionary(x => x.Key, x => x.Count);
-            var lastMap = clicksByCode.ToDictionary(x => x.Key, x => x.Last);
-
-            codeStats = codes.Select(c => new CodeClickStats(
-                c.Code, c.UserId, countMap.GetValueOrDefault(c.Id, 0))).ToList();
-
-            totalClicks = codeStats.Sum(s => s.ClickCount);
-            lastClickAt = lastMap.Count > 0 ? lastMap.Values.Max() : null;
+            var countByCode = visits
+                .GroupBy(v => v.UserLinkCodeId)
+                .ToDictionary(g => g.Key, g => g.LongCount());
+            codeStats = codes
+                .Select(c => new CodeClickStats(c.Code, c.UserId, countByCode.GetValueOrDefault(c.Id, 0)))
+                .ToList();
+            rows = visits.Select(v => new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt)).ToList();
         }
 
-        return Ok(new LinkAnalyticsResponse(id, link.OriginalUrl, link.Mode.ToString(),
-            totalClicks, lastClickAt, codeStats));
+        var b = ClickAggregator.Summarize(rows);
+        return Ok(new LinkAnalyticsResponse(
+            id, link.OriginalUrl, link.Mode.ToString(),
+            b.TotalClicks, b.UniqueClicks, b.FirstClickAt, b.LastClickAt,
+            codeStats, b.Sources, b.Devices, b.Timeline));
     }
 
     private static LinkResponse ToLinkResponse(LinkEntity link, string shortCode) =>

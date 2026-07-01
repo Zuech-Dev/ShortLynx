@@ -122,6 +122,25 @@ public sealed class LinkService(
         return true;
     }
 
+    public async Task<bool> SetLinkCampaignAsync(
+        Guid linkId, Guid? campaignId, Guid accountId, CancellationToken ct = default)
+    {
+        var link = await db.LinkEntities
+            .FirstOrDefaultAsync(l => l.Id == linkId && l.AccountId == accountId, ct);
+        if (link is null) return false;
+
+        if (campaignId is { } cid)
+        {
+            var ownsCampaign = await db.CampaignEntities.AnyAsync(
+                c => c.Id == cid && c.AccountId == accountId, ct);
+            if (!ownsCampaign) return false;
+        }
+
+        link.CampaignId = campaignId;
+        await db.SaveChangesAsync(ct);
+        return true;
+    }
+
     public Task<IReadOnlyList<UserLinkCodeEntity>> CreateUserLinkCodesAsync(
         Guid linkId, IEnumerable<Guid> userIds, CancellationToken ct = default)
         => CreateUserLinkCodesAsync(

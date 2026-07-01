@@ -121,6 +121,35 @@ public class LinkDetailComponentTests : BunitContext
     }
 
     [Fact]
+    public void Campaign_SelectingCampaign_CallsSetLinkCampaign()
+    {
+        var id = SeedUserAttributedLink();
+        var campaignId = SeedCampaign();
+        var cut = Render<LinkDetail>(p => p.Add(c => c.Id, id));
+
+        cut.Find("[data-testid=campaign-select]").Change(campaignId.ToString());
+        cut.Find("[data-testid=campaign-save]").Click();
+
+        Assert.Single(_links.CampaignSet);
+        Assert.Equal(id, _links.CampaignSet[0].LinkId);
+        Assert.Equal(campaignId, _links.CampaignSet[0].CampaignId);
+        Assert.Equal(_accountId, _links.CampaignSet[0].AccountId);
+    }
+
+    private Guid SeedCampaign(string name = "Launch")
+    {
+        var factory = Services.GetRequiredService<IDbContextFactory<ShortLynxDbContext>>();
+        using var db = factory.CreateDbContext();
+        var c = new CampaignEntity
+        {
+            Id = Guid.CreateVersion7(), AccountId = _accountId, Name = name, CreatedAt = DateTimeOffset.UtcNow,
+        };
+        db.CampaignEntities.Add(c);
+        db.SaveChanges();
+        return c.Id;
+    }
+
+    [Fact]
     public void QrCard_RendersPngAndSvgDownloadLinks_ForAnonymousLink()
     {
         var id = SeedAnonymousLink();
@@ -129,6 +158,69 @@ public class LinkDetailComponentTests : BunitContext
         Assert.Equal($"/qr/{id}?format=png", cut.Find("[data-testid=qr-png]").GetAttribute("href"));
         Assert.Equal($"/qr/{id}?format=svg", cut.Find("[data-testid=qr-svg]").GetAttribute("href"));
         Assert.NotNull(cut.Find("[data-testid=qr-preview]"));
+    }
+
+    [Fact]
+    public void Breakdown_RendersUniqueSourceAndDevice_ForAnonymousLink()
+    {
+        var id = SeedAnonymousLinkWithVisits();
+        var cut = Render<LinkDetail>(p => p.Add(c => c.Id, id));
+
+        Assert.NotNull(cut.Find("[data-testid=click-breakdown]"));
+        Assert.Equal("3", cut.Find("[data-testid=total-clicks]").TextContent.Trim());
+        Assert.Equal("2", cut.Find("[data-testid=unique-clicks]").TextContent.Trim()); // ip1, ip2
+        Assert.Contains("Twitter", cut.Find("[data-testid=sources]").InnerHtml);
+        Assert.Contains("Mobile", cut.Find("[data-testid=devices]").InnerHtml);
+        Assert.NotNull(cut.Find("[data-testid=timeline]"));
+        // Range selector renders the four windows.
+        Assert.NotNull(cut.Find("[data-testid=range-7]"));
+        Assert.NotNull(cut.Find("[data-testid=range-30]"));
+        // Per-bar hover tooltip carries the date plus that day's total and unique counts (3 total, 2 unique).
+        Assert.NotEmpty(cut.FindAll("[data-testid=bar-tooltip]"));
+        Assert.Contains("Total clicks: 3", cut.Markup);
+        Assert.Contains("Unique clicks: 2", cut.Markup);
+    }
+
+    [Fact]
+    public void ShortUrl_RendersFullUrl_AndCopyButton_ForAnonymousLink()
+    {
+        var id = SeedAnonymousLink(); // code "abc12345"
+        var cut = Render<LinkDetail>(p => p.Add(c => c.Id, id));
+
+        var link = cut.Find("[data-testid=short-url]");
+        Assert.Equal("https://s.example/abc12345", link.GetAttribute("href"));
+        Assert.Contains("https://s.example/abc12345", link.TextContent);
+        Assert.NotNull(cut.Find("[data-testid=copy-short-url]"));
+    }
+
+    private Guid SeedAnonymousLinkWithVisits()
+    {
+        var factory = Services.GetRequiredService<IDbContextFactory<ShortLynxDbContext>>();
+        using var db = factory.CreateDbContext();
+        var link = new LinkEntity
+        {
+            Id = Guid.CreateVersion7(), OriginalUrl = "https://example.com", Mode = LinkMode.Anonymous,
+            AccountId = _accountId, CreatedAt = DateTimeOffset.UtcNow, IsActive = true,
+        };
+        var sc = new ShortCodeEntity
+        {
+            Id = Guid.CreateVersion7(), LinkId = link.Id, Code = "vis12345",
+            CreatedAt = DateTimeOffset.UtcNow, IsActive = true,
+        };
+        db.LinkEntities.Add(link);
+        db.ShortCodeEntities.Add(sc);
+        db.VisitEntities.AddRange(
+            Visit(sc.Id, "ip1", ClickSource.Twitter, DeviceType.Mobile),
+            Visit(sc.Id, "ip1", ClickSource.Twitter, DeviceType.Mobile),
+            Visit(sc.Id, "ip2", ClickSource.Direct, DeviceType.Desktop));
+        db.SaveChanges();
+        return link.Id;
+
+        static VisitEntity Visit(Guid scId, string ip, ClickSource source, DeviceType device) => new()
+        {
+            Id = Guid.CreateVersion7(), ShortCodeId = scId, HashedIp = ip,
+            Source = source, Device = device, ClickedAt = DateTimeOffset.UtcNow,
+        };
     }
 
     private Guid SeedAnonymousLink()

@@ -178,6 +178,11 @@ Tiers: **A (open, build first): Bluesky, Mastodon** · **B (official, gated): Th
 
 ## Status / next step
 **Phase 0 is shipped** (Core API + data layer): campaigns, source/device attribution, enriched link
-analytics, and the campaign roll-up — the reporting surface everything else rolls up into. Remaining
-before Phase 1: surface the new breakdowns in the Admin dashboard. Then **Phase 1 (Bluesky + Mastodon)**
-to prove the connector/OAuth pattern on the open platforms before tackling gated review.
+analytics, and the campaign roll-up — the reporting surface everything else rolls up into. The Admin
+dashboard now surfaces these (breakdowns, campaigns CRUD, roll-up view, filterable clicks table).
+
+Recommended next: **Phase 0.5 — privacy hardening** ([PRIVACY_ANALYTICS_PLAN.md](PRIVACY_ANALYTICS_PLAN.md)):
+finish the derive-at-ingest work Phase 0 started (drop raw User-Agent/Referrer, add browser/OS/host/
+language/geo, honor DNT/Sec-GPC). Do this **before Phase 1**, since Phase 1 only adds more data surface.
+Then **Phase 1 (Bluesky + Mastodon)** to prove the connector/OAuth pattern on the open platforms before
+tackling gated review.

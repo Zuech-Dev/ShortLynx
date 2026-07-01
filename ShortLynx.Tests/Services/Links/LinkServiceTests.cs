@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using ShortLynx.Data.Entities;
 using ShortLynx.Data.Enums;
+using ShortLynx.Services.Entitlements;
 using ShortLynx.Services.Links;
 using ShortLynx.Services.ShortCodes;
 
@@ -9,10 +10,13 @@ namespace ShortLynx.Tests.Services.Links;
 
 public class LinkServiceTests
 {
-    private static LinkService MakeSvc(ShortLynx.Data.Context.ShortLynxDbContext ctx, bool urlValid = true, string? invalidReason = null)
+    private static LinkService MakeSvc(
+        ShortLynx.Data.Context.ShortLynxDbContext ctx, bool urlValid = true, string? invalidReason = null,
+        IEntitlements? entitlements = null)
         => new(ctx,
             new RandomBase62Generator(Options.Create(new ShortCodeOptions { Length = 8 })),
-            new StubUrlValidationService(urlValid, invalidReason));
+            new StubUrlValidationService(urlValid, invalidReason),
+            entitlements ?? new UnlimitedEntitlements());
 
     private static async Task<Guid> SeedAccountAsync(TestDatabase db)
     {
@@ -40,6 +44,37 @@ public class LinkServiceTests
         ctx.LinkEntities.Add(link);
         await ctx.SaveChangesAsync();
         return link;
+    }
+
+    // Denies everything — stands in for a hosted plan policy at its limit.
+    private sealed class DenyEntitlements : IEntitlements
+    {
+        public Task<bool> CanCreateLinkAsync(Guid accountId, CancellationToken ct = default) => Task.FromResult(false);
+        public Task<bool> IsFeatureEnabledAsync(Guid accountId, PlanFeature feature, CancellationToken ct = default) => Task.FromResult(false);
+    }
+
+    // ── Entitlements gate ─────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task CreateAnonymousLink_WhenLinkQuotaReached_ThrowsEntitlement()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+        var accountId = await SeedAccountAsync(db);
+        var svc = MakeSvc(db.CreateContext(), entitlements: new DenyEntitlements());
+
+        await Assert.ThrowsAsync<EntitlementException>(
+            () => svc.CreateAnonymousLinkAsync("https://example.com", accountId));
+    }
+
+    [Fact]
+    public async Task CreateUserAttributedLink_WhenFeatureNotInPlan_ThrowsEntitlement()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+        var accountId = await SeedAccountAsync(db);
+        var svc = MakeSvc(db.CreateContext(), entitlements: new DenyEntitlements());
+
+        await Assert.ThrowsAsync<EntitlementException>(
+            () => svc.CreateUserAttributedLinkAsync("https://example.com", accountId));
     }
 
     // ── CreateAnonymousLinkAsync ──────────────────────────────────────────────

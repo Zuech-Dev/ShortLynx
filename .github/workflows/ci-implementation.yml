@@ -25,9 +25,40 @@ jobs:
 
       # Tests use in-memory SQLite, so no database service is required.
       # The Tailwind build step is skipped on CI (no binary present) and falls
-      # back to the committed wwwroot/css/tailwind.css — a warning, not an error.
+      # back to the committed wwwroot/css/tailwind.css — the `tailwind` job below
+      # guards against that committed file going stale.
       - name: Build
         run: dotnet build ShortLynx.slnx --no-restore -c Release
 
       - name: Test
         run: dotnet test ShortLynx.slnx --no-build -c Release --verbosity normal
+
+  # Regenerate wwwroot/css/tailwind.css and fail if the committed copy is stale,
+  # so an Admin markup change that adds utility classes can't ship without the CSS.
+  tailwind:
+    name: Tailwind CSS up to date
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pinned to the version the committed CSS was generated with so formatting
+      # matches exactly (a newer CLI could reformat output and cause false diffs).
+      - name: Download Tailwind standalone CLI
+        run: |
+          mkdir -p ShortLynx.Admin/tools
+          curl -sSL -o ShortLynx.Admin/tools/tailwindcss \
+            https://github.com/tailwindlabs/tailwindcss/releases/download/v4.3.2/tailwindcss-linux-x64
+          chmod +x ShortLynx.Admin/tools/tailwindcss
+
+      - name: Regenerate CSS from current markup
+        working-directory: ShortLynx.Admin
+        run: ./tools/tailwindcss -i Styles/app.tailwind.css -o wwwroot/css/tailwind.css
+
+      - name: Fail if committed tailwind.css is stale
+        run: |
+          if ! git diff --quiet -- ShortLynx.Admin/wwwroot/css/tailwind.css; then
+            echo "::error::ShortLynx.Admin/wwwroot/css/tailwind.css is out of date. Regenerate it with the Tailwind CLI and commit the result."
+            git diff --stat -- ShortLynx.Admin/wwwroot/css/tailwind.css
+            exit 1
+          fi
+          echo "tailwind.css is up to date."

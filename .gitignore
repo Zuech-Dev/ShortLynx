@@ -4,6 +4,14 @@ obj/
 riderModule.iml
 /_ReSharper.Caches/
 
+# Confidential business plan — internal only, never publish to GitHub
+BUSINESS_PLAN.md
+BUSINESS_PLAN.docx
+ShortLynx_Compensation_Model.xlsx
+
+# Local-only scratch notes
+NOTES.local.md
+
 # IDE per-user settings (Rider/ReSharper, Visual Studio) — never shared
 *.DotSettings.user
 *.user

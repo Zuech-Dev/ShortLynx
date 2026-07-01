@@ -138,6 +138,31 @@ public class MeCampaignsTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task CreateLink_WithCampaignId_AssignsAtCreation()
+    {
+        var (client, _, _) = await _factory.CreateSessionClientAsync();
+        var campaign = await (await client.PostAsJsonAsync("/me/campaigns", new CreateCampaignRequest("Launch")))
+            .Content.ReadFromJsonAsync<CampaignResponse>();
+
+        var resp = await client.PostAsJsonAsync("/me/links",
+            new CreateMyLinkRequest("https://example.com", CampaignId: campaign!.Id));
+        Assert.Equal(HttpStatusCode.Created, resp.StatusCode);
+
+        var fetched = await (await client.GetAsync($"/me/campaigns/{campaign.Id}"))
+            .Content.ReadFromJsonAsync<CampaignResponse>();
+        Assert.Equal(1, fetched!.LinkCount);
+    }
+
+    [Fact]
+    public async Task CreateLink_WithForeignCampaignId_Returns400()
+    {
+        var (client, _, _) = await _factory.CreateSessionClientAsync();
+        var resp = await client.PostAsJsonAsync("/me/links",
+            new CreateMyLinkRequest("https://example.com", CampaignId: Guid.CreateVersion7()));
+        Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+    }
+
+    [Fact]
     public async Task Campaigns_WithoutSession_Returns401()
     {
         var resp = await _factory.CreateClient().GetAsync("/me/campaigns");

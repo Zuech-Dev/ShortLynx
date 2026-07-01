@@ -53,23 +53,5 @@ public class SourceDetectorTests
         // hosts, so an unmapped package is "Other", not "Direct". App-package decoding is a follow-up.
         => Assert.Equal(ClickSource.Other, SourceDetector.DetectSource("android-app://com.google.android.gm"));
 
-    [Theory]
-    [InlineData(null, DeviceType.Unknown)]
-    [InlineData("", DeviceType.Unknown)]
-    // Desktop
-    [InlineData("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36", DeviceType.Desktop)]
-    [InlineData("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17 Safari/605.1.15", DeviceType.Desktop)]
-    // Mobile
-    [InlineData("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148", DeviceType.Mobile)]
-    [InlineData("Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Mobile Safari/537.36", DeviceType.Mobile)]
-    // Tablet
-    [InlineData("Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17 Safari/605.1.15", DeviceType.Tablet)]
-    [InlineData("Mozilla/5.0 (Linux; Android 14; SM-X910) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36", DeviceType.Tablet)]
-    // Bot / preview fetchers
-    [InlineData("Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)", DeviceType.Bot)]
-    [InlineData("facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)", DeviceType.Bot)]
-    [InlineData("Twitterbot/1.0", DeviceType.Bot)]
-    [InlineData("curl/8.4.0", DeviceType.Bot)]
-    public void DetectDevice_MapsUserAgentToDeviceClass(string? userAgent, DeviceType expected)
-        => Assert.Equal(expected, SourceDetector.DetectDevice(userAgent));
+    // Device classification moved to IUserAgentParser (see UserAgentParserTests).
 }

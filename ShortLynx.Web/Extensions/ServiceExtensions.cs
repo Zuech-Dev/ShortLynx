@@ -50,6 +50,10 @@ public static class ServiceExtensions
         // BackgroundVisitWriter resolves IDbOperations per-flush via IServiceScopeFactory (avoids
         // the singleton-capturing-scoped-service anti-pattern).
         services.Configure<VisitSinkOptions>(configuration.GetSection("VisitSink"));
+        // Pure reducers the writer uses to derive low-entropy dimensions from raw signals at ingest.
+        services.AddSingleton<ShortLynx.Services.Analytics.IUserAgentParser, ShortLynx.Services.Analytics.UserAgentParser>();
+        services.AddSingleton<ShortLynx.Services.Analytics.IReferrerReducer, ShortLynx.Services.Analytics.ReferrerReducer>();
+        services.AddSingleton<ShortLynx.Services.Analytics.ILanguageReducer, ShortLynx.Services.Analytics.LanguageReducer>();
         services.AddSingleton<InMemoryVisitEventSink>();
         services.AddSingleton<IVisitEventSink>(sp => sp.GetRequiredService<InMemoryVisitEventSink>());
         services.AddHostedService<BackgroundVisitWriter>();

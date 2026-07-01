@@ -74,7 +74,7 @@
                     @SortHeader("Clicked At", SortCol.ClickedAt)
                     @SortHeader("Platform", SortCol.Source)
                     @SortHeader("Device", SortCol.Device)
-                    @SortHeader("Referrer", SortCol.Referrer)
+                    @SortHeader("Referrer host", SortCol.Referrer)
                 </tr>
                 </thead>
                 <tbody>
@@ -84,7 +84,7 @@
                         <td class="whitespace-nowrap">@c.ClickedAt.ToString("yyyy-MM-dd HH:mm") UTC</td>
                         <td>@c.Source</td>
                         <td>@c.Device</td>
-                        <td class="text-gray-500 text-sm truncate max-w-[320px]" title="@c.Referrer">@(string.IsNullOrEmpty(c.Referrer) ? "—" : c.Referrer)</td>
+                        <td class="text-gray-500 text-sm truncate max-w-[320px]" title="@c.ReferrerHost">@(string.IsNullOrEmpty(c.ReferrerHost) ? "—" : c.ReferrerHost)</td>
                     </tr>
                 }
                 </tbody>
@@ -164,7 +164,7 @@
         if (!string.IsNullOrEmpty(_source)) q = q.Where(c => c.Source.ToString() == _source);
         if (!string.IsNullOrEmpty(_device)) q = q.Where(c => c.Device.ToString() == _device);
         if (!string.IsNullOrWhiteSpace(_referrer))
-            q = q.Where(c => (c.Referrer ?? "").Contains(_referrer, StringComparison.OrdinalIgnoreCase));
+            q = q.Where(c => (c.ReferrerHost ?? "").Contains(_referrer, StringComparison.OrdinalIgnoreCase));
 
         q = (_sort, _desc) switch
         {
@@ -174,8 +174,8 @@
             (SortCol.Source, false) => q.OrderBy(c => c.Source.ToString()),
             (SortCol.Device, true) => q.OrderByDescending(c => c.Device.ToString()),
             (SortCol.Device, false) => q.OrderBy(c => c.Device.ToString()),
-            (SortCol.Referrer, true) => q.OrderByDescending(c => c.Referrer ?? ""),
-            _ => q.OrderBy(c => c.Referrer ?? ""),
+            (SortCol.Referrer, true) => q.OrderByDescending(c => c.ReferrerHost ?? ""),
+            _ => q.OrderBy(c => c.ReferrerHost ?? ""),
         };
         return q.ToList();
     }

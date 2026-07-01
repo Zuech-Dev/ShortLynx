@@ -57,6 +57,10 @@ app.MapGet("/{code}", async (
     var ip = ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown";
     var referrer = ctx.Request.Headers.Referer.ToString();
     var ua = ctx.Request.Headers.UserAgent.ToString();
+    var acceptLanguage = ctx.Request.Headers.AcceptLanguage.ToString();
+    var secFetchSite = ctx.Request.Headers["Sec-Fetch-Site"].ToString();
+    // Honour an explicit "do not track" preference (DNT:1 or the newer Sec-GPC:1).
+    var privacySignal = ctx.Request.Headers["DNT"] == "1" || ctx.Request.Headers["Sec-GPC"] == "1";
 
     await sink.EnqueueAsync(new VisitEvent(
         ShortCodeId: entry.ShortCodeId,
@@ -65,7 +69,10 @@ app.MapGet("/{code}", async (
         RawIp: ip,
         Referrer: referrer.Length > 0 ? referrer : null,
         UserAgent: ua.Length > 0 ? ua : null,
-        ClickedAt: DateTimeOffset.UtcNow));
+        ClickedAt: DateTimeOffset.UtcNow,
+        AcceptLanguage: acceptLanguage.Length > 0 ? acceptLanguage : null,
+        SecFetchSite: secFetchSite.Length > 0 ? secFetchSite : null,
+        PrivacySignal: privacySignal));
 
     return Results.Redirect(entry.OriginalUrl, permanent: false);
 }).RequireRateLimiting("redirect");

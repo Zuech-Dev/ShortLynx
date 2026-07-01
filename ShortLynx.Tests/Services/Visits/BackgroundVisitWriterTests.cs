@@ -25,7 +25,10 @@ public class BackgroundVisitWriterTests
         var scopeFactory = services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
 
         var sink = new InMemoryVisitEventSink(opts);
-        var writer = new BackgroundVisitWriter(sink, scopeFactory, opts);
+        var writer = new BackgroundVisitWriter(sink, scopeFactory, opts,
+            new ShortLynx.Services.Analytics.UserAgentParser(),
+            new ShortLynx.Services.Analytics.ReferrerReducer(),
+            new ShortLynx.Services.Analytics.LanguageReducer());
         return (sink, db, writer);
     }
 
@@ -157,7 +160,7 @@ public class BackgroundVisitWriterTests
     }
 
     [Fact]
-    public async Task Writer_PreservesReferrerAndUserAgent()
+    public async Task Writer_DerivesDimensions_AndDoesNotPersistRawSignals()
     {
         var (sink, db, writer) = MakeWriter(drainMs: 20);
         using var cts = new CancellationTokenSource();
@@ -167,34 +170,11 @@ public class BackgroundVisitWriterTests
             UserLinkCodeId: null,
             UserId: null,
             RawIp: "1.2.3.4",
-            Referrer: "https://example.com",
-            UserAgent: "Mozilla/5.0",
-            ClickedAt: DateTimeOffset.UtcNow);
-
-        await writer.StartAsync(cts.Token);
-        await sink.EnqueueAsync(evt);
-        await WaitUntilAsync(() => db.VisitCount >= 1);
-        await cts.CancelAsync();
-
-        var stored = db.InsertedVisits.Single();
-        Assert.Equal("https://example.com", stored.Referrer);
-        Assert.Equal("Mozilla/5.0", stored.UserAgent);
-    }
-
-    [Fact]
-    public async Task Writer_DerivesSourceAndDevice_FromReferrerAndUserAgent()
-    {
-        var (sink, db, writer) = MakeWriter(drainMs: 20);
-        using var cts = new CancellationTokenSource();
-
-        var evt = new VisitEvent(
-            ShortCodeId: Guid.CreateVersion7(),
-            UserLinkCodeId: null,
-            UserId: null,
-            RawIp: "1.2.3.4",
-            Referrer: "https://t.co/abc123",
-            UserAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile/15E148",
-            ClickedAt: DateTimeOffset.UtcNow);
+            Referrer: "https://www.t.co/abc123?s=secret",
+            UserAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile/15E148 Safari/604.1",
+            ClickedAt: DateTimeOffset.UtcNow,
+            AcceptLanguage: "en-US,en;q=0.9",
+            SecFetchSite: "cross-site");
 
         await writer.StartAsync(cts.Token);
         await sink.EnqueueAsync(evt);
@@ -204,6 +184,44 @@ public class BackgroundVisitWriterTests
         var stored = db.InsertedVisits.Single();
         Assert.Equal(ShortLynx.Data.Enums.ClickSource.Twitter, stored.Source);
         Assert.Equal(ShortLynx.Data.Enums.DeviceType.Mobile, stored.Device);
+        Assert.Equal("Safari", stored.Browser);
+        Assert.Equal("iOS", stored.Os);
+        Assert.Equal("t.co", stored.ReferrerHost);      // host only, www stripped, path/query dropped
+        Assert.Equal("en", stored.Language);
+        Assert.Equal("cross-site", stored.NavigationType);
+    }
+
+    [Fact]
+    public async Task Writer_PrivacySignal_CountsClick_ButSuppressesDimensions()
+    {
+        var (sink, db, writer) = MakeWriter(drainMs: 20);
+        using var cts = new CancellationTokenSource();
+
+        var evt = new VisitEvent(
+            ShortCodeId: Guid.CreateVersion7(),
+            UserLinkCodeId: null,
+            UserId: null,
+            RawIp: "1.2.3.4",
+            Referrer: "https://t.co/abc",
+            UserAgent: "Mozilla/5.0 (iPhone) Mobile Safari",
+            ClickedAt: DateTimeOffset.UtcNow,
+            AcceptLanguage: "en-US",
+            SecFetchSite: "cross-site",
+            PrivacySignal: true);
+
+        await writer.StartAsync(cts.Token);
+        await sink.EnqueueAsync(evt);
+        await WaitUntilAsync(() => db.VisitCount >= 1);
+        await cts.CancelAsync();
+
+        var stored = db.InsertedVisits.Single();
+        Assert.Equal(64, stored.HashedIp.Length);       // click still counted
+        Assert.Null(stored.Browser);
+        Assert.Null(stored.Os);
+        Assert.Null(stored.ReferrerHost);
+        Assert.Null(stored.Language);
+        Assert.Null(stored.NavigationType);
+        Assert.Equal(ShortLynx.Data.Enums.DeviceType.Unknown, stored.Device);
     }
 
     [Fact]

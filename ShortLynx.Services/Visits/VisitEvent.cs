@@ -1,5 +1,11 @@
 namespace ShortLynx.Services.Visits;
 
+/// <summary>
+/// Capture-time record from the redirect handler. Raw signals (Referrer, UserAgent, AcceptLanguage) are
+/// carried through unchanged and reduced to low-entropy buckets in BackgroundVisitWriter.FlushAsync —
+/// they are never persisted. When <see cref="PrivacySignal"/> is set (DNT / Sec-GPC), the writer records
+/// the click but suppresses all derived dimensions.
+/// </summary>
 public sealed record VisitEvent(
     Guid? ShortCodeId,
     Guid? UserLinkCodeId,
@@ -7,4 +13,7 @@ public sealed record VisitEvent(
     string RawIp,
     string? Referrer,
     string? UserAgent,
-    DateTimeOffset ClickedAt);
+    DateTimeOffset ClickedAt,
+    string? AcceptLanguage = null,
+    string? SecFetchSite = null,
+    bool PrivacySignal = false);

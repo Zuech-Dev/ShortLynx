@@ -3,6 +3,7 @@ using System.Text;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
+using ShortLynx.Data.Enums;
 using ShortLynx.Data.Entities;
 using ShortLynx.Data.Operations;
 using ShortLynx.Services.Analytics;
@@ -12,7 +13,11 @@ namespace ShortLynx.Services.Visits;
 public sealed class BackgroundVisitWriter(
     InMemoryVisitEventSink sink,
     IServiceScopeFactory scopeFactory,
-    IOptions<VisitSinkOptions> options) : BackgroundService
+    IOptions<VisitSinkOptions> options,
+    IUserAgentParser uaParser,
+    IReferrerReducer referrerReducer,
+    ILanguageReducer languageReducer,
+    IGeoIpResolver geoIp) : BackgroundService
 {
     private readonly VisitSinkOptions _opts = options.Value;
 
@@ -55,41 +60,78 @@ public sealed class BackgroundVisitWriter(
         return batch;
     }
 
-    private static async Task FlushAsync(List<VisitEvent> batch, IDbOperations dbOps, string pepper, CancellationToken ct)
+    private async Task FlushAsync(List<VisitEvent> batch, IDbOperations dbOps, string pepper, CancellationToken ct)
     {
         var mode1 = batch
             .Where(e => e.ShortCodeId.HasValue)
-            .Select(e => new VisitEntity
+            .Select(e =>
             {
-                Id = Guid.CreateVersion7(),
-                ShortCodeId = e.ShortCodeId!.Value,
-                ClickedAt = e.ClickedAt,
-                HashedIp = HashIp(e.RawIp, pepper),
-                Referrer = e.Referrer,
-                UserAgent = e.UserAgent,
-                Source = SourceDetector.DetectSource(e.Referrer),
-                Device = SourceDetector.DetectDevice(e.UserAgent),
+                var d = Derive(e);
+                return new VisitEntity
+                {
+                    Id = Guid.CreateVersion7(),
+                    ShortCodeId = e.ShortCodeId!.Value,
+                    ClickedAt = e.ClickedAt,
+                    HashedIp = HashIp(e.RawIp, pepper),
+                    Source = d.Source,
+                    Device = d.Device,
+                    Browser = d.Browser,
+                    Os = d.Os,
+                    ReferrerHost = d.ReferrerHost,
+                    Country = d.Country,
+                    Language = d.Language,
+                    NavigationType = d.NavigationType,
+                };
             })
             .ToList();
 
         var mode2 = batch
             .Where(e => e.UserLinkCodeId.HasValue)
-            .Select(e => new UserVisitEntity
+            .Select(e =>
             {
-                Id = Guid.CreateVersion7(),
-                UserLinkCodeId = e.UserLinkCodeId!.Value,
-                UserId = e.UserId,
-                ClickedAt = e.ClickedAt,
-                HashedIp = HashIp(e.RawIp, pepper),
-                Referrer = e.Referrer,
-                UserAgent = e.UserAgent,
-                Source = SourceDetector.DetectSource(e.Referrer),
-                Device = SourceDetector.DetectDevice(e.UserAgent),
+                var d = Derive(e);
+                return new UserVisitEntity
+                {
+                    Id = Guid.CreateVersion7(),
+                    UserLinkCodeId = e.UserLinkCodeId!.Value,
+                    UserId = e.UserId,
+                    ClickedAt = e.ClickedAt,
+                    HashedIp = HashIp(e.RawIp, pepper),
+                    Source = d.Source,
+                    Device = d.Device,
+                    Browser = d.Browser,
+                    Os = d.Os,
+                    ReferrerHost = d.ReferrerHost,
+                    Country = d.Country,
+                    Language = d.Language,
+                    NavigationType = d.NavigationType,
+                };
             })
             .ToList();
 
         if (mode1.Count > 0) await dbOps.BulkInsertVisitsAsync(mode1, ct);
         if (mode2.Count > 0) await dbOps.BulkInsertUserVisitsAsync(mode2, ct);
+    }
+
+    // Reduces a visit's raw signals to the stored low-entropy dimensions. A privacy signal (DNT / Sec-GPC)
+    // suppresses every derived dimension — the click still counts, but carries no profile.
+    private (ClickSource Source, DeviceType Device, string? Browser, string? Os, string? ReferrerHost,
+        string? Country, string? Language, string? NavigationType) Derive(VisitEvent e)
+    {
+        if (e.PrivacySignal)
+            return (ClickSource.Direct, DeviceType.Unknown, null, null, null, null, null, null);
+
+        var ua = uaParser.Parse(e.UserAgent);
+        var nav = string.IsNullOrWhiteSpace(e.SecFetchSite) ? null : e.SecFetchSite.Trim().ToLowerInvariant();
+        return (
+            SourceDetector.DetectSource(e.Referrer),
+            ua.Device,
+            ua.Browser,
+            ua.Os,
+            referrerReducer.Host(e.Referrer),
+            geoIp.ResolveCountry(e.RawIp),
+            languageReducer.Primary(e.AcceptLanguage),
+            nav);
     }
 
     // IP hashing is keyed with a secret pepper (HMAC) so the small IPv4 space can't be brute-forced

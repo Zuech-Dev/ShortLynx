@@ -67,6 +67,11 @@ public static class ServiceExtensions
         services.Configure<AccessControlOptions>(configuration.GetSection("Admin"));
         services.AddScoped<IUserSessionService, UserSessionService>();
 
+        // Pure reducers the writer uses to derive low-entropy dimensions from raw signals at ingest.
+        services.AddSingleton<ShortLynx.Services.Analytics.IUserAgentParser, ShortLynx.Services.Analytics.UserAgentParser>();
+        services.AddSingleton<ShortLynx.Services.Analytics.IReferrerReducer, ShortLynx.Services.Analytics.ReferrerReducer>();
+        services.AddSingleton<ShortLynx.Services.Analytics.ILanguageReducer, ShortLynx.Services.Analytics.LanguageReducer>();
+        services.AddSingleton<ShortLynx.Services.Analytics.IGeoIpResolver, ShortLynx.Services.Analytics.NullGeoIpResolver>();
         services.AddSingleton<InMemoryVisitEventSink>();
         services.AddSingleton<IVisitEventSink>(sp => sp.GetRequiredService<InMemoryVisitEventSink>());
         services.AddHostedService<BackgroundVisitWriter>();

@@ -57,8 +57,6 @@ internal static class EntityFactory
         ShortCodeId = shortCodeId,
         ClickedAt = DateTimeOffset.UtcNow,
         HashedIp = "hashed-ip",
-        Referrer = null,
-        UserAgent = null,
     };
 
     internal static UserVisitEntity UserVisit(Guid userLinkCodeId, Guid userId) => new()
@@ -68,8 +66,6 @@ internal static class EntityFactory
         UserId = userId,
         ClickedAt = DateTimeOffset.UtcNow,
         HashedIp = "hashed-ip",
-        Referrer = null,
-        UserAgent = null,
     };
 
     internal static UserAccountEntity UserAccount(string email = "user@example.com") => new()

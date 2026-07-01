@@ -65,6 +65,32 @@ public class LinksComponentTests : BunitContext
     }
 
     [Fact]
+    public void CreateLink_WithCampaignSelected_PassesCampaignId()
+    {
+        Guid campaignId;
+        var factory = Services.GetRequiredService<IDbContextFactory<ShortLynxDbContext>>();
+        using (var db = factory.CreateDbContext())
+        {
+            var c = new ShortLynx.Data.Entities.CampaignEntity
+            {
+                Id = Guid.CreateVersion7(), AccountId = _accountId, Name = "Launch", CreatedAt = DateTimeOffset.UtcNow,
+            };
+            db.CampaignEntities.Add(c);
+            db.SaveChanges();
+            campaignId = c.Id;
+        }
+
+        var cut = Render<Links>();
+        cut.Find("button.btn-primary").Click();
+        cut.Find("input.field-input").Change("https://example.com");
+        cut.Find("[data-testid=create-campaign]").Change(campaignId.ToString());
+        cut.Find("form").Submit();
+
+        Assert.Single(_links.Created);
+        Assert.Equal(campaignId, _links.Created[0].CampaignId);
+    }
+
+    [Fact]
     public void CreateLink_UserAttributedMode_CallsMode2Path()
     {
         var cut = Render<Links>();

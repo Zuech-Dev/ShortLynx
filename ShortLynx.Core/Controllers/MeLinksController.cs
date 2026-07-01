@@ -55,11 +55,11 @@ public class MeLinksController(
         {
             if (string.Equals(request.Mode, nameof(LinkMode.UserAttributed), StringComparison.OrdinalIgnoreCase))
             {
-                var link = await linkService.CreateUserAttributedLinkAsync(request.Url, AccountId, CurrentUserId, ct);
+                var link = await linkService.CreateUserAttributedLinkAsync(request.Url, AccountId, CurrentUserId, request.CampaignId, ct);
                 return CreatedAtAction(nameof(Get), new { id = link.Id }, ToLinkResponse(link, string.Empty));
             }
 
-            var result = await linkService.CreateAnonymousLinkAsync(request.Url, AccountId, CurrentUserId, ct);
+            var result = await linkService.CreateAnonymousLinkAsync(request.Url, AccountId, CurrentUserId, request.CampaignId, ct);
             return CreatedAtAction(nameof(Get), new { id = result.Link.Id }, ToLinkResponse(result.Link, result.ShortCode.Code));
         }
         catch (ArgumentException ex)

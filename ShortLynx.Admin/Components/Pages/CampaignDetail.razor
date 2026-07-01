@@ -113,10 +113,10 @@ else
             var scIds = scToLink.Keys.ToList();
             var visits = await db.VisitEntities
                 .Where(v => scIds.Contains(v.ShortCodeId))
-                .Select(v => new { v.ShortCodeId, v.HashedIp, v.Source, v.Device, v.ClickedAt })
+                .Select(v => new { v.ShortCodeId, v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Browser, v.Os, v.Country, v.Language })
                 .ToListAsync();
             tagged.AddRange(visits.Select(v =>
-                (scToLink[v.ShortCodeId], new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt))));
+                (scToLink[v.ShortCodeId], new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Browser, v.Os, v.Country, v.Language))));
         }
 
         var codeToLink = await db.UserLinkCodeEntities
@@ -128,10 +128,10 @@ else
             var codeIds = codeToLink.Keys.ToList();
             var uvisits = await db.UserVisitEntities
                 .Where(v => codeIds.Contains(v.UserLinkCodeId))
-                .Select(v => new { v.UserLinkCodeId, v.HashedIp, v.Source, v.Device, v.ClickedAt })
+                .Select(v => new { v.UserLinkCodeId, v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Browser, v.Os, v.Country, v.Language })
                 .ToListAsync();
             tagged.AddRange(uvisits.Select(v =>
-                (codeToLink[v.UserLinkCodeId], new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt))));
+                (codeToLink[v.UserLinkCodeId], new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Browser, v.Os, v.Country, v.Language))));
         }
 
         _breakdown = ClickAggregator.Summarize(tagged.Select(x => x.Row).ToList());

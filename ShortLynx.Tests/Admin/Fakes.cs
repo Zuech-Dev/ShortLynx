@@ -182,8 +182,8 @@ internal sealed class FakeCustomDomainService : ICustomDomainService
 
 internal sealed class FakeLinkService : ILinkService
 {
-    public readonly List<(string Url, Guid AccountId)> Created = [];
-    public readonly List<(string Url, Guid AccountId)> CreatedUserAttributed = [];
+    public readonly List<(string Url, Guid AccountId, Guid? CampaignId)> Created = [];
+    public readonly List<(string Url, Guid AccountId, Guid? CampaignId)> CreatedUserAttributed = [];
     public readonly List<(Guid LinkId, IReadOnlyCollection<CodeRecipient> Recipients, bool OneTime)> Provisioned = [];
     public bool ThrowOnCreate;
     public string CodeToReturn = "abc12345";
@@ -191,14 +191,14 @@ internal sealed class FakeLinkService : ILinkService
     public Task<AnonymousLinkResult> CreateAnonymousLinkAsync(string url, ApiKeyEntity owner, CancellationToken ct = default)
         => throw new NotSupportedException();
 
-    public Task<AnonymousLinkResult> CreateAnonymousLinkAsync(string url, Guid accountId, Guid? createdByUserAccountId = null, CancellationToken ct = default)
+    public Task<AnonymousLinkResult> CreateAnonymousLinkAsync(string url, Guid accountId, Guid? createdByUserAccountId = null, Guid? campaignId = null, CancellationToken ct = default)
     {
         if (ThrowOnCreate) throw new ArgumentException("blocked URL", nameof(url));
-        Created.Add((url, accountId));
+        Created.Add((url, accountId, campaignId));
         var link = new LinkEntity
         {
             Id = Guid.CreateVersion7(), OriginalUrl = url, AccountId = accountId, UserAccountId = createdByUserAccountId,
-            Mode = LinkMode.Anonymous, CreatedAt = DateTimeOffset.UtcNow, IsActive = true,
+            CampaignId = campaignId, Mode = LinkMode.Anonymous, CreatedAt = DateTimeOffset.UtcNow, IsActive = true,
         };
         var sc = new ShortCodeEntity
         {
@@ -208,14 +208,14 @@ internal sealed class FakeLinkService : ILinkService
         return Task.FromResult(new AnonymousLinkResult(link, sc));
     }
 
-    public Task<LinkEntity> CreateUserAttributedLinkAsync(string url, Guid accountId, Guid? createdByUserAccountId = null, CancellationToken ct = default)
+    public Task<LinkEntity> CreateUserAttributedLinkAsync(string url, Guid accountId, Guid? createdByUserAccountId = null, Guid? campaignId = null, CancellationToken ct = default)
     {
         if (ThrowOnCreate) throw new ArgumentException("blocked URL", nameof(url));
-        CreatedUserAttributed.Add((url, accountId));
+        CreatedUserAttributed.Add((url, accountId, campaignId));
         var link = new LinkEntity
         {
             Id = Guid.CreateVersion7(), OriginalUrl = url, AccountId = accountId, UserAccountId = createdByUserAccountId,
-            Mode = LinkMode.UserAttributed, CreatedAt = DateTimeOffset.UtcNow, IsActive = true,
+            CampaignId = campaignId, Mode = LinkMode.UserAttributed, CreatedAt = DateTimeOffset.UtcNow, IsActive = true,
         };
         return Task.FromResult(link);
     }

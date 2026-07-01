@@ -40,6 +40,27 @@
                 </div>
             </div>
 
+            @{ var extraDims = ExtraSections(b); }
+            @if (extraDims.Count > 0)
+            {
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-4" data-testid="extra-dimensions">
+                    @foreach (var dim in extraDims)
+                    {
+                        <div data-testid="@dim.Test">
+                            <h6 class="font-semibold text-sm mb-2">@dim.Title</h6>
+                            @foreach (var item in dim.Items)
+                            {
+                                <div class="flex items-center gap-2 text-sm mb-1">
+                                    <span class="w-24 shrink-0 truncate">@item.Label</span>
+                                    <span class="flex-1 bg-gray-100 rounded h-3"><span class="block bg-purple-500 h-3 rounded" style="width:@BarPct(item.Count, b.TotalClicks)%"></span></span>
+                                    <span class="w-10 text-right text-gray-600">@item.Count</span>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+
             @{
                 var window = TimelineWindow(b);
                 var winMax = Math.Max(1, window.Max(d => d.Count));
@@ -104,6 +125,17 @@
 
     static readonly int[] Ranges = [7, 14, 21, 30];
     int _days = 30;
+
+    // The optional string-dimension breakdowns, keeping only those with any data (so the card hides,
+    // say, "By country" until GeoIP is configured). Built in @code to keep the tuple work out of markup.
+    private static List<(string Title, IReadOnlyList<LabelCount> Items, string Test)> ExtraSections(ClickBreakdown b)
+        => new (string, IReadOnlyList<LabelCount>, string)[]
+        {
+            ("By browser", b.Browsers, "browsers"),
+            ("By OS", b.OperatingSystems, "operating-systems"),
+            ("By language", b.Languages, "languages"),
+            ("By country", b.Countries, "countries"),
+        }.Where(x => x.Item2.Count > 0).ToList();
 
     // Bar size as a percent of a basis (total clicks for source/device, busiest day for the timeline). Clamped 0–100.
     static int BarPct(long count, long basis) => basis <= 0 ? 0 : (int)Math.Clamp(Math.Round(100.0 * count / basis), 0, 100);

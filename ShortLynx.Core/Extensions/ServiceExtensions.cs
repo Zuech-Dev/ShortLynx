@@ -50,14 +50,13 @@ public static class ServiceExtensions
         // A hosted deployment replaces this with a billing-backed policy (outside this repo).
         services.AddSingleton<IEntitlements, UnlimitedEntitlements>();
 
-        // Token encryption for social connections. Keys MUST be persisted in production (set
-        // DataProtection:KeyPath to a mounted volume) — with the default ephemeral key ring, stored
-        // tokens become undecryptable after a restart/redeploy.
-        var dataProtection = services.AddDataProtection().SetApplicationName("ShortLynx");
-        var keyPath = configuration["DataProtection:KeyPath"];
-        if (!string.IsNullOrWhiteSpace(keyPath))
-            dataProtection.PersistKeysToFileSystem(new DirectoryInfo(keyPath));
-        services.AddSingleton<ShortLynx.Services.Social.ITokenProtector, ShortLynx.Core.Social.DataProtectionTokenProtector>();
+        // Token encryption for social connections. The key ring is persisted in the DATABASE and the
+        // application name is shared, so Core and Admin use one ring: tokens protected by either app are
+        // readable by the other, and keys survive redeploys with no mounted volume.
+        services.AddDataProtection()
+            .SetApplicationName("ShortLynx")
+            .PersistKeysToDbContext<ShortLynx.Data.Context.ShortLynxDbContext>();
+        services.AddSingleton<ShortLynx.Services.Social.ITokenProtector, ShortLynx.Services.Social.DataProtectionTokenProtector>();
 
         // Social connectors (one per platform, typed HttpClients) + the account-scoped connection service.
         services.AddHttpClient<ShortLynx.Services.Social.ISocialConnector, ShortLynx.Services.Social.BlueskyConnector>();

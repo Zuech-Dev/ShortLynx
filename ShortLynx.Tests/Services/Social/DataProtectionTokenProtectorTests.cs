@@ -1,5 +1,5 @@
 using Microsoft.AspNetCore.DataProtection;
-using ShortLynx.Core.Social;
+using ShortLynx.Services.Social;
 
 namespace ShortLynx.Tests.Services.Social;
 

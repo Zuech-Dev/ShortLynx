@@ -48,5 +48,35 @@ public sealed class MastodonConnector(HttpClient http) : ISocialConnector
             ExpiresAt: null);
     }
 
+    public async Task<SocialPostRef> PublishAsync(SocialConnectionContext connection, string text, CancellationToken ct = default)
+    {
+        if (text.Length > 500)
+            throw new ArgumentException("Mastodon posts are limited to 500 characters on most instances.");
+        if (string.IsNullOrWhiteSpace(connection.InstanceUrl))
+            throw new ArgumentException("The Mastodon connection has no instance URL.");
+
+        var baseUrl = connection.InstanceUrl.TrimEnd('/');
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/api/v1/statuses");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", connection.Tokens.AccessToken);
+        request.Content = JsonContent.Create(new { status = text });
+
+        using var response = await http.SendAsync(request, ct);
+
+        if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+            throw new TokenExpiredException("Mastodon rejected the access token — reconnect the account.");
+        if (response.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.UnprocessableEntity)
+            throw new ArgumentException($"Mastodon rejected the post: {await response.Content.ReadAsStringAsync(ct)}");
+        response.EnsureSuccessStatusCode();
+
+        var status = await response.Content.ReadFromJsonAsync<StatusResponse>(ct)
+                     ?? throw new InvalidOperationException("Empty status response from Mastodon.");
+        return new SocialPostRef(status.Id, status.Url);
+    }
+
+    // Mastodon user tokens are long-lived and have no refresh flow — an invalid token means reconnect.
+    public Task<SocialTokens?> RefreshAsync(SocialConnectionContext connection, CancellationToken ct = default)
+        => Task.FromResult<SocialTokens?>(null);
+
     private sealed record VerifyCredentialsResponse(string Id, string Username, string Acct);
+    private sealed record StatusResponse(string Id, string? Url);
 }

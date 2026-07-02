@@ -87,6 +87,7 @@ public static class ServiceExtensions
         services.AddHttpClient<ISocialConnector, BlueskyConnector>();
         services.AddHttpClient<ISocialConnector, MastodonConnector>();
         services.AddScoped<ISocialConnectionService, SocialConnectionService>();
+        services.AddScoped<ISocialPublishService, SocialPublishService>();
 
         services.AddScoped<IShortCodeGenerator, HashBase62Generator>();
         services.AddSingleton<IUrlValidationService, UrlValidationService>();

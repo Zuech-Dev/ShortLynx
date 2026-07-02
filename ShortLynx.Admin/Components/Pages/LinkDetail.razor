@@ -5,6 +5,7 @@
 @using ShortLynx.Services.Analytics
 @using ShortLynx.Services.Campaigns
 @using ShortLynx.Services.Links
+@using ShortLynx.Services.Social
 @inject IDbContextFactory<ShortLynxDbContext> DbFactory
 @inject IServiceScopeFactory ScopeFactory
 @inject IOptions<DashboardOptions> DashboardOpts
@@ -140,6 +141,93 @@ else
         </div>
     }
 
+    @if (_canPin && _link.Mode == LinkMode.Anonymous && !string.IsNullOrEmpty(_shortUrl))
+    {
+        <div class="card mb-4" data-testid="publish-card">
+            <div class="card-body">
+                <h5 class="card-title">Post to social</h5>
+                @if (_socialConnections.Count == 0)
+                {
+                    <p class="text-gray-500 text-sm">No social accounts connected yet — connect one under
+                        <a class="text-blue-700 hover:underline" href="/social">Social</a> to publish this link.</p>
+                }
+                else
+                {
+                    <p class="text-gray-500 text-sm">The short URL is appended to your message automatically.</p>
+                    <div class="mb-2">
+                        <textarea class="field-input" rows="3" @bind="_publishText"
+                                  placeholder="Say something about this link…" data-testid="publish-text"></textarea>
+                    </div>
+                    <div class="flex flex-col gap-1 mb-3">
+                        @foreach (var c in _socialConnections)
+                        {
+                            <label class="inline-flex items-center gap-2">
+                                <input type="checkbox" checked="@_publishTargets.Contains(c.Id)"
+                                       @onchange="e => ToggleTarget(c.Id, e.Value is true)" data-testid="publish-target"/>
+                                <span class="badge @(c.Platform == "Bluesky" ? "badge-blue" : "badge-gray")">@c.Platform</span>
+                                <span>@c.Handle</span>
+                            </label>
+                        }
+                    </div>
+                    <button class="btn btn-primary" disabled="@(_busyPublishing || _publishTargets.Count == 0)"
+                            @onclick="PublishAsync" data-testid="publish-submit">
+                        @(_busyPublishing ? "Posting…" : "Post")
+                    </button>
+
+                    @if (_publishResults.Count > 0)
+                    {
+                        <ul class="mt-3 space-y-1 text-sm" data-testid="publish-results">
+                            @foreach (var r in _publishResults)
+                            {
+                                <li>
+                                    @if (r.Success)
+                                    {
+                                        <span class="text-green-600">✓ @r.Handle</span>
+                                        @if (r.PostUrl is not null)
+                                        {
+                                            <text> — </text><a class="text-blue-700 hover:underline" href="@r.PostUrl" target="_blank" rel="noopener">view post</a>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <span class="text-red-600">✗ @r.Handle — @r.Error</span>
+                                    }
+                                </li>
+                            }
+                        </ul>
+                    }
+                }
+
+                @if (_posts.Count > 0)
+                {
+                    <h6 class="font-semibold text-sm mt-4 mb-2">Published posts</h6>
+                    <table class="data-table" data-testid="social-posts">
+                        <thead>
+                        <tr><th>Platform</th><th>Account</th><th>Posted</th><th>Impressions</th><th></th></tr>
+                        </thead>
+                        <tbody>
+                        @foreach (var p in _posts)
+                        {
+                            <tr>
+                                <td>@p.Platform</td>
+                                <td>@p.Handle</td>
+                                <td class="whitespace-nowrap">@p.PostedAt.ToString("yyyy-MM-dd HH:mm") UTC</td>
+                                <td>@(p.Impressions?.ToString() ?? "—")</td>
+                                <td>
+                                    @if (p.PostUrl is not null)
+                                    {
+                                        <a class="text-blue-700 hover:underline text-sm" href="@p.PostUrl" target="_blank" rel="noopener">view</a>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                }
+            </div>
+        </div>
+    }
+
     <ClickBreakdownCard Breakdown="_breakdown" />
 
     @if (_link.Mode == LinkMode.UserAttributed)
@@ -243,6 +331,14 @@ else
     List<CampaignOption> _campaignOptions = [];
     string _selectedCampaignKey = string.Empty;
 
+    // Social publishing (anonymous links in the current account).
+    bool _busyPublishing;
+    string? _publishText;
+    readonly HashSet<Guid> _publishTargets = [];
+    List<SocialConnectionRow> _socialConnections = [];
+    List<PublishResultRow> _publishResults = [];
+    List<SocialPostRow> _posts = [];
+
     protected override async Task OnParametersSetAsync()
     {
         if (!_authResolved)
@@ -345,10 +441,61 @@ else
                 .Select(c => new CampaignOption(c.Id, c.Name))
                 .ToListAsync();
             _selectedCampaignKey = _link.CampaignId?.ToString() ?? string.Empty;
+
+            if (_link.Mode == LinkMode.Anonymous)
+            {
+                _socialConnections = await db.SocialConnectionEntities
+                    .Where(c => c.AccountId == _accountId)
+                    .OrderBy(c => c.Handle)
+                    .Select(c => new SocialConnectionRow(c.Id, c.Platform.ToString(), c.Handle))
+                    .ToListAsync();
+                _posts = await db.SocialPostEntities
+                    .Where(p => p.LinkId == Id)
+                    .OrderByDescending(p => p.Id)
+                    .Select(p => new SocialPostRow(p.Platform.ToString(), p.Handle, p.PostedAt, p.PostUrl, p.Impressions))
+                    .ToListAsync();
+            }
         }
 
         _loaded = true;
     }
+
+    void ToggleTarget(Guid connectionId, bool selected)
+    {
+        if (selected) _publishTargets.Add(connectionId);
+        else _publishTargets.Remove(connectionId);
+    }
+
+    async Task PublishAsync()
+    {
+        if (_publishTargets.Count == 0 || string.IsNullOrEmpty(_shortUrl)) return;
+        _busyPublishing = true;
+        _publishResults = [];
+        try
+        {
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var publisher = scope.ServiceProvider.GetRequiredService<ISocialPublishService>();
+            var results = await publisher.PublishLinkAsync(_accountId, Id, [.. _publishTargets], _publishText, _shortUrl);
+            _publishResults = results
+                .Select(r => new PublishResultRow(r.Handle, r.Success, r.Post?.PostUrl, r.Error))
+                .ToList();
+            if (results.Any(r => r.Success))
+            {
+                _publishText = null;
+                _publishTargets.Clear();
+                await LoadAsync(); // refresh the published-posts table; per-target results stay visible
+            }
+        }
+        catch (ShortLynx.Services.Entitlements.EntitlementException ex)
+        {
+            _publishResults = [new PublishResultRow("plan", false, null, ex.Message)];
+        }
+        finally { _busyPublishing = false; }
+    }
+
+    sealed record SocialConnectionRow(Guid Id, string Platform, string Handle);
+    sealed record PublishResultRow(string Handle, bool Success, string? PostUrl, string? Error);
+    sealed record SocialPostRow(string Platform, string Handle, DateTimeOffset PostedAt, string? PostUrl, long? Impressions);
 
     async Task SaveCampaign()
     {

@@ -16,7 +16,31 @@ namespace ShortLynx.Tests.Admin;
 
 public class LinkDetailComponentTests : BunitContext
 {
+    private sealed class FakePublishService : ShortLynx.Services.Social.ISocialPublishService
+    {
+        public readonly List<(Guid AccountId, Guid LinkId, Guid[] ConnectionIds, string? Text, string ShortUrl)> Calls = [];
+
+        public Task<IReadOnlyList<ShortLynx.Services.Social.PublishResult>> PublishLinkAsync(
+            Guid accountId, Guid linkId, IReadOnlyCollection<Guid> connectionIds,
+            string? text, string shortUrl, CancellationToken ct = default)
+        {
+            Calls.Add((accountId, linkId, [.. connectionIds], text, shortUrl));
+            IReadOnlyList<ShortLynx.Services.Social.PublishResult> results =
+                connectionIds.Select(id => new ShortLynx.Services.Social.PublishResult(
+                    id, "me.bsky.social", true,
+                    new SocialPostEntity
+                    {
+                        Id = Guid.CreateVersion7(), AccountId = accountId, LinkId = linkId,
+                        Platform = SocialPlatform.Bluesky, Handle = "me.bsky.social",
+                        ExternalPostId = "at://x", PostUrl = "https://bsky.app/profile/x/post/1",
+                        Text = "posted", PostedAt = DateTimeOffset.UtcNow,
+                    }, null)).ToList();
+            return Task.FromResult(results);
+        }
+    }
+
     private readonly FakeLinkService _links = new();
+    private readonly FakePublishService _publish = new();
     private readonly SqliteConnection _conn;
     private readonly Guid _uid = Guid.CreateVersion7();
     private readonly Guid _accountId;
@@ -27,6 +51,7 @@ public class LinkDetailComponentTests : BunitContext
         _conn.Open();
         Services.AddDbContextFactory<ShortLynxDbContext>(o => o.UseSqlite(_conn));
         Services.AddScoped<ILinkService>(_ => _links);
+        Services.AddScoped<ShortLynx.Services.Social.ISocialPublishService>(_ => _publish);
         Services.AddSingleton<IOptions<DashboardOptions>>(
             Options.Create(new DashboardOptions { PublicBaseUrl = "https://s.example" }));
 
@@ -147,6 +172,51 @@ public class LinkDetailComponentTests : BunitContext
         db.CampaignEntities.Add(c);
         db.SaveChanges();
         return c.Id;
+    }
+
+    [Fact]
+    public void PublishCard_SeededConnection_PostsToSelectedTargets()
+    {
+        var linkId = SeedAnonymousLink(); // code "abc12345" → short URL https://s.example/abc12345
+        Guid connectionId;
+        var factory = Services.GetRequiredService<IDbContextFactory<ShortLynxDbContext>>();
+        using (var db = factory.CreateDbContext())
+        {
+            var c = new SocialConnectionEntity
+            {
+                Id = Guid.CreateVersion7(), AccountId = _accountId, Platform = SocialPlatform.Bluesky,
+                ExternalAccountId = "did:plc:x", Handle = "me.bsky.social",
+                AccessTokenProtected = "enc:x", CreatedAt = DateTimeOffset.UtcNow,
+            };
+            db.SocialConnectionEntities.Add(c);
+            db.SaveChanges();
+            connectionId = c.Id;
+        }
+
+        var cut = Render<LinkDetail>(p => p.Add(c => c.Id, linkId));
+
+        cut.Find("[data-testid=publish-text]").Change("Big news!");
+        cut.Find("[data-testid=publish-target]").Change(true);
+        cut.Find("[data-testid=publish-submit]").Click();
+
+        var call = Assert.Single(_publish.Calls);
+        Assert.Equal(_accountId, call.AccountId);
+        Assert.Equal(linkId, call.LinkId);
+        Assert.Equal([connectionId], call.ConnectionIds);
+        Assert.Equal("Big news!", call.Text);
+        Assert.Equal("https://s.example/abc12345", call.ShortUrl);
+
+        // Result list + refreshed published-posts table render.
+        Assert.Contains("view post", cut.Find("[data-testid=publish-results]").InnerHtml);
+    }
+
+    [Fact]
+    public void PublishCard_NoConnections_ShowsConnectHint()
+    {
+        var linkId = SeedAnonymousLink();
+        var cut = Render<LinkDetail>(p => p.Add(c => c.Id, linkId));
+
+        Assert.Contains("connect one under", cut.Find("[data-testid=publish-card]").InnerHtml);
     }
 
     [Fact]

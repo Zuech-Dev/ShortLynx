@@ -1,4 +1,5 @@
 using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Options;
 using ShortLynx.Core.RateLimit;
 using ShortLynx.Services.Accounts;
@@ -48,6 +49,15 @@ public static class ServiceExtensions
         // Open-source default: unlimited at every tier, so self-hosting is fully featured and free.
         // A hosted deployment replaces this with a billing-backed policy (outside this repo).
         services.AddSingleton<IEntitlements, UnlimitedEntitlements>();
+
+        // Token encryption for social connections. Keys MUST be persisted in production (set
+        // DataProtection:KeyPath to a mounted volume) — with the default ephemeral key ring, stored
+        // tokens become undecryptable after a restart/redeploy.
+        var dataProtection = services.AddDataProtection().SetApplicationName("ShortLynx");
+        var keyPath = configuration["DataProtection:KeyPath"];
+        if (!string.IsNullOrWhiteSpace(keyPath))
+            dataProtection.PersistKeysToFileSystem(new DirectoryInfo(keyPath));
+        services.AddSingleton<ShortLynx.Services.Social.ITokenProtector, ShortLynx.Core.Social.DataProtectionTokenProtector>();
         services.AddScoped<ILinkService, LinkService>();
         services.AddScoped<ICampaignService, CampaignService>();
         services.AddScoped<IMagicLinkService, MagicLinkService>();

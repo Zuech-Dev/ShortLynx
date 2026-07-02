@@ -189,6 +189,25 @@ public partial class ShortLynxDbContext
                           .HasForeignKey(e => e.UserAccountId)
                           .OnDelete(DeleteBehavior.Cascade);
                 }
+            )
+           .Entity<SocialConnectionEntity>(entity =>
+                {
+                    entity.HasKey(e => e.Id);
+                    entity.Property(e => e.Id).ValueGeneratedNever();
+                    entity.Property(e => e.Platform).HasConversion<int>();
+                    // One connection per (account, platform, external account).
+                    entity.HasIndex(e => new { e.AccountId, e.Platform, e.ExternalAccountId }).IsUnique();
+                    // Owning account — deleting an account removes its connections.
+                    entity.HasOne(e => e.Account)
+                          .WithMany()
+                          .HasForeignKey(e => e.AccountId)
+                          .OnDelete(DeleteBehavior.Cascade);
+                    // Audit-only creator; deleting the user doesn't touch the connection.
+                    entity.HasOne(e => e.UserAccount)
+                          .WithMany()
+                          .HasForeignKey(e => e.UserAccountId)
+                          .OnDelete(DeleteBehavior.NoAction);
+                }
             );
 
         OnModelCreatingPartial(modelBuilder);

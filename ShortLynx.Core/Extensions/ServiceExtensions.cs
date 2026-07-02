@@ -58,6 +58,10 @@ public static class ServiceExtensions
         if (!string.IsNullOrWhiteSpace(keyPath))
             dataProtection.PersistKeysToFileSystem(new DirectoryInfo(keyPath));
         services.AddSingleton<ShortLynx.Services.Social.ITokenProtector, ShortLynx.Core.Social.DataProtectionTokenProtector>();
+
+        // Social connectors (one per platform, typed HttpClients) + the account-scoped connection service.
+        services.AddHttpClient<ShortLynx.Services.Social.ISocialConnector, ShortLynx.Services.Social.BlueskyConnector>();
+        services.AddScoped<ShortLynx.Services.Social.ISocialConnectionService, ShortLynx.Services.Social.SocialConnectionService>();
         services.AddScoped<ILinkService, LinkService>();
         services.AddScoped<ICampaignService, CampaignService>();
         services.AddScoped<IMagicLinkService, MagicLinkService>();

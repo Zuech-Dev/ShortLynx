@@ -170,6 +170,52 @@ public class MeLinksController(
             codeStats, b.Sources, b.Devices, b.Timeline));
     }
 
+    // POST /me/links/{id}/publish — post the link's short URL to connected social accounts.
+    [HttpPost("{id:guid}/publish")]
+    public async Task<IActionResult> Publish(
+        Guid id, [FromBody] PublishLinkRequest request,
+        [FromServices] ShortLynx.Services.Social.ISocialPublishService publisher, CancellationToken ct)
+    {
+        var link = await db.LinkEntities.FirstOrDefaultAsync(l => l.Id == id && l.AccountId == AccountId, ct);
+        if (link is null) return NotFound();
+
+        // Public posting needs the shared anonymous code; user-attributed links only have per-recipient
+        // codes, and broadcasting one recipient's code would corrupt that recipient's attribution.
+        var code = await ResolveCodeAsync(link, code: null, ct);
+        if (code is null)
+            return BadRequest(new { error = "Only anonymous links can be published (user-attributed links have per-recipient codes)." });
+
+        var shortUrl = await ShortUrlBuilder.BuildAsync(db, link, code, linkOptions.Value.PublicBaseUrl, ct);
+
+        try
+        {
+            var results = await publisher.PublishLinkAsync(AccountId, id, request.ConnectionIds, request.Text, shortUrl, ct);
+            return Ok(results.Select(r => new PublishTargetResponse(
+                r.ConnectionId, r.Handle, r.Success, r.Post?.PostUrl, r.Error)));
+        }
+        catch (EntitlementException ex)
+        {
+            return StatusCode(StatusCodes.Status402PaymentRequired, new { error = ex.Message });
+        }
+    }
+
+    // GET /me/links/{id}/posts — publishing history (and, once pulled, metrics) for the link.
+    [HttpGet("{id:guid}/posts")]
+    public async Task<IActionResult> Posts(Guid id, CancellationToken ct)
+    {
+        if (!await db.LinkEntities.AnyAsync(l => l.Id == id && l.AccountId == AccountId, ct))
+            return NotFound();
+
+        var posts = await db.SocialPostEntities
+            .Where(p => p.LinkId == id)
+            .OrderByDescending(p => p.Id)
+            .ToListAsync(ct);
+
+        return Ok(posts.Select(p => new SocialPostResponse(
+            p.Id, p.Platform.ToString(), p.Handle, p.PostUrl, p.Text, p.PostedAt,
+            p.Impressions, p.Likes, p.Reposts, p.Replies, p.MetricsUpdatedAt)));
+    }
+
     // GET /me/links/{id}/qr?format=png|svg&size=<n>&code=<optional>
     // Returns a downloadable QR code that encodes the link's full short URL. For user-attributed links
     // (one code per recipient) pass ?code= to choose which code to encode.

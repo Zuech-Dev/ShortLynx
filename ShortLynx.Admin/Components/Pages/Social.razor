@@ -1,0 +1,210 @@
+@page "/social"
+@attribute [Authorize]
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.Extensions.DependencyInjection
+@using ShortLynx.Services.Entitlements
+@using ShortLynx.Services.Social
+@inject IServiceScopeFactory ScopeFactory
+@inject IDbContextFactory<ShortLynxDbContext> DbFactory
+
+<PageTitle>Social Accounts — ShortLynx Admin</PageTitle>
+
+<div class="flex justify-between items-center mb-3">
+    <h1 class="text-2xl font-bold">Social Accounts</h1>
+    <button class="btn btn-primary" data-testid="connect-toggle" @onclick="() => _showConnect = !_showConnect">
+        @(_showConnect ? "Cancel" : "+ Connect account")
+    </button>
+</div>
+
+<p class="text-gray-500 text-sm mb-3 max-w-[640px]">
+    Connect Bluesky or Mastodon accounts to publish tracked links directly and (soon) pull post
+    impressions for true click-through rates. Credentials are verified with the platform and tokens are
+    stored encrypted — they are never shown again.
+</p>
+
+@if (_showConnect)
+{
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5 class="card-title">Connect an account</h5>
+            <EditForm Model="_form" OnValidSubmit="Connect">
+                <DataAnnotationsValidator/>
+                <div class="mb-3">
+                    <label class="field-label">Platform</label>
+                    <InputSelect class="field-input max-w-[240px]" @bind-Value="_form.Platform" data-testid="connect-platform">
+                        <option value="Bluesky">Bluesky</option>
+                        <option value="Mastodon">Mastodon</option>
+                    </InputSelect>
+                </div>
+                @if (_form.Platform == "Mastodon")
+                {
+                    <div class="mb-3">
+                        <label class="field-label">Instance URL</label>
+                        <InputText class="field-input" @bind-Value="_form.InstanceUrl"
+                                   placeholder="https://mastodon.social" data-testid="connect-instance"/>
+                        <div class="text-gray-500 text-sm mt-1">Your Mastodon server.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="field-label">Access token</label>
+                        <InputText type="password" class="field-input" @bind-Value="_form.Secret" data-testid="connect-secret"/>
+                        <div class="text-gray-500 text-sm mt-1">
+                            Create one on your instance under <em>Settings → Development → New application</em>
+                            (scopes: read, write).
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="field-label">Handle <span class="text-gray-500 text-sm">(for your reference)</span></label>
+                        <InputText class="field-input" @bind-Value="_form.Identifier" placeholder="@("@you@mastodon.social")" data-testid="connect-identifier"/>
+                    </div>
+                }
+                else
+                {
+                    <div class="mb-3">
+                        <label class="field-label">Handle</label>
+                        <InputText class="field-input" @bind-Value="_form.Identifier"
+                                   placeholder="you.bsky.social" data-testid="connect-identifier"/>
+                    </div>
+                    <div class="mb-3">
+                        <label class="field-label">App password</label>
+                        <InputText type="password" class="field-input" @bind-Value="_form.Secret" data-testid="connect-secret"/>
+                        <div class="text-gray-500 text-sm mt-1">
+                            Create one in Bluesky under <em>Settings → App Passwords</em> — never your main password.
+                        </div>
+                    </div>
+                }
+                @if (_connectError is not null)
+                {
+                    <div class="text-red-600 text-sm mb-2" data-testid="connect-error">@_connectError</div>
+                }
+                <button type="submit" class="btn btn-primary" disabled="@_busy" data-testid="connect-submit">
+                    @(_busy ? "Verifying…" : "Connect")
+                </button>
+            </EditForm>
+        </div>
+    </div>
+}
+
+@if (!_loaded)
+{
+    <p class="text-gray-500">Loading…</p>
+}
+else if (_connections.Count == 0)
+{
+    <p class="text-gray-500" data-testid="social-empty">No social accounts connected yet.</p>
+}
+else
+{
+    <div class="flex flex-col gap-3">
+        @foreach (var c in _connections)
+        {
+            <div class="card" data-testid="social-row">
+                <div class="card-body">
+                    <div class="flex items-center gap-2">
+                        <span class="badge @(c.Platform == "Bluesky" ? "badge-blue" : "badge-gray")">@c.Platform</span>
+                        <span class="font-semibold">@c.Handle</span>
+                        @if (!string.IsNullOrEmpty(c.InstanceUrl))
+                        {
+                            <span class="text-gray-500 text-sm">@c.InstanceUrl</span>
+                        }
+                        <span class="text-gray-500 text-sm ml-auto">connected @c.CreatedAt.ToString("yyyy-MM-dd")</span>
+                        <button class="btn btn-outline-danger" disabled="@_busy" data-testid="disconnect-btn"
+                                @onclick="() => Disconnect(c.Id)">Disconnect</button>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    bool _loaded, _resolved, _showConnect, _busy;
+    Guid _uid, _accountId;
+    List<ConnectionRow> _connections = [];
+    readonly ConnectForm _form = new();
+    string? _connectError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var principal = (await AuthState).User;
+        var userId = principal.GetUserId();
+        if (userId is null) { _loaded = true; return; }
+        _uid = userId.Value;
+        await using (var db = await DbFactory.CreateDbContextAsync())
+            _accountId = await AccountResolver.ResolveAccountIdAsync(db, _uid, principal.GetAccountId(), principal.Identity?.Name ?? "Personal");
+        _resolved = true;
+        await LoadAsync();
+    }
+
+    async Task LoadAsync()
+    {
+        if (!_resolved) return;
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        var svc = scope.ServiceProvider.GetRequiredService<ISocialConnectionService>();
+        var list = await svc.ListAsync(_accountId);
+        _connections = list.Select(c => new ConnectionRow(
+            c.Id, c.Platform.ToString(), c.Handle, c.InstanceUrl, c.CreatedAt)).ToList();
+        _loaded = true;
+    }
+
+    async Task Connect()
+    {
+        if (!_resolved) return;
+        _connectError = null;
+
+        if (!Enum.TryParse<SocialPlatform>(_form.Platform, ignoreCase: true, out var platform))
+        {
+            _connectError = $"Unknown platform '{_form.Platform}'.";
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var svc = scope.ServiceProvider.GetRequiredService<ISocialConnectionService>();
+            await svc.ConnectAsync(_accountId, _uid, platform,
+                new SocialCredentials(_form.Identifier ?? string.Empty, _form.Secret!, _form.InstanceUrl));
+            _form.Reset();
+            _showConnect = false;
+            await LoadAsync();
+        }
+        catch (ArgumentException ex) { _connectError = ex.Message; }
+        catch (EntitlementException ex) { _connectError = ex.Message; }
+        catch (HttpRequestException) { _connectError = "The platform could not be reached. Try again shortly."; }
+        finally { _busy = false; }
+    }
+
+    async Task Disconnect(Guid id)
+    {
+        _busy = true;
+        try
+        {
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var svc = scope.ServiceProvider.GetRequiredService<ISocialConnectionService>();
+            await svc.DisconnectAsync(id, _accountId);
+            await LoadAsync();
+        }
+        finally { _busy = false; }
+    }
+
+    sealed class ConnectForm
+    {
+        public string Platform { get; set; } = "Bluesky";
+        public string? Identifier { get; set; }
+
+        [Required(ErrorMessage = "The app password / access token is required.")]
+        public string? Secret { get; set; }
+
+        public string? InstanceUrl { get; set; }
+
+        public void Reset()
+        {
+            Identifier = Secret = InstanceUrl = null;
+            Platform = "Bluesky";
+        }
+    }
+
+    sealed record ConnectionRow(Guid Id, string Platform, string Handle, string? InstanceUrl, DateTimeOffset CreatedAt);
+}

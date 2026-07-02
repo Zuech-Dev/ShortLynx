@@ -27,6 +27,12 @@ public class SocialConnectionServiceTests
             Calls++;
             return Task.FromResult(Identity);
         }
+
+        public Task<SocialPostRef> PublishAsync(SocialConnectionContext connection, string text, CancellationToken ct = default)
+            => throw new NotSupportedException();
+
+        public Task<SocialTokens?> RefreshAsync(SocialConnectionContext connection, CancellationToken ct = default)
+            => Task.FromResult<SocialTokens?>(null);
     }
 
     private sealed class DenyEntitlements : IEntitlements

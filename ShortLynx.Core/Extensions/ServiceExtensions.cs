@@ -61,6 +61,7 @@ public static class ServiceExtensions
 
         // Social connectors (one per platform, typed HttpClients) + the account-scoped connection service.
         services.AddHttpClient<ShortLynx.Services.Social.ISocialConnector, ShortLynx.Services.Social.BlueskyConnector>();
+        services.AddHttpClient<ShortLynx.Services.Social.ISocialConnector, ShortLynx.Services.Social.MastodonConnector>();
         services.AddScoped<ShortLynx.Services.Social.ISocialConnectionService, ShortLynx.Services.Social.SocialConnectionService>();
         services.AddScoped<ILinkService, LinkService>();
         services.AddScoped<ICampaignService, CampaignService>();

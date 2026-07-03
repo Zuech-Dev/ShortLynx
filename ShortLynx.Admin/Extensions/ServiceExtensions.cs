@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using ShortLynx.Admin.Options;
 using ShortLynx.Data.Context;
@@ -14,6 +15,7 @@ using ShortLynx.Services.Email;
 using ShortLynx.Services.Links;
 using ShortLynx.Services.MagicLinks;
 using ShortLynx.Services.ShortCodes;
+using ShortLynx.Services.Social;
 using ShortLynx.Services.UrlValidation;
 
 namespace ShortLynx.Admin.Extensions;
@@ -74,6 +76,18 @@ public static class ServiceExtensions
         services.AddSingleton<IEntitlements, UnlimitedEntitlements>();
         services.AddScoped<ILinkService, LinkService>();
         services.AddScoped<ICampaignService, CampaignService>();
+
+        // Shared DataProtection ring (DB-persisted, same application name as Core) so tokens the
+        // dashboard protects are decryptable by Core for publishing. Side benefit: Admin auth cookies
+        // now survive restarts instead of logging everyone out on each redeploy.
+        services.AddDataProtection()
+            .SetApplicationName("ShortLynx")
+            .PersistKeysToDbContext<ShortLynxDbContext>();
+        services.AddSingleton<ITokenProtector, DataProtectionTokenProtector>();
+        services.AddHttpClient<ISocialConnector, BlueskyConnector>();
+        services.AddHttpClient<ISocialConnector, MastodonConnector>();
+        services.AddScoped<ISocialConnectionService, SocialConnectionService>();
+
         services.AddScoped<IShortCodeGenerator, HashBase62Generator>();
         services.AddSingleton<IUrlValidationService, UrlValidationService>();
         // Custom domains: management + DNS-TXT verification.

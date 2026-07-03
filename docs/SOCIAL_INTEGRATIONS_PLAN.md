@@ -133,11 +133,14 @@ Tiers: **A (open, build first): Bluesky, Mastodon** · **B (official, gated): Th
   Admin UI surfacing of the new breakdowns (this phase shipped the Core API + data layer).
 
 ### Phase 1 — Tier-A publishing (Bluesky + Mastodon)
-- `SocialConnection` entity + migration + encrypted token storage; connect/disconnect under `/me/social`.
-- `ISocialConnector` + Bluesky (app-password→OAuth) and Mastodon connectors.
-- "Create link → post to connected accounts" flow (Core endpoint + Admin UI); record `SocialPost`.
-- Pull post metrics on a schedule (reuse the hosted-service pattern from domain re-verification).
-- **CTR surface:** `SocialPost` metrics (impressions) alongside visit click counts → true CTR per post.
+- ✅ `SocialConnection` entity + migration + encrypted token storage; connect/disconnect under `/me/social`
+  and an Admin **Social** page. Tokens encrypted via a DataProtection key ring **persisted in the DB and
+  shared across Core/Admin** (one ring, survives redeploys, no volume).
+- ✅ `ISocialConnector` + Bluesky (app password → `createSession`, DID as external id) and Mastodon
+  (`verify_credentials`, instance-qualified external id) connectors.
+- ⬜ "Create link → post to connected accounts" flow (Core endpoint + Admin UI); record `SocialPost`.
+- ⬜ Pull post metrics on a schedule (reuse the hosted-service pattern from domain re-verification).
+- ⬜ **CTR surface:** `SocialPost` metrics (impressions) alongside visit click counts → true CTR per post.
 
 ### Phase 2 — Gated platforms (Threads, Reddit)
 - Meta app + Tech-Provider Verification + per-permission review; Threads connector (container/publish,

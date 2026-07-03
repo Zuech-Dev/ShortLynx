@@ -20,6 +20,8 @@ public class AdminServiceResolutionTests : IClassFixture<AdminFactory>
     [InlineData(typeof(ILinkService))]
     [InlineData(typeof(ICustomDomainService))]
     [InlineData(typeof(IAccountService))]
+    [InlineData(typeof(ShortLynx.Services.Social.ISocialConnectionService))]
+    [InlineData(typeof(ShortLynx.Services.Social.ITokenProtector))]
     public void PageService_IsRegistered(Type serviceType)
     {
         using var scope = _factory.Services.CreateScope();

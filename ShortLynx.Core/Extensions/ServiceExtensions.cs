@@ -1,4 +1,5 @@
 using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Options;
 using ShortLynx.Core.RateLimit;
 using ShortLynx.Services.Accounts;
@@ -48,6 +49,19 @@ public static class ServiceExtensions
         // Open-source default: unlimited at every tier, so self-hosting is fully featured and free.
         // A hosted deployment replaces this with a billing-backed policy (outside this repo).
         services.AddSingleton<IEntitlements, UnlimitedEntitlements>();
+
+        // Token encryption for social connections. The key ring is persisted in the DATABASE and the
+        // application name is shared, so Core and Admin use one ring: tokens protected by either app are
+        // readable by the other, and keys survive redeploys with no mounted volume.
+        services.AddDataProtection()
+            .SetApplicationName("ShortLynx")
+            .PersistKeysToDbContext<ShortLynx.Data.Context.ShortLynxDbContext>();
+        services.AddSingleton<ShortLynx.Services.Social.ITokenProtector, ShortLynx.Services.Social.DataProtectionTokenProtector>();
+
+        // Social connectors (one per platform, typed HttpClients) + the account-scoped connection service.
+        services.AddHttpClient<ShortLynx.Services.Social.ISocialConnector, ShortLynx.Services.Social.BlueskyConnector>();
+        services.AddHttpClient<ShortLynx.Services.Social.ISocialConnector, ShortLynx.Services.Social.MastodonConnector>();
+        services.AddScoped<ShortLynx.Services.Social.ISocialConnectionService, ShortLynx.Services.Social.SocialConnectionService>();
         services.AddScoped<ILinkService, LinkService>();
         services.AddScoped<ICampaignService, CampaignService>();
         services.AddScoped<IMagicLinkService, MagicLinkService>();

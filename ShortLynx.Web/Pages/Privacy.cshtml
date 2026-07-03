@@ -1,8 +1,71 @@
-﻿@page
+@page
 @model PrivacyModel
 @{
     ViewData["Title"] = "Privacy Policy";
 }
 <h1 class="text-2xl font-bold mb-3">@ViewData["Title"]</h1>
+<p class="text-gray-500 text-sm mb-4">Last updated: @Model.LastUpdated.ToString("MMMM d, yyyy")</p>
 
-<p>Use this page to detail your site's privacy policy.</p>
+<p>
+    ShortLynx ("we", "us") operates a link-shortening and campaign-analytics service. This page explains
+    what data we collect when someone clicks one of our short links or uses our dashboard, and what we
+    deliberately do not collect.
+</p>
+
+<h2 class="text-xl font-semibold mt-6 mb-2">What we collect when a link is clicked</h2>
+<p>Every click through a ShortLynx short link is redirected instantly, and we record:</p>
+<ul class="list-disc pl-6 space-y-1">
+    <li>The timestamp of the click.</li>
+    <li>
+        A one-way <strong>cryptographic hash</strong> of the visitor's IP address (keyed with a secret
+        pepper, rotating hourly). The raw IP address is <strong>never stored</strong>. This hash cannot be
+        reversed to recover the original IP and is used only to estimate unique visitors and to filter
+        automated traffic.
+    </li>
+    <li>
+        Coarse, low-detail categories derived from the browser's request headers: platform/referrer
+        source (e.g. "Twitter", "Direct"), device class (mobile/desktop/tablet), browser family, operating
+        system family, primary language, and — where our infrastructure supports it — country. We derive
+        these categories once and discard the underlying raw values (the full User-Agent string and the
+        full referring URL are never stored).
+    </li>
+    <li>
+        For links created in "user-attributed" mode (used for outreach and sales tracking), the specific
+        recipient code that was clicked, so the link creator can see which of their own contacts engaged.
+        This does not require the visitor to sign in or provide any personal information at click time.
+    </li>
+</ul>
+
+<h2 class="text-xl font-semibold mt-6 mb-2">What we do not collect</h2>
+<ul class="list-disc pl-6 space-y-1">
+    <li>We do not set tracking cookies on the redirect.</li>
+    <li>We do not collect precise geolocation, device fingerprints, or browser fingerprinting signals.</li>
+    <li>We do not sell click data or share it with advertisers or data brokers.</li>
+    <li>
+        If a visitor's browser sends <strong>Do Not Track (DNT)</strong> or
+        <strong>Global Privacy Control (Sec-GPC)</strong>, we honor it: the click is still counted for
+        aggregate volume, but none of the category data above (platform, device, browser, etc.) is
+        recorded for that click.
+    </li>
+</ul>
+
+<h2 class="text-xl font-semibold mt-6 mb-2">Account data</h2>
+<p>
+    If you create a ShortLynx account (to shorten links, run campaigns, or connect social accounts), we
+    store your email address, the links and campaigns you create, and — for connected social accounts —
+    OAuth access tokens, which are encrypted at rest and never displayed after the initial connection.
+    You can disconnect a social account at any time, which permanently deletes its stored tokens.
+</p>
+
+<h2 class="text-xl font-semibold mt-6 mb-2">Data retention and deletion</h2>
+<p>
+    You may request deletion of your account and associated data at any time. See our
+    <a asp-page="/DataDeletion" class="text-blue-700 hover:underline">Data Deletion Instructions</a>
+    for how to do this.
+</p>
+
+<h2 class="text-xl font-semibold mt-6 mb-2">Contact</h2>
+<p>
+    Questions about this policy or your data can be sent to
+    <a href="mailto:@Model.ContactEmail" class="text-blue-700 hover:underline">@Model.ContactEmail</a>.
+</p>

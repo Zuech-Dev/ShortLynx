@@ -138,7 +138,9 @@ Tiers: **A (open, build first): Bluesky, Mastodon** · **B (official, gated): Th
   shared across Core/Admin** (one ring, survives redeploys, no volume).
 - ✅ `ISocialConnector` + Bluesky (app password → `createSession`, DID as external id) and Mastodon
   (`verify_credentials`, instance-qualified external id) connectors.
-- ⬜ "Create link → post to connected accounts" flow (Core endpoint + Admin UI); record `SocialPost`.
+- ✅ "Create link → post to connected accounts" flow: `POST /me/links/{id}/publish` (per-connection
+  results, stale-token refresh + retry, `SocialPost` recorded) + a "Post to social" card on the Admin
+  link page. Bluesky posts carry byte-offset link facets so the URL is clickable.
 - ⬜ Pull post metrics on a schedule (reuse the hosted-service pattern from domain re-verification).
 - ⬜ **CTR surface:** `SocialPost` metrics (impressions) alongside visit click counts → true CTR per post.
 

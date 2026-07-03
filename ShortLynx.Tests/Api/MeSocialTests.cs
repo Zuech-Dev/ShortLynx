@@ -25,6 +25,12 @@ public class MeSocialTests : IClassFixture<ApiFactory>
             => RejectCredentials
                 ? throw new ArgumentException("Bluesky rejected the handle or app password.")
                 : Task.FromResult(new SocialIdentity("did:plc:test", credentials.Identifier, "access-jwt", "refresh-jwt", null));
+
+        public Task<SocialPostRef> PublishAsync(SocialConnectionContext connection, string text, CancellationToken ct = default)
+            => Task.FromResult(new SocialPostRef("at://did:plc:test/app.bsky.feed.post/abc", "https://bsky.app/profile/x/post/abc"));
+
+        public Task<SocialTokens?> RefreshAsync(SocialConnectionContext connection, CancellationToken ct = default)
+            => Task.FromResult<SocialTokens?>(null);
     }
 
     // Host with the real pipeline but a faked platform connector (no live network in CI).

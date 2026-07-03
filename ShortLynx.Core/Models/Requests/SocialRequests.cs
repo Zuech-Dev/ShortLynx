@@ -12,3 +12,11 @@ public sealed record ConnectSocialRequest(
     [Required] string Identifier,
     [Required] string Secret,
     string? InstanceUrl = null);
+
+/// <summary>
+/// Publish a link to one or more connected social accounts. The link's short URL is appended to Text
+/// automatically unless Text already contains it; empty Text posts just the short URL.
+/// </summary>
+public sealed record PublishLinkRequest(
+    [Required, MinLength(1)] Guid[] ConnectionIds,
+    string? Text = null);

@@ -62,6 +62,7 @@ public static class ServiceExtensions
         services.AddHttpClient<ShortLynx.Services.Social.ISocialConnector, ShortLynx.Services.Social.BlueskyConnector>();
         services.AddHttpClient<ShortLynx.Services.Social.ISocialConnector, ShortLynx.Services.Social.MastodonConnector>();
         services.AddScoped<ShortLynx.Services.Social.ISocialConnectionService, ShortLynx.Services.Social.SocialConnectionService>();
+        services.AddScoped<ShortLynx.Services.Social.ISocialPublishService, ShortLynx.Services.Social.SocialPublishService>();
         services.AddScoped<ILinkService, LinkService>();
         services.AddScoped<ICampaignService, CampaignService>();
         services.AddScoped<IMagicLinkService, MagicLinkService>();

@@ -51,26 +51,10 @@ public sealed class SocialPublishService(
 
         try
         {
-            var context = BuildContext(connection);
-            SocialPostRef postRef;
-            try
-            {
-                postRef = await connector.PublishAsync(context, composed, ct);
-            }
-            catch (TokenExpiredException)
-            {
-                // Stale access token: refresh, persist the rotated pair, retry exactly once.
-                var rotated = await connector.RefreshAsync(context, ct);
-                if (rotated is null)
-                    return new PublishResult(connection.Id, connection.Handle, false, null,
-                        "The connection's tokens have expired — reconnect the account.");
-
-                connection.AccessTokenProtected = protector.Protect(rotated.AccessToken);
-                connection.RefreshTokenProtected = rotated.RefreshToken is null ? null : protector.Protect(rotated.RefreshToken);
-                await db.SaveChangesAsync(ct);
-
-                postRef = await connector.PublishAsync(BuildContext(connection), composed, ct);
-            }
+            // Stale-token refresh + single retry is handled centrally by ConnectorTokenGuard.
+            var postRef = await ConnectorTokenGuard.ExecuteAsync(
+                db, protector, connector, connection,
+                context => connector.PublishAsync(context, composed, ct), ct);
 
             var post = new SocialPostEntity
             {
@@ -90,10 +74,9 @@ public sealed class SocialPublishService(
 
             return new PublishResult(connection.Id, connection.Handle, true, post, null);
         }
-        catch (TokenExpiredException)
+        catch (TokenExpiredException ex)
         {
-            return new PublishResult(connection.Id, connection.Handle, false, null,
-                "The connection's tokens have expired — reconnect the account.");
+            return new PublishResult(connection.Id, connection.Handle, false, null, ex.Message);
         }
         catch (ArgumentException ex)
         {
@@ -105,14 +88,6 @@ public sealed class SocialPublishService(
                 "The platform could not be reached. Try again shortly.");
         }
     }
-
-    private SocialConnectionContext BuildContext(SocialConnectionEntity connection) => new(
-        connection.ExternalAccountId,
-        connection.Handle,
-        connection.InstanceUrl,
-        new SocialTokens(
-            protector.Unprotect(connection.AccessTokenProtected),
-            connection.RefreshTokenProtected is null ? null : protector.Unprotect(connection.RefreshTokenProtected)));
 
     // The tracked short URL is the point of the post — append it unless the author already placed it.
     internal static string Compose(string? text, string shortUrl)

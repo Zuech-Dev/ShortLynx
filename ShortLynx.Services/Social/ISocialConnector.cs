@@ -30,6 +30,12 @@ public sealed record SocialConnectionContext(
 public sealed record SocialPostRef(string ExternalPostId, string? PostUrl);
 
 /// <summary>
+/// Engagement metrics for a post. Fields the platform doesn't expose stay null — notably neither
+/// Bluesky nor Mastodon reports impressions/views, so true CTR needs the gated platforms (Threads).
+/// </summary>
+public sealed record SocialPostMetrics(long? Impressions, long? Likes, long? Reposts, long? Replies);
+
+/// <summary>
 /// The platform said the access token is expired/invalid. The publish pipeline catches this, refreshes
 /// via <see cref="ISocialConnector.RefreshAsync"/>, persists the rotated tokens, and retries once.
 /// </summary>
@@ -62,4 +68,11 @@ public interface ISocialConnector
     /// mechanism (Mastodon user tokens are long-lived) or no refresh token is held.
     /// </summary>
     Task<SocialTokens?> RefreshAsync(SocialConnectionContext connection, CancellationToken ct = default);
+
+    /// <summary>
+    /// Fetches current engagement metrics for a previously published post. Returns null when the post
+    /// no longer exists (deleted on-platform). Throws <see cref="TokenExpiredException"/> on a stale
+    /// access token, like <see cref="PublishAsync"/>.
+    /// </summary>
+    Task<SocialPostMetrics?> GetPostMetricsAsync(SocialConnectionContext connection, string externalPostId, CancellationToken ct = default);
 }

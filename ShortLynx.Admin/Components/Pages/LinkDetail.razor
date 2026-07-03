@@ -200,10 +200,23 @@ else
 
                 @if (_posts.Count > 0)
                 {
-                    <h6 class="font-semibold text-sm mt-4 mb-2">Published posts</h6>
+                    <div class="flex items-center mt-4 mb-2">
+                        <h6 class="font-semibold text-sm">Published posts</h6>
+                        <button class="btn btn-outline ml-auto" disabled="@_busyMetrics"
+                                @onclick="RefreshMetricsAsync" data-testid="refresh-metrics">
+                            @(_busyMetrics ? "Refreshing…" : "Refresh metrics")
+                        </button>
+                    </div>
+                    <p class="text-gray-500 text-xs mb-2">
+                        Likes/reposts/replies come from the platform. Bluesky and Mastodon don't report
+                        impressions, so click-through rate needs the gated platforms (later phase).
+                        Metrics also refresh automatically in the background.
+                    </p>
                     <table class="data-table" data-testid="social-posts">
                         <thead>
-                        <tr><th>Platform</th><th>Account</th><th>Posted</th><th>Impressions</th><th></th></tr>
+                        <tr><th>Platform</th><th>Account</th><th>Posted</th>
+                            <th class="text-right">Likes</th><th class="text-right">Reposts</th>
+                            <th class="text-right">Replies</th><th class="text-right">Impressions</th><th></th></tr>
                         </thead>
                         <tbody>
                         @foreach (var p in _posts)
@@ -212,7 +225,10 @@ else
                                 <td>@p.Platform</td>
                                 <td>@p.Handle</td>
                                 <td class="whitespace-nowrap">@p.PostedAt.ToString("yyyy-MM-dd HH:mm") UTC</td>
-                                <td>@(p.Impressions?.ToString() ?? "—")</td>
+                                <td class="text-right">@(p.Likes?.ToString() ?? "—")</td>
+                                <td class="text-right">@(p.Reposts?.ToString() ?? "—")</td>
+                                <td class="text-right">@(p.Replies?.ToString() ?? "—")</td>
+                                <td class="text-right">@(p.Impressions?.ToString() ?? "—")</td>
                                 <td>
                                     @if (p.PostUrl is not null)
                                     {
@@ -333,6 +349,7 @@ else
 
     // Social publishing (anonymous links in the current account).
     bool _busyPublishing;
+    bool _busyMetrics;
     string? _publishText;
     readonly HashSet<Guid> _publishTargets = [];
     List<SocialConnectionRow> _socialConnections = [];
@@ -452,12 +469,25 @@ else
                 _posts = await db.SocialPostEntities
                     .Where(p => p.LinkId == Id)
                     .OrderByDescending(p => p.Id)
-                    .Select(p => new SocialPostRow(p.Platform.ToString(), p.Handle, p.PostedAt, p.PostUrl, p.Impressions))
+                    .Select(p => new SocialPostRow(p.Platform.ToString(), p.Handle, p.PostedAt, p.PostUrl, p.Likes, p.Reposts, p.Replies, p.Impressions))
                     .ToListAsync();
             }
         }
 
         _loaded = true;
+    }
+
+    async Task RefreshMetricsAsync()
+    {
+        _busyMetrics = true;
+        try
+        {
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var metrics = scope.ServiceProvider.GetRequiredService<ISocialMetricsService>();
+            await metrics.RefreshLinkAsync(_accountId, Id);
+            await LoadAsync();
+        }
+        finally { _busyMetrics = false; }
     }
 
     void ToggleTarget(Guid connectionId, bool selected)
@@ -495,7 +525,7 @@ else
 
     sealed record SocialConnectionRow(Guid Id, string Platform, string Handle);
     sealed record PublishResultRow(string Handle, bool Success, string? PostUrl, string? Error);
-    sealed record SocialPostRow(string Platform, string Handle, DateTimeOffset PostedAt, string? PostUrl, long? Impressions);
+    sealed record SocialPostRow(string Platform, string Handle, DateTimeOffset PostedAt, string? PostUrl, long? Likes, long? Reposts, long? Replies, long? Impressions);
 
     async Task SaveCampaign()
     {

@@ -206,14 +206,31 @@ public class MeLinksController(
         if (!await db.LinkEntities.AnyAsync(l => l.Id == id && l.AccountId == AccountId, ct))
             return NotFound();
 
+        return Ok(await LoadPostsAsync(id, ct));
+    }
+
+    // POST /me/links/{id}/posts/refresh — pull current engagement metrics now, then return the posts.
+    [HttpPost("{id:guid}/posts/refresh")]
+    public async Task<IActionResult> RefreshPosts(
+        Guid id, [FromServices] ShortLynx.Services.Social.ISocialMetricsService metrics, CancellationToken ct)
+    {
+        if (!await db.LinkEntities.AnyAsync(l => l.Id == id && l.AccountId == AccountId, ct))
+            return NotFound();
+
+        await metrics.RefreshLinkAsync(AccountId, id, ct);
+        return Ok(await LoadPostsAsync(id, ct));
+    }
+
+    private async Task<IEnumerable<SocialPostResponse>> LoadPostsAsync(Guid linkId, CancellationToken ct)
+    {
         var posts = await db.SocialPostEntities
-            .Where(p => p.LinkId == id)
+            .Where(p => p.LinkId == linkId)
             .OrderByDescending(p => p.Id)
             .ToListAsync(ct);
 
-        return Ok(posts.Select(p => new SocialPostResponse(
+        return posts.Select(p => new SocialPostResponse(
             p.Id, p.Platform.ToString(), p.Handle, p.PostUrl, p.Text, p.PostedAt,
-            p.Impressions, p.Likes, p.Reposts, p.Replies, p.MetricsUpdatedAt)));
+            p.Impressions, p.Likes, p.Reposts, p.Replies, p.MetricsUpdatedAt));
     }
 
     // GET /me/links/{id}/qr?format=png|svg&size=<n>&code=<optional>

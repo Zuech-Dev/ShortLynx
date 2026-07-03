@@ -141,8 +141,12 @@ Tiers: **A (open, build first): Bluesky, Mastodon** · **B (official, gated): Th
 - ✅ "Create link → post to connected accounts" flow: `POST /me/links/{id}/publish` (per-connection
   results, stale-token refresh + retry, `SocialPost` recorded) + a "Post to social" card on the Admin
   link page. Bluesky posts carry byte-offset link facets so the URL is clickable.
-- ⬜ Pull post metrics on a schedule (reuse the hosted-service pattern from domain re-verification).
-- ⬜ **CTR surface:** `SocialPost` metrics (impressions) alongside visit click counts → true CTR per post.
+- ✅ Pull post metrics on a schedule (`SocialMetricsBackgroundService`, hourly by default + startup pass;
+  manual pull via `POST /me/links/{id}/posts/refresh` and a dashboard button). Stale tokens rotate via the
+  shared `ConnectorTokenGuard`.
+- ⚠️ **CTR surface — deferred to Phase 2 by platform reality:** neither Bluesky nor Mastodon exposes
+  impressions/views in their APIs, so likes/reposts/replies are shown instead and `Impressions` stays
+  null. True CTR (clicks ÷ impressions) arrives with the gated platforms (Threads reports views).
 
 ### Phase 2 — Gated platforms (Threads, Reddit)
 - Meta app + Tech-Provider Verification + per-permission review; Threads connector (container/publish,

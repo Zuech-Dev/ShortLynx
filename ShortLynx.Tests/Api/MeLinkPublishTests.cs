@@ -34,8 +34,10 @@ public class MeLinkPublishTests : IClassFixture<ApiFactory>
         public Task<SocialTokens?> RefreshAsync(SocialConnectionContext connection, CancellationToken ct = default)
             => Task.FromResult<SocialTokens?>(null);
 
-            public Task<SocialPostMetrics?> GetPostMetricsAsync(SocialConnectionContext connection, string externalPostId, CancellationToken ct = default)
-                => Task.FromResult<SocialPostMetrics?>(null);
+        public SocialPostMetrics? Metrics;
+
+        public Task<SocialPostMetrics?> GetPostMetricsAsync(SocialConnectionContext connection, string externalPostId, CancellationToken ct = default)
+            => Task.FromResult(Metrics);
     }
 
     private async Task<(HttpClient Client, FakeBlueskyConnector Connector)> CreateClientAsync()
@@ -88,6 +90,28 @@ public class MeLinkPublishTests : IClassFixture<ApiFactory>
         var post = Assert.Single(posts!);
         Assert.Equal("Bluesky", post.Platform);
         Assert.Null(post.Impressions);
+    }
+
+    [Fact]
+    public async Task RefreshPosts_PullsMetrics_AndReturnsUpdatedPosts()
+    {
+        var (client, connector) = await CreateClientAsync();
+        var connectionId = await ConnectAsync(client);
+        var link = await (await client.PostAsJsonAsync("/me/links", new CreateMyLinkRequest("https://example.com")))
+            .Content.ReadFromJsonAsync<LinkResponse>();
+        await client.PostAsJsonAsync($"/me/links/{link!.Id}/publish", new PublishLinkRequest([connectionId], "hi"));
+
+        connector.Metrics = new SocialPostMetrics(Impressions: null, Likes: 12, Reposts: 4, Replies: 2);
+        var resp = await client.PostAsync($"/me/links/{link.Id}/posts/refresh", null);
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+
+        var posts = await resp.Content.ReadFromJsonAsync<List<SocialPostResponse>>();
+        var post = Assert.Single(posts!);
+        Assert.Equal(12, post.Likes);
+        Assert.Equal(4, post.Reposts);
+        Assert.Equal(2, post.Replies);
+        Assert.Null(post.Impressions);          // Tier-A platforms don't report views
+        Assert.NotNull(post.MetricsUpdatedAt);
     }
 
     [Fact]

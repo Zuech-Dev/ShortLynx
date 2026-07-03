@@ -95,7 +95,8 @@ All require a session and act on the JWT's **current account**.
 | `GET /me/campaigns/{id}/analytics` | Campaign roll-up: clicks across all its links + per-link table |
 | `GET /me/social` · `POST` `{ platform, identifier, secret, instanceUrl? }` · `DELETE /{id}` | Connect social accounts (Bluesky handle + app password; Mastodon instance URL + access token). Credentials are verified with the platform; tokens are stored encrypted and **never returned**. Errors: 400 bad credentials/platform, 402 plan, 502 platform unreachable. |
 | `POST /me/links/{id}/publish` `{ connectionIds:[], text? }` | Post the link to connected accounts (anonymous links only). The short URL is appended to `text` automatically. Returns **per-connection results** — partial failure is normal (e.g. one platform down). |
-| `GET /me/links/{id}/posts` | Publishing history for the link, with post URLs and (once pulled) impressions/likes metrics |
+| `GET /me/links/{id}/posts` | Publishing history for the link, with post URLs and pulled engagement metrics (likes/reposts/replies; impressions only on platforms that report them — Bluesky/Mastodon don't) |
+| `POST /me/links/{id}/posts/refresh` | Pull current engagement metrics for the link's posts now, then return them (they also refresh automatically on a schedule) |
 | `GET /me/api-keys` · `POST` `{ name, scopes }` · `DELETE /{id}` | Manage API keys (POST returns the plaintext once) |
 | `GET /me/domains` · `POST` `{ domain }` · `POST /{id}/verify` · `DELETE /{id}` | Manage custom domains |
 

@@ -88,6 +88,8 @@ public static class ServiceExtensions
         services.AddHttpClient<ISocialConnector, MastodonConnector>();
         services.AddScoped<ISocialConnectionService, SocialConnectionService>();
         services.AddScoped<ISocialPublishService, SocialPublishService>();
+        services.Configure<SocialMetricsOptions>(configuration.GetSection("SocialMetrics"));
+        services.AddScoped<ISocialMetricsService, SocialMetricsService>();
 
         services.AddScoped<IShortCodeGenerator, HashBase62Generator>();
         services.AddSingleton<IUrlValidationService, UrlValidationService>();

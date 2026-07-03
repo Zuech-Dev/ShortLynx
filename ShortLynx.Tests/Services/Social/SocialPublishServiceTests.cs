@@ -43,8 +43,8 @@ public class SocialPublishServiceTests
         public Task<SocialTokens?> RefreshAsync(SocialConnectionContext connection, CancellationToken ct = default)
             => Task.FromResult(RefreshResult);
 
-            public Task<SocialPostMetrics?> GetPostMetricsAsync(SocialConnectionContext connection, string externalPostId, CancellationToken ct = default)
-                => Task.FromResult<SocialPostMetrics?>(null);
+        public Task<SocialPostMetrics?> GetPostMetricsAsync(SocialConnectionContext connection, string externalPostId, CancellationToken ct = default)
+            => Task.FromResult<SocialPostMetrics?>(null);
     }
 
     private static SocialPublishService MakeSvc(ShortLynxDbContext ctx, ScriptedConnector connector)

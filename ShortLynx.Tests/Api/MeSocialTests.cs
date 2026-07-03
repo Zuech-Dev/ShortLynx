@@ -31,6 +31,9 @@ public class MeSocialTests : IClassFixture<ApiFactory>
 
         public Task<SocialTokens?> RefreshAsync(SocialConnectionContext connection, CancellationToken ct = default)
             => Task.FromResult<SocialTokens?>(null);
+
+            public Task<SocialPostMetrics?> GetPostMetricsAsync(SocialConnectionContext connection, string externalPostId, CancellationToken ct = default)
+                => Task.FromResult<SocialPostMetrics?>(null);
     }
 
     // Host with the real pipeline but a faked platform connector (no live network in CI).

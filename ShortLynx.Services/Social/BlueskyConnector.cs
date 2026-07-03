@@ -90,6 +90,30 @@ public sealed class BlueskyConnector(HttpClient http) : ISocialConnector
         return session is null ? null : new SocialTokens(session.AccessJwt, session.RefreshJwt);
     }
 
+    public async Task<SocialPostMetrics?> GetPostMetricsAsync(
+        SocialConnectionContext connection, string externalPostId, CancellationToken ct = default)
+    {
+        var baseUrl = BaseUrl(connection.InstanceUrl);
+        using var request = new HttpRequestMessage(HttpMethod.Get,
+            $"{baseUrl}/xrpc/app.bsky.feed.getPosts?uris={Uri.EscapeDataString(externalPostId)}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", connection.Tokens.AccessToken);
+
+        using var response = await http.SendAsync(request, ct);
+        await ThrowIfAuthProblemAsync(response, ct);
+        response.EnsureSuccessStatusCode();
+
+        var result = await response.Content.ReadFromJsonAsync<GetPostsResponse>(ct);
+        var post = result?.Posts?.FirstOrDefault();
+        if (post is null) return null; // deleted on-platform
+
+        // Bluesky's public API has no impression/view count — that field stays null here.
+        return new SocialPostMetrics(
+            Impressions: null,
+            Likes: post.LikeCount,
+            Reposts: (post.RepostCount ?? 0) + (post.QuoteCount ?? 0), // quotes are reposts-with-comment
+            Replies: post.ReplyCount);
+    }
+
     private static string BaseUrl(string? instanceUrl)
         => string.IsNullOrWhiteSpace(instanceUrl) ? DefaultService : instanceUrl.TrimEnd('/');
 
@@ -144,4 +168,6 @@ public sealed class BlueskyConnector(HttpClient http) : ISocialConnector
 
     private sealed record CreateSessionResponse(string Did, string Handle, string AccessJwt, string? RefreshJwt);
     private sealed record CreateRecordResponse(string Uri, string Cid);
+    private sealed record GetPostsResponse(List<PostView>? Posts);
+    private sealed record PostView(string Uri, long? LikeCount, long? RepostCount, long? ReplyCount, long? QuoteCount);
 }

@@ -37,6 +37,20 @@ public class SocialComponentTests : BunitContext
             return Task.FromResult(entity);
         }
 
+        public Task<SocialConnectionEntity> ConnectFromIdentityAsync(
+            Guid accountId, Guid? connectedByUserAccountId, SocialPlatform platform,
+            SocialIdentity identity, string? instanceUrl = null, CancellationToken ct = default)
+        {
+            var entity = new SocialConnectionEntity
+            {
+                Id = Guid.CreateVersion7(), AccountId = accountId, Platform = platform,
+                ExternalAccountId = identity.ExternalAccountId, Handle = identity.Handle, InstanceUrl = instanceUrl,
+                AccessTokenProtected = "enc:x", CreatedAt = DateTimeOffset.UtcNow,
+            };
+            Connections.Add(entity);
+            return Task.FromResult(entity);
+        }
+
         public Task<IReadOnlyList<SocialConnectionEntity>> ListAsync(Guid accountId, CancellationToken ct = default)
             => Task.FromResult<IReadOnlyList<SocialConnectionEntity>>(
                 Connections.Where(c => c.AccountId == accountId).ToList());

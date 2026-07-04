@@ -27,8 +27,12 @@
 
     <!-- Tailwind CSS via the standalone CLI. tools/tailwindcss is git-ignored and platform-specific
          (download per machine). wwwroot/css/tailwind.css is generated from Styles/app.tailwind.css
-         on every build when the CLI is present; output is minified for Release builds. -->
+         on every build when the CLI is present; output is minified for Release builds.
+
+         TailwindVersion should be kept in sync with ShortLynx.Admin.csproj's pin (which CI enforces
+         for that project) — see the longer comment there for why version drift here is a footgun. -->
     <PropertyGroup>
+        <TailwindVersion>v4.3.2</TailwindVersion>
         <TailwindCli>$(MSBuildProjectDirectory)/tools/tailwindcss</TailwindCli>
         <TailwindInput>$(MSBuildProjectDirectory)/Styles/app.tailwind.css</TailwindInput>
         <TailwindOutput>$(MSBuildProjectDirectory)/wwwroot/css/tailwind.css</TailwindOutput>
@@ -41,7 +45,7 @@
     </Target>
 
     <Target Name="WarnTailwindMissing" BeforeTargets="Build" Condition="!Exists('$(TailwindCli)')">
-        <Warning Text="Tailwind CLI not found at $(TailwindCli); wwwroot/css/tailwind.css was not regenerated. Download it: curl -sL -o &quot;$(TailwindCli)&quot; https://github.com/tailwindlabs/tailwindcss/releases/latest/download/tailwindcss-macos-arm64 &amp;&amp; chmod +x &quot;$(TailwindCli)&quot;" />
+        <Warning Text="Tailwind CLI not found at $(TailwindCli); wwwroot/css/tailwind.css was not regenerated. Download the pinned version (not '/latest/'): curl -sL -o &quot;$(TailwindCli)&quot; https://github.com/tailwindlabs/tailwindcss/releases/download/$(TailwindVersion)/tailwindcss-macos-arm64 &amp;&amp; chmod +x &quot;$(TailwindCli)&quot;" />
     </Target>
 
 </Project>

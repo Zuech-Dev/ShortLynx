@@ -19,12 +19,12 @@ namespace ShortLynx.Services.Social;
 /// versioned. Every authenticated Graph call is signed with <c>appsecret_proof</c> per Meta's
 /// recommended security practice.
 /// </summary>
-public sealed class ThreadsConnector(HttpClient http, IOptions<MetaOptions> options) : IOAuthSocialConnector
+public sealed class ThreadsConnector(HttpClient http, IOptions<ThreadsOptions> options) : IOAuthSocialConnector
 {
     private const string AuthorizeHost = "https://threads.net";
     private const string ApiHost = "https://graph.threads.net";
 
-    private MetaOptions Options => options.Value;
+    private ThreadsOptions Options => options.Value;
 
     public SocialPlatform Platform => SocialPlatform.Threads;
 

@@ -123,14 +123,18 @@ callback, Core can also publish/pull metrics via its `/me/*` API):
 
 | Variable | Value |
 |---|---|
-| `Meta__AppId` | the **Threads app ID** (not the app-level App ID shown at the top of the settings page) |
-| `Meta__AppSecret` | the **Threads app secret** — **never commit this**, Railway env only |
-| `Meta__RedirectUri` | `https://shortlynx.dev/social/threads/callback` (must exactly match what's in the Meta dashboard) |
+| `Threads__AppId` | the **Threads app ID** (not the app-level App ID shown at the top of the settings page) |
+| `Threads__AppSecret` | the **Threads app secret** — **never commit this**, Railway env only |
+| `Threads__RedirectUri` | `https://shortlynx.dev/social/threads/callback` (must exactly match what's in the Meta dashboard) |
 
 > **Two credential pairs live on the same settings page** — the app-level "App ID"/"App secret" at the
 > top (general Meta/Facebook Graph API) and a separate "Threads app ID"/"Threads app secret" further down
 > (specific to the Threads product). `ThreadsConnector` talks to `graph.threads.net`, which authenticates
 > against the **Threads-specific** pair — using the app-level one instead will fail token exchange.
+>
+> This is deliberately its own `Threads:*` config section, not a shared `Meta:*` one — Facebook and
+> Instagram (Phase 3+) will each get their own connector and their own config section the same way,
+> since each Meta product tends to provision its own credential pair rather than sharing one app-wide.
 
 Then, **before** full App Review completes, you can test the whole flow end-to-end using a **Meta test
 user** (App Dashboard → Roles → Test Users) — test users get an approved-permission sandbox without

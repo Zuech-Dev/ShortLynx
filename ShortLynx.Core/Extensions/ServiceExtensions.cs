@@ -64,7 +64,7 @@ public static class ServiceExtensions
         // Threads is OAuth-only (gated, Meta App Review) — the authorize/callback endpoints live on
         // Admin, but Core's /me/links/{id}/publish and the metrics puller both run ISocialConnector
         // over any connected platform, so Threads needs to be part of this collection here too.
-        services.Configure<ShortLynx.Services.Social.MetaOptions>(configuration.GetSection("Meta"));
+        services.Configure<ShortLynx.Services.Social.ThreadsOptions>(configuration.GetSection("Threads"));
         services.AddHttpClient<ShortLynx.Services.Social.IOAuthSocialConnector, ShortLynx.Services.Social.ThreadsConnector>();
         services.AddScoped<ShortLynx.Services.Social.ISocialConnector>(
             sp => sp.GetRequiredService<ShortLynx.Services.Social.IOAuthSocialConnector>());

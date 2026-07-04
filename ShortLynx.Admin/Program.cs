@@ -1,4 +1,6 @@
 using System.Security.Claims;
+using System.Security.Cryptography;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -9,8 +11,10 @@ using ShortLynx.Data.Context;
 using ShortLynx.Data.Enums;
 using ShortLynx.Repository;
 using ShortLynx.Services.Accounts;
+using ShortLynx.Services.Entitlements;
 using ShortLynx.Services.Links;
 using ShortLynx.Services.Qr;
+using ShortLynx.Services.Social;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -106,6 +110,155 @@ app.MapGet("/qr/{linkId:guid}", async (
         };
     })
     .RequireAuthorization();
+
+// ── Threads (Meta) OAuth + Meta App Review webhooks ─────────────────────────────────────────────
+// These four routes exist because Meta's Threads app dashboard requires exact, working URLs for
+// them before it will accept an App Review submission — see docs/META_APP_SETUP.md.
+const string ThreadsOAuthStateCookieName = "sl_threads_oauth_state";
+const string ThreadsOAuthStateCookiePurpose = "ShortLynx.ThreadsOAuthState";
+
+// "Connect Threads" entry point: mint a random anti-CSRF state, stash it in a short-lived cookie
+// (tamper-evident via DataProtection, not just base64), and send the browser to Meta's consent screen.
+app.MapGet("/social/threads/authorize", (
+        HttpContext http,
+        IOAuthSocialConnector connector,
+        IOptions<MetaOptions> metaOptions,
+        IDataProtectionProvider dataProtection) =>
+    {
+        var state = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(16));
+        var protector = dataProtection.CreateProtector(ThreadsOAuthStateCookiePurpose);
+        http.Response.Cookies.Append(ThreadsOAuthStateCookieName, protector.Protect(state), new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = true,
+            SameSite = SameSiteMode.Lax,
+            MaxAge = TimeSpan.FromMinutes(10),
+        });
+
+        return Results.Redirect(connector.BuildAuthorizeUrl(metaOptions.Value.RedirectUri, state));
+    })
+    .RequireAuthorization();
+
+// Where Meta sends the browser back after the user approves (or denies) access. Must exactly match
+// Meta:RedirectUri configured in the app dashboard.
+app.MapGet("/social/threads/callback", async (
+        HttpContext http, string? code, string? state, string? error,
+        IOAuthSocialConnector connector,
+        IOptions<MetaOptions> metaOptions,
+        IDataProtectionProvider dataProtection,
+        IDbContextFactory<ShortLynxDbContext> dbFactory,
+        ISocialConnectionService socialConnections,
+        ClaimsPrincipal user,
+        CancellationToken ct) =>
+    {
+        if (!string.IsNullOrEmpty(error))
+            return Results.Redirect($"/social?threadsError={Uri.EscapeDataString(error)}");
+
+        var cookieValue = http.Request.Cookies[ThreadsOAuthStateCookieName];
+        http.Response.Cookies.Delete(ThreadsOAuthStateCookieName); // single use either way
+
+        if (string.IsNullOrEmpty(cookieValue) || string.IsNullOrEmpty(state))
+            return Results.Redirect("/social?threadsError=missing_state");
+
+        string expectedState;
+        try
+        {
+            expectedState = dataProtection.CreateProtector(ThreadsOAuthStateCookiePurpose).Unprotect(cookieValue);
+        }
+        catch (CryptographicException)
+        {
+            return Results.Redirect("/social?threadsError=invalid_state");
+        }
+
+        // Anti-CSRF: the value returned by Meta must match the one this same browser was handed at
+        // /authorize — otherwise this could be a crafted callback URL opened in a victim's browser.
+        if (!string.Equals(expectedState, state, StringComparison.Ordinal))
+            return Results.Redirect("/social?threadsError=state_mismatch");
+
+        if (string.IsNullOrEmpty(code))
+            return Results.Redirect("/social?threadsError=missing_code");
+
+        var userId = user.GetUserId();
+        if (userId is null) return Results.Unauthorized();
+
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var accountId = await AccountResolver.ResolveAccountIdAsync(
+            db, userId.Value, user.GetAccountId(), user.Identity?.Name ?? "Personal", ct);
+
+        try
+        {
+            var identity = await connector.ExchangeAuthorizationCodeAsync(code, metaOptions.Value.RedirectUri, ct);
+            await socialConnections.ConnectFromIdentityAsync(
+                accountId, userId.Value, SocialPlatform.Threads, identity, instanceUrl: null, ct);
+        }
+        catch (ArgumentException ex)
+        {
+            return Results.Redirect($"/social?threadsError={Uri.EscapeDataString(ex.Message)}");
+        }
+        catch (EntitlementException)
+        {
+            return Results.Redirect("/social?threadsError=plan");
+        }
+
+        return Results.Redirect("/social?connected=threads");
+    })
+    .RequireAuthorization();
+
+// Meta POSTs a signed_request here when a user removes ShortLynx from their Threads app settings.
+// Unauthenticated by design — this is a server-to-server call from Meta, not a user's browser — so the
+// HMAC verification is the only thing standing between this and anyone deleting anyone's connection.
+app.MapPost("/webhooks/threads/deauthorize", async (
+        HttpRequest request,
+        IOptions<MetaOptions> metaOptions,
+        IDbContextFactory<ShortLynxDbContext> dbFactory,
+        CancellationToken ct) =>
+    {
+        var form = await request.ReadFormAsync(ct);
+        if (!MetaSignedRequestParser.TryParse(form["signed_request"], metaOptions.Value.AppSecret, out var payload))
+            return Results.BadRequest();
+
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        await db.SocialConnectionEntities
+            .Where(c => c.Platform == SocialPlatform.Threads && c.ExternalAccountId == payload!.UserId)
+            .ExecuteDeleteAsync(ct);
+
+        return Results.Ok();
+    });
+
+// Meta POSTs a signed_request here when a user requests deletion of their data via Meta's own UI
+// (Settings → Apps and Websites). Must respond with the exact { url, confirmation_code } shape Meta's
+// Data Deletion Callback spec requires.
+app.MapPost("/webhooks/threads/delete", async (
+        HttpRequest request,
+        IOptions<MetaOptions> metaOptions,
+        IDbContextFactory<ShortLynxDbContext> dbFactory,
+        CancellationToken ct) =>
+    {
+        var form = await request.ReadFormAsync(ct);
+        if (!MetaSignedRequestParser.TryParse(form["signed_request"], metaOptions.Value.AppSecret, out var payload))
+            return Results.BadRequest();
+
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        await db.SocialConnectionEntities
+            .Where(c => c.Platform == SocialPlatform.Threads && c.ExternalAccountId == payload!.UserId)
+            .ExecuteDeleteAsync(ct);
+
+        var confirmationCode = Guid.NewGuid().ToString("N")[..16];
+        return Results.Json(new
+        {
+            url = $"{request.Scheme}://{request.Host}/social/threads/delete-status?id={confirmationCode}",
+            confirmation_code = confirmationCode,
+        });
+    });
+
+// A generic confirmation page for the URL above. Intentionally stateless — by the time this URL could
+// be visited, the deletion the confirmation_code refers to has already completed (or there was nothing
+// to delete), so there's no per-code status to look up.
+app.MapGet("/social/threads/delete-status", () => Results.Content(
+    "<!doctype html><html><body><h1>Deletion complete</h1>" +
+    "<p>Any ShortLynx data associated with your Threads account has been deleted.</p></body></html>",
+    "text/html"));
+
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 

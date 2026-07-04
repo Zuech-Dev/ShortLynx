@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Bunit;
 using Bunit.TestDoubles;
+using Microsoft.AspNetCore.Components;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -31,6 +32,20 @@ public class SocialComponentTests : BunitContext
             {
                 Id = Guid.CreateVersion7(), AccountId = accountId, Platform = platform,
                 ExternalAccountId = "ext", Handle = credentials.Identifier, InstanceUrl = credentials.InstanceUrl,
+                AccessTokenProtected = "enc:x", CreatedAt = DateTimeOffset.UtcNow,
+            };
+            Connections.Add(entity);
+            return Task.FromResult(entity);
+        }
+
+        public Task<SocialConnectionEntity> ConnectFromIdentityAsync(
+            Guid accountId, Guid? connectedByUserAccountId, SocialPlatform platform,
+            SocialIdentity identity, string? instanceUrl = null, CancellationToken ct = default)
+        {
+            var entity = new SocialConnectionEntity
+            {
+                Id = Guid.CreateVersion7(), AccountId = accountId, Platform = platform,
+                ExternalAccountId = identity.ExternalAccountId, Handle = identity.Handle, InstanceUrl = instanceUrl,
                 AccessTokenProtected = "enc:x", CreatedAt = DateTimeOffset.UtcNow,
             };
             Connections.Add(entity);
@@ -70,6 +85,35 @@ public class SocialComponentTests : BunitContext
         using var db = factory.CreateDbContext();
         db.Database.EnsureCreated();
         _accountId = AccountTestSeed.SeedOwner(db, _uid);
+    }
+
+    [Fact]
+    public void ConnectThreadsLink_PointsAtOAuthAuthorizeEndpoint()
+    {
+        var cut = Render<Social>();
+
+        var link = cut.Find("[data-testid=connect-threads]");
+        Assert.Equal("/social/threads/authorize", link.GetAttribute("href"));
+    }
+
+    [Fact]
+    public void ConnectedQueryParam_ShowsThreadsSuccessBanner()
+    {
+        Services.GetRequiredService<NavigationManager>().NavigateTo("/social?connected=threads");
+
+        var cut = Render<Social>();
+
+        cut.WaitForElement("[data-testid=threads-connected]");
+    }
+
+    [Fact]
+    public void ThreadsErrorQueryParam_ShowsErrorBanner()
+    {
+        Services.GetRequiredService<NavigationManager>().NavigateTo("/social?threadsError=state_mismatch");
+
+        var cut = Render<Social>();
+
+        Assert.Contains("state_mismatch", cut.Find("[data-testid=threads-error]").TextContent);
     }
 
     [Fact]

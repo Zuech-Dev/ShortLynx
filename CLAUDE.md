@@ -18,6 +18,25 @@ dotnet run --project ShortLynx.Web/ShortLynx.Web.csproj         # Public UI → 
 
 No test projects exist yet.
 
+## Frontend build (Tailwind CSS)
+
+`ShortLynx.Admin` and `ShortLynx.Web` each compile `wwwroot/css/tailwind.css` from
+`Styles/app.tailwind.css` via a standalone CLI at `tools/tailwindcss` (git-ignored, one per machine).
+This runs automatically before every `dotnet build`/`dotnet test` if that binary exists.
+
+**The binary's version must match the version pinned in `.github/workflows/ci.yml`'s `tailwind` job**
+(currently `v4.3.2`, mirrored in each `.csproj`'s `TailwindVersion` property). CI regenerates the CSS
+with that exact version and fails the PR on any diff from the committed file — including a pure
+version-string difference, since different Tailwind versions format output slightly differently even
+for identical input. If you ever need to (re)fetch the CLI, use the pinned URL the `WarnTailwindMissing`
+build warning prints (or `.github/workflows/ci.yml`), never `/releases/latest/...`.
+
+**When you change any Razor/`.cshtml` markup that affects classes used** (Admin or Web), regenerate and
+commit the CSS as the very last step before committing/pushing — with no `dotnet build`/`dotnet test` in
+between the regen and the `git add`/`git commit`. Running the build again in between re-invokes the
+same MSBuild target and can silently produce different output if `tools/tailwindcss` is ever on a
+different version than what you just used, undoing a correct regen without any visible error.
+
 ## Architecture
 
 ShortLynx is a self-hosted .NET 10 short-link service with two link modes:

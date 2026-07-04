@@ -8,4 +8,7 @@ public enum SocialPlatform
 {
     Bluesky = 0,
     Mastodon = 1,
+
+    /// <summary>Gated (Meta App Review). Connected via OAuth from the dashboard, not the credentials API.</summary>
+    Threads = 2,
 }

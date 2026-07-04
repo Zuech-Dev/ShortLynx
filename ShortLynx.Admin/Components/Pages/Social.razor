@@ -6,21 +6,34 @@
 @using ShortLynx.Services.Social
 @inject IServiceScopeFactory ScopeFactory
 @inject IDbContextFactory<ShortLynxDbContext> DbFactory
+@inject NavigationManager Nav
 
 <PageTitle>Social Accounts — ShortLynx Admin</PageTitle>
 
 <div class="flex justify-between items-center mb-3">
     <h1 class="text-2xl font-bold">Social Accounts</h1>
-    <button class="btn btn-primary" data-testid="connect-toggle" @onclick="() => _showConnect = !_showConnect">
-        @(_showConnect ? "Cancel" : "+ Connect account")
-    </button>
+    <div class="flex gap-2">
+        <a class="btn btn-outline" href="/social/threads/authorize" data-testid="connect-threads">Connect Threads</a>
+        <button class="btn btn-primary" data-testid="connect-toggle" @onclick="() => _showConnect = !_showConnect">
+            @(_showConnect ? "Cancel" : "+ Connect account")
+        </button>
+    </div>
 </div>
 
 <p class="text-gray-500 text-sm mb-3 max-w-[640px]">
-    Connect Bluesky or Mastodon accounts to publish tracked links directly and (soon) pull post
-    impressions for true click-through rates. Credentials are verified with the platform and tokens are
-    stored encrypted — they are never shown again.
+    Connect Bluesky, Mastodon, or Threads accounts to publish tracked links directly and pull post
+    engagement. Credentials/authorization are verified with the platform and tokens are stored
+    encrypted — they are never shown again.
 </p>
+
+@if (_threadsConnected)
+{
+    <div class="text-green-600 text-sm mb-3" data-testid="threads-connected">Threads account connected.</div>
+}
+@if (_threadsError is not null)
+{
+    <div class="text-red-600 text-sm mb-3" data-testid="threads-error">Couldn't connect Threads: @_threadsError</div>
+}
 
 @if (_showConnect)
 {
@@ -100,7 +113,7 @@ else
             <div class="card" data-testid="social-row">
                 <div class="card-body">
                     <div class="flex items-center gap-2">
-                        <span class="badge @(c.Platform == "Bluesky" ? "badge-blue" : "badge-gray")">@c.Platform</span>
+                        <span class="badge @BadgeClass(c.Platform)">@c.Platform</span>
                         <span class="font-semibold">@c.Handle</span>
                         @if (!string.IsNullOrEmpty(c.InstanceUrl))
                         {
@@ -119,7 +132,8 @@ else
 @code {
     [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
 
-    bool _loaded, _resolved, _showConnect, _busy;
+    bool _loaded, _resolved, _showConnect, _busy, _threadsConnected;
+    string? _threadsError;
     Guid _uid, _accountId;
     List<ConnectionRow> _connections = [];
     readonly ConnectForm _form = new();
@@ -134,8 +148,22 @@ else
         await using (var db = await DbFactory.CreateDbContextAsync())
             _accountId = await AccountResolver.ResolveAccountIdAsync(db, _uid, principal.GetAccountId(), principal.Identity?.Name ?? "Personal");
         _resolved = true;
+
+        // Surfaces the result of a redirect back from /social/threads/callback.
+        var uri = Nav.ToAbsoluteUri(Nav.Uri);
+        var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
+        if (query.TryGetValue("connected", out var connected) && connected == "threads") _threadsConnected = true;
+        if (query.TryGetValue("threadsError", out var err)) _threadsError = err;
+
         await LoadAsync();
     }
+
+    static string BadgeClass(string platform) => platform switch
+    {
+        "Bluesky" => "badge-blue",
+        "Threads" => "badge-yellow",
+        _ => "badge-gray", // Mastodon
+    };
 
     async Task LoadAsync()
     {

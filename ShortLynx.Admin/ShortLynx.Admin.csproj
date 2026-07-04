@@ -33,8 +33,17 @@
 
     <!-- Tailwind CSS via the standalone CLI. tools/tailwindcss is git-ignored and platform-specific
          (download per machine). wwwroot/css/tailwind.css is generated from Styles/app.tailwind.css
-         on every build when the CLI is present; output is minified for Release builds. -->
+         on every build when the CLI is present; output is minified for Release builds.
+
+         TailwindVersion MUST match the version pinned in .github/workflows/ci.yml's `tailwind` job
+         (search that file for the same version number) — CI regenerates the CSS with that exact
+         version and fails the build on any diff from the committed file. A locally-downloaded CLI on
+         a different version (e.g. fetched via .../releases/latest/... before this comment existed)
+         produces differently-formatted output purely from the version bump, which then silently
+         overwrites a correct regen on the next local `dotnet build`/`dotnet test` and fails CI once
+         committed. If you bump this, bump the CI workflow(s) in the same commit. -->
     <PropertyGroup>
+        <TailwindVersion>v4.3.2</TailwindVersion>
         <TailwindCli>$(MSBuildProjectDirectory)/tools/tailwindcss</TailwindCli>
         <TailwindInput>$(MSBuildProjectDirectory)/Styles/app.tailwind.css</TailwindInput>
         <TailwindOutput>$(MSBuildProjectDirectory)/wwwroot/css/tailwind.css</TailwindOutput>
@@ -47,7 +56,7 @@
     </Target>
 
     <Target Name="WarnTailwindMissing" BeforeTargets="Build" Condition="!Exists('$(TailwindCli)')">
-        <Warning Text="Tailwind CLI not found at $(TailwindCli); wwwroot/css/tailwind.css was not regenerated. Download it: curl -sL -o &quot;$(TailwindCli)&quot; https://github.com/tailwindlabs/tailwindcss/releases/latest/download/tailwindcss-macos-arm64 &amp;&amp; chmod +x &quot;$(TailwindCli)&quot;" />
+        <Warning Text="Tailwind CLI not found at $(TailwindCli); wwwroot/css/tailwind.css was not regenerated. Download the version CI is pinned to (do not use '/latest/' — that can drift from CI and produce false-positive diffs): curl -sL -o &quot;$(TailwindCli)&quot; https://github.com/tailwindlabs/tailwindcss/releases/download/$(TailwindVersion)/tailwindcss-macos-arm64 &amp;&amp; chmod +x &quot;$(TailwindCli)&quot;" />
     </Target>
 
 </Project>

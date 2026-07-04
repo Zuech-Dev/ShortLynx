@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Bunit;
 using Bunit.TestDoubles;
+using Microsoft.AspNetCore.Components;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -84,6 +85,35 @@ public class SocialComponentTests : BunitContext
         using var db = factory.CreateDbContext();
         db.Database.EnsureCreated();
         _accountId = AccountTestSeed.SeedOwner(db, _uid);
+    }
+
+    [Fact]
+    public void ConnectThreadsLink_PointsAtOAuthAuthorizeEndpoint()
+    {
+        var cut = Render<Social>();
+
+        var link = cut.Find("[data-testid=connect-threads]");
+        Assert.Equal("/social/threads/authorize", link.GetAttribute("href"));
+    }
+
+    [Fact]
+    public void ConnectedQueryParam_ShowsThreadsSuccessBanner()
+    {
+        Services.GetRequiredService<NavigationManager>().NavigateTo("/social?connected=threads");
+
+        var cut = Render<Social>();
+
+        cut.WaitForElement("[data-testid=threads-connected]");
+    }
+
+    [Fact]
+    public void ThreadsErrorQueryParam_ShowsErrorBanner()
+    {
+        Services.GetRequiredService<NavigationManager>().NavigateTo("/social?threadsError=state_mismatch");
+
+        var cut = Render<Social>();
+
+        Assert.Contains("state_mismatch", cut.Find("[data-testid=threads-error]").TextContent);
     }
 
     [Fact]

@@ -76,3 +76,21 @@ public interface ISocialConnector
     /// </summary>
     Task<SocialPostMetrics?> GetPostMetricsAsync(SocialConnectionContext connection, string externalPostId, CancellationToken ct = default);
 }
+
+/// <summary>
+/// Additional capability for platforms that connect via a browser OAuth redirect (Threads) rather than
+/// user-supplied credentials (Bluesky/Mastodon). The dashboard drives the redirect; this interface is
+/// what the OAuth authorize/callback endpoints need from the connector.
+/// </summary>
+public interface IOAuthSocialConnector : ISocialConnector
+{
+    /// <summary>Builds the URL to send the user's browser to, to grant this app access.</summary>
+    string BuildAuthorizeUrl(string redirectUri, string state);
+
+    /// <summary>
+    /// Exchanges an authorization code (from the OAuth callback) for a verified identity + tokens.
+    /// Throws <see cref="ArgumentException"/> when the platform rejects the code (expired, reused, or
+    /// a redirect-URI mismatch).
+    /// </summary>
+    Task<SocialIdentity> ExchangeAuthorizationCodeAsync(string code, string redirectUri, CancellationToken ct = default);
+}

@@ -34,8 +34,8 @@ public class SocialConnectionServiceTests
         public Task<SocialTokens?> RefreshAsync(SocialConnectionContext connection, CancellationToken ct = default)
             => Task.FromResult<SocialTokens?>(null);
 
-            public Task<SocialPostMetrics?> GetPostMetricsAsync(SocialConnectionContext connection, string externalPostId, CancellationToken ct = default)
-                => Task.FromResult<SocialPostMetrics?>(null);
+        public Task<SocialPostMetrics?> GetPostMetricsAsync(SocialConnectionContext connection, string externalPostId, CancellationToken ct = default)
+            => Task.FromResult<SocialPostMetrics?>(null);
     }
 
     private sealed class DenyEntitlements : IEntitlements
@@ -121,6 +121,57 @@ public class SocialConnectionServiceTests
                 accountId, null, SocialPlatform.Bluesky, new SocialCredentials("x", "y")));
 
         Assert.Equal(0, connector.Calls); // gate fires before any network call
+    }
+
+    [Fact]
+    public async Task ConnectFromIdentity_StoresEncryptedTokens_NoCredentialInvolved()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+        var accountId = await SeedAccountAsync(db);
+        var identity = new SocialIdentity("17800000000000000", "@me", "long-lived-token", null, DateTimeOffset.UtcNow.AddDays(60));
+
+        // The OAuth path (Threads): no SocialCredentials — a verified identity is handed straight in.
+        var connection = await MakeSvc(db.CreateContext()).ConnectFromIdentityAsync(
+            accountId, null, SocialPlatform.Threads, identity);
+
+        Assert.Equal("17800000000000000", connection.ExternalAccountId);
+        Assert.Equal("@me", connection.Handle);
+        Assert.Equal("enc:long-lived-token", connection.AccessTokenProtected);
+        Assert.Null(connection.RefreshTokenProtected);
+    }
+
+    [Fact]
+    public async Task ConnectFromIdentity_SameExternalAccount_Upserts_NotDuplicates()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+        var accountId = await SeedAccountAsync(db);
+        var svc = MakeSvc(db.CreateContext());
+
+        var first = await svc.ConnectFromIdentityAsync(accountId, null, SocialPlatform.Threads,
+            new SocialIdentity("178", "@me", "token-1", null, null));
+        var second = await svc.ConnectFromIdentityAsync(accountId, null, SocialPlatform.Threads,
+            new SocialIdentity("178", "@renamed", "token-2", null, null));
+
+        Assert.Equal(first.Id, second.Id);
+        Assert.Equal("@renamed", second.Handle);
+        Assert.Equal("enc:token-2", second.AccessTokenProtected);
+
+        await using var verify = db.CreateContext();
+        Assert.Equal(1, await verify.SocialConnectionEntities.CountAsync());
+    }
+
+    [Fact]
+    public async Task ConnectFromIdentity_WhenPlanDenies_ThrowsEntitlement_NoConnectionPersisted()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+        var accountId = await SeedAccountAsync(db);
+
+        await Assert.ThrowsAsync<EntitlementException>(() =>
+            MakeSvc(db.CreateContext(), entitlements: new DenyEntitlements()).ConnectFromIdentityAsync(
+                accountId, null, SocialPlatform.Threads, new SocialIdentity("178", "@me", "token", null, null)));
+
+        await using var verify = db.CreateContext();
+        Assert.Equal(0, await verify.SocialConnectionEntities.CountAsync());
     }
 
     [Fact]

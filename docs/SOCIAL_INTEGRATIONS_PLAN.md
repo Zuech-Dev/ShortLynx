@@ -152,10 +152,16 @@ Tiers: **A (open, build first): Bluesky, Mastodon** · **B (official, gated): Th
 - ✅ **Prerequisites for Meta App Review**: a real Privacy Policy (`/Privacy`) and Data Deletion
   Instructions (`/DataDeletion`) page on the Web app — both required, hosted URLs before Meta will accept
   an app-review submission. Step-by-step operator walkthrough: [META_APP_SETUP.md](META_APP_SETUP.md).
-- ⬜ Meta app + Tech-Provider Verification + per-permission review (`threads_basic`,
-  `threads_content_publish`, `threads_manage_insights`) — in progress on Meta's side per the guide above.
-- ⬜ Threads connector (container/publish, insights) — same `ISocialConnector` shape as Bluesky/Mastodon;
-  can be built/tested against Meta test users while review is pending.
+- ✅ **Threads connector**: OAuth (code → 60-day token → refresh), two-step container/publish with
+  byte-accurate permalink, and insights (Threads *does* report views/impressions — the true-CTR gap the
+  Phase 1 note above flags). Same `ISocialConnector` shape as Bluesky/Mastodon, plus `IOAuthSocialConnector`
+  for the browser-redirect connect flow.
+- ✅ **The four URLs Meta's dashboard requires**: `/social/threads/authorize` + `/social/threads/callback`
+  (OAuth), `/webhooks/threads/deauthorize` + `/webhooks/threads/delete` (Meta-signed server-to-server
+  callbacks, verified via `MetaSignedRequestParser`) — all live on the Admin app.
+- ⬜ **Meta's own approval process** (Business Portfolio, Tech-Provider Verification, the
+  `threads_basic`/`threads_content_publish`/`threads_manage_insights` permission review) — entirely on
+  Meta's side; ~2–4 weeks. Walkthrough + exact Railway config: [META_APP_SETUP.md](META_APP_SETUP.md) §6-7.
 - ⬜ Reddit app pre-approval; submit + read, respect per-subreddit rules + rate limits.
 
 ### Phase 3 — Conversions loop + Substack

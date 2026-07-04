@@ -86,6 +86,12 @@ public static class ServiceExtensions
         services.AddSingleton<ITokenProtector, DataProtectionTokenProtector>();
         services.AddHttpClient<ISocialConnector, BlueskyConnector>();
         services.AddHttpClient<ISocialConnector, MastodonConnector>();
+        // Threads is OAuth-only (gated, Meta App Review) — registered as IOAuthSocialConnector for the
+        // dashboard's authorize/callback endpoints, and bridged onto ISocialConnector so it also
+        // participates in publish/metrics like Bluesky/Mastodon.
+        services.Configure<MetaOptions>(configuration.GetSection("Meta"));
+        services.AddHttpClient<IOAuthSocialConnector, ThreadsConnector>();
+        services.AddScoped<ISocialConnector>(sp => sp.GetRequiredService<IOAuthSocialConnector>());
         services.AddScoped<ISocialConnectionService, SocialConnectionService>();
         services.AddScoped<ISocialPublishService, SocialPublishService>();
         services.Configure<SocialMetricsOptions>(configuration.GetSection("SocialMetrics"));

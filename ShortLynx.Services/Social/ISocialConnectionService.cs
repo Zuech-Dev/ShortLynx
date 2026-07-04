@@ -19,6 +19,16 @@ public interface ISocialConnectionService
         Guid accountId, Guid? connectedByUserAccountId, SocialPlatform platform,
         SocialCredentials credentials, CancellationToken ct = default);
 
+    /// <summary>
+    /// Connects (or re-connects) a social account from an already-verified <see cref="SocialIdentity"/> —
+    /// the path for OAuth platforms (Threads) whose callback has already exchanged a code for tokens, so
+    /// there's no credential to hand a connector. Same upsert-by-external-id and entitlement gate as
+    /// <see cref="ConnectAsync"/>.
+    /// </summary>
+    Task<SocialConnectionEntity> ConnectFromIdentityAsync(
+        Guid accountId, Guid? connectedByUserAccountId, SocialPlatform platform,
+        SocialIdentity identity, string? instanceUrl = null, CancellationToken ct = default);
+
     Task<IReadOnlyList<SocialConnectionEntity>> ListAsync(Guid accountId, CancellationToken ct = default);
 
     /// <summary>Removes a connection (tokens are destroyed with the row). False if not the account's.</summary>

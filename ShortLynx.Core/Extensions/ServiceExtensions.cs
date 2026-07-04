@@ -61,6 +61,13 @@ public static class ServiceExtensions
         // Social connectors (one per platform, typed HttpClients) + the account-scoped connection service.
         services.AddHttpClient<ShortLynx.Services.Social.ISocialConnector, ShortLynx.Services.Social.BlueskyConnector>();
         services.AddHttpClient<ShortLynx.Services.Social.ISocialConnector, ShortLynx.Services.Social.MastodonConnector>();
+        // Threads is OAuth-only (gated, Meta App Review) — the authorize/callback endpoints live on
+        // Admin, but Core's /me/links/{id}/publish and the metrics puller both run ISocialConnector
+        // over any connected platform, so Threads needs to be part of this collection here too.
+        services.Configure<ShortLynx.Services.Social.MetaOptions>(configuration.GetSection("Meta"));
+        services.AddHttpClient<ShortLynx.Services.Social.IOAuthSocialConnector, ShortLynx.Services.Social.ThreadsConnector>();
+        services.AddScoped<ShortLynx.Services.Social.ISocialConnector>(
+            sp => sp.GetRequiredService<ShortLynx.Services.Social.IOAuthSocialConnector>());
         services.AddScoped<ShortLynx.Services.Social.ISocialConnectionService, ShortLynx.Services.Social.SocialConnectionService>();
         services.AddScoped<ShortLynx.Services.Social.ISocialPublishService, ShortLynx.Services.Social.SocialPublishService>();
         services.Configure<ShortLynx.Services.Social.SocialMetricsOptions>(configuration.GetSection("SocialMetrics"));

@@ -5,8 +5,9 @@ Everything in this doc happens on **Meta's own portals** (developers.facebook.co
 to get from "no Meta app" to "Threads connector approved for production."
 
 Per [SOCIAL_INTEGRATIONS_PLAN.md](SOCIAL_INTEGRATIONS_PLAN.md), Threads is **Phase 2** — gated, ~2–4 weeks
-of review lead time. Start this now; the codebase work for the connector itself can proceed in parallel
-once you have a **Meta App ID** and the review requirements below are satisfied.
+of review lead time. **The codebase side is done** (`ThreadsConnector`, the OAuth authorize/callback
+routes, and the two Meta webhooks are all built and tested — `feature/threads-connector`); what's left is
+entirely on Meta's portals: creating the app, verifying the business, and getting the permissions approved.
 
 ---
 
@@ -48,15 +49,24 @@ spot-checks these URLs.
 4. Under **App Settings → Basic**:
    - **App Domains**: your production domain (e.g. `shrtlynx.com`).
    - **Privacy Policy URL**: the `/Privacy` URL from step 1.
-   - **User Data Deletion**: either paste the `/DataDeletion` URL (instructions-URL method — simplest,
-     no callback to build) or, if you'd rather automate it later, implement the signed-request callback
-     protocol (`docs.developer.facebook.com` → Data Deletion Callback) — not required for the instructions
-     method.
+   - **User Data Deletion**: the `/DataDeletion` URL (instructions-URL method) — or leave it for the
+     callback URL below, now that it's a real, working endpoint.
    - **Category**: something accurate, e.g. "Business" or "Productivity".
-5. Add the **Threads** product to the app (App Dashboard → Add Product → Threads API).
+5. Add the **Threads** product to the app (App Dashboard → Add Product → Threads API), then under its
+   **Settings**, fill in the three callback fields with the endpoints this repo now serves on the Admin
+   app (`shortlynx.dev` — the dashboard, not the public redirect domain):
 
-Note the **App ID** and **App Secret** — you'll put these in Railway config once the connector code lands
-(not yet — that's a follow-up branch after this one).
+   | Field | Value |
+   |---|---|
+   | Redirect Callback URL(s) | `https://shortlynx.dev/social/threads/callback` |
+   | Uninstall Callback URL | `https://shortlynx.dev/webhooks/threads/deauthorize` |
+   | Delete Callback URL | `https://shortlynx.dev/webhooks/threads/delete` |
+
+   > **The redirect URI field must be submitted as a real URL, not just typed text.** After pasting it,
+   > press Enter/Tab so it becomes a chip/pill before saving — a common Meta-dashboard gotcha is the form
+   > silently not registering a value that's still sitting as plain text in the input.
+
+6. Note the **App ID** and **App Secret** — see the Railway config section below.
 
 ---
 
@@ -101,22 +111,37 @@ Expect **~2–4 weeks** total for this stage, consistent with the plan doc's est
 
 ---
 
-## 6. While waiting on review
+## 6. Set the Railway config, then test with a Meta test user
 
-Review is the long pole, not engineering — so once the app + permission requests are submitted, the
-Threads connector code (`ThreadsConnector : ISocialConnector`, following the exact shape
-`BlueskyConnector`/`MastodonConnector` already establish) can be built and tested against Meta's
-**test users** (App Dashboard → Roles → Test Users get an approved-permission sandbox without waiting
-for full review). That's the natural next branch once you have an App ID + Secret to test against.
+Once you have an **App ID** and **App Secret** (available immediately after app creation — you don't need
+to wait for Tech-Provider Verification to finish to start testing), set these on **both** the `core` and
+`admin` Railway services (both run `ThreadsConnector` — Admin serves the OAuth callback, Core can also
+publish/pull metrics via its `/me/*` API):
+
+| Variable | Value |
+|---|---|
+| `Meta__AppId` | the App ID from the dashboard |
+| `Meta__AppSecret` | the App Secret — **never commit this**, Railway env only |
+| `Meta__RedirectUri` | `https://shortlynx.dev/social/threads/callback` (must exactly match what's in the Meta dashboard) |
+
+Then, **before** full App Review completes, you can test the whole flow end-to-end using a **Meta test
+user** (App Dashboard → Roles → Test Users) — test users get an approved-permission sandbox without
+waiting for review:
+1. Sign in to the dashboard → **Social** → **Connect Threads** → approve on Meta's consent screen with
+   the test user's Threads account.
+2. Open any anonymous link → **Post to social** → tick the Threads connection → post. You should get a
+   working `threads.net` permalink back, same as the Bluesky/Mastodon flow.
+3. This is also the moment to **record the screencast** App Review asks for (§5) — the connect → compose
+   → publish → view-post loop, in one recording.
 
 ---
 
-## 7. Operational notes for later
+## 7. Operational notes
 
-- **Token storage**: Threads OAuth tokens will use the exact same `SocialConnectionEntity` +
-  `ITokenProtector` encryption path already built for Bluesky/Mastodon — no new schema needed, just a new
-  `SocialPlatform.Threads` enum value and connector.
-- **Config**: App ID/Secret go in Railway as `Meta__AppId` / `Meta__AppSecret` (Core service) when that
-  branch lands — never commit them.
+- **Token storage**: Threads OAuth tokens use the exact same `SocialConnectionEntity` +
+  `ITokenProtector` encryption path as Bluesky/Mastodon — no separate secret store.
+- **Uninstall/delete webhooks are live**: if a user removes ShortLynx from their Threads app settings, or
+  requests deletion via Meta's own UI, `POST /webhooks/threads/deauthorize` / `/webhooks/threads/delete`
+  fire automatically and delete the matching `SocialConnection` — no manual cleanup needed.
 - **Re-review**: Meta periodically re-reviews apps with live permissions (especially after material UI
   changes to the connect/publish flow) — keep the screencast and written justifications on file.

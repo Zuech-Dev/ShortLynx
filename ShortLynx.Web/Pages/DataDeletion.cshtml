@@ -1,0 +1,44 @@
+@page
+@model DataDeletionModel
+@{
+    ViewData["Title"] = "Data Deletion Instructions";
+}
+<h1 class="text-2xl font-bold mb-3">@ViewData["Title"]</h1>
+<p class="text-gray-500 text-sm mb-4">Last updated: @Model.LastUpdated.ToString("MMMM d, yyyy")</p>
+
+<p>
+    You can request deletion of your ShortLynx account and all associated data — links, campaigns,
+    click analytics, and any connected social-account tokens — at any time.
+</p>
+
+<h2 class="text-xl font-semibold mt-6 mb-2">How to request deletion</h2>
+<p>
+    Email <a href="mailto:@Model.ContactEmail" class="text-blue-700 hover:underline">@Model.ContactEmail</a>
+    from the email address on your ShortLynx account with the subject line
+    <strong>"Delete my ShortLynx data"</strong>. We will confirm your identity, then permanently delete:
+</p>
+<ul class="list-disc pl-6 space-y-1">
+    <li>Your account and login credentials.</li>
+    <li>Every link, campaign, and short code you created, and their click history.</li>
+    <li>Any connected social-account tokens (Bluesky, Mastodon, and any platform added later).</li>
+</ul>
+<p>We process deletion requests within 30 days and will confirm by email once complete.</p>
+
+<h2 class="text-xl font-semibold mt-6 mb-2">Disconnecting a social account only</h2>
+<p>
+    If you only want to revoke ShortLynx's access to a connected social account (Bluesky, Mastodon, or
+    any platform we support), you don't need to delete your whole ShortLynx account — sign in and remove
+    the connection from the <strong>Social</strong> page in your dashboard. This immediately and
+    permanently deletes the stored access tokens for that connection.
+</p>
+<p>
+    You can also revoke access directly from the platform's own settings (e.g. Bluesky's
+    <em>Settings → App Passwords</em>, or Mastodon's <em>Settings → Authorized apps</em>), which takes
+    effect immediately regardless of what's stored on our side.
+</p>
+
+<h2 class="text-xl font-semibold mt-6 mb-2">Related</h2>
+<p>
+    See our <a asp-page="/Privacy" class="text-blue-700 hover:underline">Privacy Policy</a> for what we
+    collect and why.
+</p>

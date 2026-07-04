@@ -149,8 +149,14 @@ Tiers: **A (open, build first): Bluesky, Mastodon** · **B (official, gated): Th
   null. True CTR (clicks ÷ impressions) arrives with the gated platforms (Threads reports views).
 
 ### Phase 2 — Gated platforms (Threads, Reddit)
-- Meta app + Tech-Provider Verification + per-permission review; Threads connector (container/publish,
-  insights). Reddit app pre-approval; submit + read, respect per-subreddit rules + rate limits.
+- ✅ **Prerequisites for Meta App Review**: a real Privacy Policy (`/Privacy`) and Data Deletion
+  Instructions (`/DataDeletion`) page on the Web app — both required, hosted URLs before Meta will accept
+  an app-review submission. Step-by-step operator walkthrough: [META_APP_SETUP.md](META_APP_SETUP.md).
+- ⬜ Meta app + Tech-Provider Verification + per-permission review (`threads_basic`,
+  `threads_content_publish`, `threads_manage_insights`) — in progress on Meta's side per the guide above.
+- ⬜ Threads connector (container/publish, insights) — same `ISocialConnector` shape as Bluesky/Mastodon;
+  can be built/tested against Meta test users while review is pending.
+- ⬜ Reddit app pre-approval; submit + read, respect per-subreddit rules + rate limits.
 
 ### Phase 3 — Conversions loop + Substack
 - Outbound: per-account **webhooks**; **Meta CAPI / TikTok Events / GA4 MP** click→conversion (hashed

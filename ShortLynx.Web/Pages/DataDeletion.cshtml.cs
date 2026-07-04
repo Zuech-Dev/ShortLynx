@@ -4,10 +4,8 @@ using Microsoft.Extensions.Configuration;
 
 namespace ShortLynx.Web.Pages;
 
-public class PrivacyModel(IConfiguration configuration) : PageModel
+public class DataDeletionModel(IConfiguration configuration) : PageModel
 {
-    // Bumped manually when the policy text changes materially — Meta's App Review checks for a
-    // credible, dated policy rather than a placeholder.
     public DateOnly LastUpdated { get; } = new(2026, 7, 3);
 
     public string ContactEmail { get; private set; } = "privacy@shrtlynx.com";

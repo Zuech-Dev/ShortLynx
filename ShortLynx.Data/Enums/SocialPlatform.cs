@@ -11,4 +11,7 @@ public enum SocialPlatform
 
     /// <summary>Gated (Meta App Review). Connected via OAuth from the dashboard, not the credentials API.</summary>
     Threads = 2,
+
+    /// <summary>Gated (Reddit API pre-approval). Connected via OAuth from the dashboard, not the credentials API.</summary>
+    Reddit = 3,
 }

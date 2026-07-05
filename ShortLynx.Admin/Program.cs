@@ -111,105 +111,123 @@ app.MapGet("/qr/{linkId:guid}", async (
     })
     .RequireAuthorization();
 
-// ── Threads (Meta) OAuth + Meta App Review webhooks ─────────────────────────────────────────────
-// These four routes exist because Meta's Threads app dashboard requires exact, working URLs for
-// them before it will accept an App Review submission — see docs/META_APP_SETUP.md.
-const string ThreadsOAuthStateCookieName = "sl_threads_oauth_state";
-const string ThreadsOAuthStateCookiePurpose = "ShortLynx.ThreadsOAuthState";
+// ── Social OAuth (Threads, Reddit) + Meta App Review webhooks ───────────────────────────────────
+// The Threads routes exist because Meta's app dashboard requires exact, working URLs before it will
+// accept an App Review submission (docs/META_APP_SETUP.md); Reddit mirrors the same registered-URL
+// contract (docs/REDDIT_APP_SETUP.md). One shared flow: mint anti-CSRF state in a short-lived
+// DataProtection-wrapped cookie, bounce to the platform's consent screen, verify state on return,
+// exchange the code, and upsert the connection.
+void MapSocialOAuth(string slug, SocialPlatform platform,
+    Func<IServiceProvider, (string AppId, string AppSecret, string RedirectUri)> credentials)
+{
+    var cookieName = $"sl_{slug}_oauth_state";
+    var cookiePurpose = $"ShortLynx.{platform}OAuthState";
+    var errorParam = $"{slug}Error";
 
-// "Connect Threads" entry point: mint a random anti-CSRF state, stash it in a short-lived cookie
-// (tamper-evident via DataProtection, not just base64), and send the browser to Meta's consent screen.
-app.MapGet("/social/threads/authorize", (
-        HttpContext http,
-        IOAuthSocialConnector connector,
-        IOptions<ThreadsOptions> threadsOptions,
-        IDataProtectionProvider dataProtection) =>
-    {
-        // Unconfigured deployments (no Meta app yet — most self-hosters) must fail here with a clear
-        // message, not send the browser to Meta with an empty client_id, which Meta answers with an
-        // unhelpful generic "unknown error" page.
-        if (string.IsNullOrWhiteSpace(threadsOptions.Value.AppId) ||
-            string.IsNullOrWhiteSpace(threadsOptions.Value.AppSecret))
-            return Results.Redirect("/social?threadsError=not_configured");
-
-        var state = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(16));
-        var protector = dataProtection.CreateProtector(ThreadsOAuthStateCookiePurpose);
-        http.Response.Cookies.Append(ThreadsOAuthStateCookieName, protector.Protect(state), new CookieOptions
+    app.MapGet($"/social/{slug}/authorize", (
+            HttpContext http,
+            IEnumerable<ISocialConnector> connectors,
+            IDataProtectionProvider dataProtection) =>
         {
-            HttpOnly = true,
-            Secure = true,
-            SameSite = SameSiteMode.Lax,
-            MaxAge = TimeSpan.FromMinutes(10),
-        });
+            // Unconfigured deployments (no platform app yet — most self-hosters) must fail here with a
+            // clear message, not send the browser to the platform with an empty client_id, which is
+            // answered with an unhelpful generic error page.
+            var (appId, appSecret, redirectUri) = credentials(http.RequestServices);
+            if (string.IsNullOrWhiteSpace(appId) || string.IsNullOrWhiteSpace(appSecret))
+                return Results.Redirect($"/social?{errorParam}=not_configured");
 
-        return Results.Redirect(connector.BuildAuthorizeUrl(threadsOptions.Value.RedirectUri, state));
-    })
-    .RequireAuthorization();
+            var state = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(16));
+            var protector = dataProtection.CreateProtector(cookiePurpose);
+            http.Response.Cookies.Append(cookieName, protector.Protect(state), new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = true,
+                SameSite = SameSiteMode.Lax,
+                MaxAge = TimeSpan.FromMinutes(10),
+            });
 
-// Where Meta sends the browser back after the user approves (or denies) access. Must exactly match
-// Meta:RedirectUri configured in the app dashboard.
-app.MapGet("/social/threads/callback", async (
-        HttpContext http, string? code, string? state, string? error,
-        IOAuthSocialConnector connector,
-        IOptions<ThreadsOptions> threadsOptions,
-        IDataProtectionProvider dataProtection,
-        IDbContextFactory<ShortLynxDbContext> dbFactory,
-        ISocialConnectionService socialConnections,
-        ClaimsPrincipal user,
-        CancellationToken ct) =>
-    {
-        if (!string.IsNullOrEmpty(error))
-            return Results.Redirect($"/social?threadsError={Uri.EscapeDataString(error)}");
+            return Results.Redirect(
+                OAuthConnectorResolver.Require(connectors, platform).BuildAuthorizeUrl(redirectUri, state));
+        })
+        .RequireAuthorization();
 
-        var cookieValue = http.Request.Cookies[ThreadsOAuthStateCookieName];
-        http.Response.Cookies.Delete(ThreadsOAuthStateCookieName); // single use either way
-
-        if (string.IsNullOrEmpty(cookieValue) || string.IsNullOrEmpty(state))
-            return Results.Redirect("/social?threadsError=missing_state");
-
-        string expectedState;
-        try
+    // Where the platform sends the browser back after the user approves (or denies) access. Must
+    // exactly match the redirect URI registered in the platform's app settings.
+    app.MapGet($"/social/{slug}/callback", async (
+            HttpContext http, string? code, string? state, string? error,
+            IEnumerable<ISocialConnector> connectors,
+            IDataProtectionProvider dataProtection,
+            IDbContextFactory<ShortLynxDbContext> dbFactory,
+            ISocialConnectionService socialConnections,
+            ClaimsPrincipal user,
+            CancellationToken ct) =>
         {
-            expectedState = dataProtection.CreateProtector(ThreadsOAuthStateCookiePurpose).Unprotect(cookieValue);
-        }
-        catch (CryptographicException)
-        {
-            return Results.Redirect("/social?threadsError=invalid_state");
-        }
+            if (!string.IsNullOrEmpty(error))
+                return Results.Redirect($"/social?{errorParam}={Uri.EscapeDataString(error)}");
 
-        // Anti-CSRF: the value returned by Meta must match the one this same browser was handed at
-        // /authorize — otherwise this could be a crafted callback URL opened in a victim's browser.
-        if (!string.Equals(expectedState, state, StringComparison.Ordinal))
-            return Results.Redirect("/social?threadsError=state_mismatch");
+            var cookieValue = http.Request.Cookies[cookieName];
+            http.Response.Cookies.Delete(cookieName); // single use either way
 
-        if (string.IsNullOrEmpty(code))
-            return Results.Redirect("/social?threadsError=missing_code");
+            if (string.IsNullOrEmpty(cookieValue) || string.IsNullOrEmpty(state))
+                return Results.Redirect($"/social?{errorParam}=missing_state");
 
-        var userId = user.GetUserId();
-        if (userId is null) return Results.Unauthorized();
+            string expectedState;
+            try
+            {
+                expectedState = dataProtection.CreateProtector(cookiePurpose).Unprotect(cookieValue);
+            }
+            catch (CryptographicException)
+            {
+                return Results.Redirect($"/social?{errorParam}=invalid_state");
+            }
 
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var accountId = await AccountResolver.ResolveAccountIdAsync(
-            db, userId.Value, user.GetAccountId(), user.Identity?.Name ?? "Personal", ct);
+            // Anti-CSRF: the value returned by the platform must match the one this same browser was
+            // handed at /authorize — otherwise this could be a crafted callback URL in a victim's browser.
+            if (!string.Equals(expectedState, state, StringComparison.Ordinal))
+                return Results.Redirect($"/social?{errorParam}=state_mismatch");
 
-        try
-        {
-            var identity = await connector.ExchangeAuthorizationCodeAsync(code, threadsOptions.Value.RedirectUri, ct);
-            await socialConnections.ConnectFromIdentityAsync(
-                accountId, userId.Value, SocialPlatform.Threads, identity, instanceUrl: null, ct);
-        }
-        catch (ArgumentException ex)
-        {
-            return Results.Redirect($"/social?threadsError={Uri.EscapeDataString(ex.Message)}");
-        }
-        catch (EntitlementException)
-        {
-            return Results.Redirect("/social?threadsError=plan");
-        }
+            if (string.IsNullOrEmpty(code))
+                return Results.Redirect($"/social?{errorParam}=missing_code");
 
-        return Results.Redirect("/social?connected=threads");
-    })
-    .RequireAuthorization();
+            var userId = user.GetUserId();
+            if (userId is null) return Results.Unauthorized();
+
+            await using var db = await dbFactory.CreateDbContextAsync(ct);
+            var accountId = await AccountResolver.ResolveAccountIdAsync(
+                db, userId.Value, user.GetAccountId(), user.Identity?.Name ?? "Personal", ct);
+
+            try
+            {
+                var connector = OAuthConnectorResolver.Require(connectors, platform);
+                var identity = await connector.ExchangeAuthorizationCodeAsync(
+                    code, credentials(http.RequestServices).RedirectUri, ct);
+                await socialConnections.ConnectFromIdentityAsync(
+                    accountId, userId.Value, platform, identity, instanceUrl: null, ct);
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.Redirect($"/social?{errorParam}={Uri.EscapeDataString(ex.Message)}");
+            }
+            catch (EntitlementException)
+            {
+                return Results.Redirect($"/social?{errorParam}=plan");
+            }
+
+            return Results.Redirect($"/social?connected={slug}");
+        })
+        .RequireAuthorization();
+}
+
+MapSocialOAuth("threads", SocialPlatform.Threads, sp =>
+{
+    var o = sp.GetRequiredService<IOptions<ThreadsOptions>>().Value;
+    return (o.AppId, o.AppSecret, o.RedirectUri);
+});
+MapSocialOAuth("reddit", SocialPlatform.Reddit, sp =>
+{
+    var o = sp.GetRequiredService<IOptions<RedditOptions>>().Value;
+    return (o.AppId, o.AppSecret, o.RedirectUri);
+});
 
 // Meta POSTs a signed_request here when a user removes ShortLynx from their Threads app settings.
 // Unauthenticated by design — this is a server-to-server call from Meta, not a user's browser — so the

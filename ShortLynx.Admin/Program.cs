@@ -125,6 +125,13 @@ app.MapGet("/social/threads/authorize", (
         IOptions<ThreadsOptions> threadsOptions,
         IDataProtectionProvider dataProtection) =>
     {
+        // Unconfigured deployments (no Meta app yet — most self-hosters) must fail here with a clear
+        // message, not send the browser to Meta with an empty client_id, which Meta answers with an
+        // unhelpful generic "unknown error" page.
+        if (string.IsNullOrWhiteSpace(threadsOptions.Value.AppId) ||
+            string.IsNullOrWhiteSpace(threadsOptions.Value.AppSecret))
+            return Results.Redirect("/social?threadsError=not_configured");
+
         var state = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(16));
         var protector = dataProtection.CreateProtector(ThreadsOAuthStateCookiePurpose);
         http.Response.Cookies.Append(ThreadsOAuthStateCookieName, protector.Protect(state), new CookieOptions

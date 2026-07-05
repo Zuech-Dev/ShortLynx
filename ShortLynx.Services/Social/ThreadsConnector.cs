@@ -25,6 +25,7 @@ public sealed class ThreadsConnector(HttpClient http, IOptions<ThreadsOptions> o
     private const string ApiHost = "https://graph.threads.net";
 
     private ThreadsOptions Options => options.Value;
+    private string VersionedApiHost => $"{ApiHost}/{Options.ApiVersion}";
 
     public SocialPlatform Platform => SocialPlatform.Threads;
 
@@ -74,7 +75,7 @@ public sealed class ThreadsConnector(HttpClient http, IOptions<ThreadsOptions> o
 
         // Step 3: fetch the profile for a display handle (the numeric user id is the stable external id).
         using var profileResponse = await http.GetAsync(
-            $"{ApiHost}/v1.0/me?fields=id,username" +
+            $"{VersionedApiHost}/me?fields=id,username" +
             $"&access_token={Uri.EscapeDataString(longLived.AccessToken)}" +
             $"&appsecret_proof={AppSecretProof(longLived.AccessToken)}", ct);
         profileResponse.EnsureSuccessStatusCode();
@@ -100,7 +101,7 @@ public sealed class ThreadsConnector(HttpClient http, IOptions<ThreadsOptions> o
 
         // Two-step publish: create a container, then publish it.
         using var createResponse = await http.PostAsync(
-            $"{ApiHost}/v1.0/{connection.ExternalAccountId}/threads", new FormUrlEncodedContent(
+            $"{VersionedApiHost}/{connection.ExternalAccountId}/threads", new FormUrlEncodedContent(
                 new Dictionary<string, string>
                 {
                     ["media_type"] = "TEXT",
@@ -115,7 +116,7 @@ public sealed class ThreadsConnector(HttpClient http, IOptions<ThreadsOptions> o
                         ?? throw new InvalidOperationException("Empty container response from Threads.");
 
         using var publishResponse = await http.PostAsync(
-            $"{ApiHost}/v1.0/{connection.ExternalAccountId}/threads_publish", new FormUrlEncodedContent(
+            $"{VersionedApiHost}/{connection.ExternalAccountId}/threads_publish", new FormUrlEncodedContent(
                 new Dictionary<string, string>
                 {
                     ["creation_id"] = container.Id,
@@ -134,7 +135,7 @@ public sealed class ThreadsConnector(HttpClient http, IOptions<ThreadsOptions> o
         try
         {
             using var mediaResponse = await http.GetAsync(
-                $"{ApiHost}/v1.0/{published.Id}?fields=permalink" +
+                $"{VersionedApiHost}/{published.Id}?fields=permalink" +
                 $"&access_token={Uri.EscapeDataString(token)}&appsecret_proof={proof}", ct);
             if (mediaResponse.IsSuccessStatusCode)
                 permalink = (await mediaResponse.Content.ReadFromJsonAsync<PermalinkResponse>(ct))?.Permalink;
@@ -161,7 +162,7 @@ public sealed class ThreadsConnector(HttpClient http, IOptions<ThreadsOptions> o
     {
         var token = connection.Tokens.AccessToken;
         using var response = await http.GetAsync(
-            $"{ApiHost}/v1.0/{externalPostId}/insights?metric=views,likes,replies,reposts,quotes" +
+            $"{VersionedApiHost}/{externalPostId}/insights?metric=views,likes,replies,reposts,quotes" +
             $"&access_token={Uri.EscapeDataString(token)}&appsecret_proof={AppSecretProof(token)}", ct);
 
         if (response.StatusCode == HttpStatusCode.NotFound) return null; // deleted on-platform

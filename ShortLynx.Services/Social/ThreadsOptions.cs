@@ -22,6 +22,10 @@ public sealed class ThreadsOptions
     /// </summary>
     public string RedirectUri { get; set; } = string.Empty;
 
-    /// <summary>Graph API version segment used in Threads API URLs, e.g. "v21.0".</summary>
-    public string ApiVersion { get; set; } = "v21.0";
+    /// <summary>
+    /// Version segment in Threads resource URLs (<c>graph.threads.net/{version}/...</c>). The Threads
+    /// API has its own versioning starting at "v1.0" — it does NOT follow the Facebook Graph API's
+    /// v2x.0 scheme, so don't "update" this to match a Graph API version.
+    /// </summary>
+    public string ApiVersion { get; set; } = "v1.0";
 }

@@ -26,6 +26,7 @@ public class SocialPublishServiceTests
         public int ExpireFirstN;
         public SocialTokens? RefreshResult;
         public Exception? PublishError;
+        public string? PublishErrorHandle; // when set, PublishError only fires for this connection
 
         public Task<SocialIdentity> ConnectAsync(SocialCredentials credentials, CancellationToken ct = default)
             => throw new NotSupportedException();
@@ -35,7 +36,8 @@ public class SocialPublishServiceTests
             PublishCalls++;
             LastText = text;
             LastTokens = connection.Tokens;
-            if (PublishError is not null) throw PublishError;
+            if (PublishError is not null && (PublishErrorHandle is null || connection.Handle == PublishErrorHandle))
+                throw PublishError;
             if (PublishCalls <= ExpireFirstN) throw new TokenExpiredException("expired");
             return Task.FromResult(new SocialPostRef($"post-{PublishCalls}", $"https://bsky.app/post/{PublishCalls}"));
         }
@@ -134,6 +136,48 @@ public class SocialPublishServiceTests
 
         await using var verify = db.CreateContext();
         Assert.Equal(0, await verify.SocialPostEntities.CountAsync());
+    }
+
+    [Fact]
+    public async Task Publish_OneConnectionRejected_OthersStillSucceed()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+        var (accountId, linkId, connectionId) = await SeedAsync(db);
+
+        // Second connection on the same account; the connector is scripted to reject only this one.
+        Guid badConnectionId;
+        await using (var ctx = db.CreateContext())
+        {
+            var bad = new SocialConnectionEntity
+            {
+                Id = Guid.CreateVersion7(), AccountId = accountId, Platform = SocialPlatform.Bluesky,
+                ExternalAccountId = "did:plc:bad", Handle = "bad.bsky.social",
+                AccessTokenProtected = "enc:access-bad", CreatedAt = DateTimeOffset.UtcNow,
+            };
+            ctx.Add(bad);
+            await ctx.SaveChangesAsync();
+            badConnectionId = bad.Id;
+        }
+
+        var connector = new ScriptedConnector
+        {
+            PublishError = new ArgumentException("Post exceeds the platform's length limit."),
+            PublishErrorHandle = "bad.bsky.social",
+        };
+
+        var results = await MakeSvc(db.CreateContext(), connector)
+            .PublishLinkAsync(accountId, linkId, [connectionId, badConnectionId], "hi", "https://s.example/abc");
+
+        // Partial failure is per-connection, never all-or-nothing.
+        Assert.Equal(2, results.Count);
+        var ok = Assert.Single(results, r => r.Success);
+        var failed = Assert.Single(results, r => !r.Success);
+        Assert.Equal("me.bsky.social", ok.Handle);
+        Assert.Equal("bad.bsky.social", failed.Handle);
+        Assert.Contains("length limit", failed.Error);
+
+        await using var verify = db.CreateContext();
+        Assert.Equal(1, await verify.SocialPostEntities.CountAsync()); // only the success recorded
     }
 
     [Fact]

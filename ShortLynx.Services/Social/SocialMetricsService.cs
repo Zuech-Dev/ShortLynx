@@ -27,17 +27,27 @@ public sealed class SocialMetricsService(
         var windowStart = now.AddDays(-Math.Max(1, options.Value.RefreshWindowDays));
         var staleBefore = now.AddMinutes(-Math.Max(1, options.Value.RefreshIntervalMinutes));
 
-        // Time comparisons run in memory (SQLite can't order/filter DateTimeOffset server-side, and the
-        // recent-post population is small). Disconnected posts are skipped — no tokens to pull with.
+        // Two-phase: the time comparisons must run in memory (SQLite — used by the test suite — can't
+        // filter DateTimeOffset server-side), but phase 1 projects only (id, dates) instead of dragging
+        // every post's text + joined connection into memory, so the per-pass cost of the full scan stays
+        // small as the table grows. Phase 2 then materializes just the due posts. Disconnected posts are
+        // skipped — no tokens to pull with.
         var candidates = await db.SocialPostEntities
-            .Include(p => p.SocialConnection)
             .Where(p => p.SocialConnectionId != null)
+            .Select(p => new { p.Id, p.PostedAt, p.MetricsUpdatedAt })
             .ToListAsync(ct);
 
-        var due = candidates
+        var dueIds = candidates
             .Where(p => p.PostedAt >= windowStart)
-            .Where(p => p.MetricsUpdatedAt is null || p.MetricsUpdatedAt < staleBefore)
+            .Where(p => p.MetricsUpdatedAt == null || p.MetricsUpdatedAt < staleBefore)
+            .Select(p => p.Id)
             .ToList();
+        if (dueIds.Count == 0) return 0;
+
+        var due = await db.SocialPostEntities
+            .Include(p => p.SocialConnection)
+            .Where(p => dueIds.Contains(p.Id))
+            .ToListAsync(ct);
 
         return await RefreshPostsAsync(due, ct);
     }

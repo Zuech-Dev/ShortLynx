@@ -107,13 +107,24 @@ public class SocialComponentTests : BunitContext
     }
 
     [Fact]
-    public void ThreadsErrorQueryParam_ShowsErrorBanner()
+    public void ThreadsErrorQueryParam_ShowsFriendlyErrorBanner()
     {
         Services.GetRequiredService<NavigationManager>().NavigateTo("/social?threadsError=state_mismatch");
 
         var cut = Render<Social>();
 
-        Assert.Contains("state_mismatch", cut.Find("[data-testid=threads-error]").TextContent);
+        // Short error codes from the OAuth endpoints map to human-readable text, not raw codes.
+        Assert.Contains("state check failed", cut.Find("[data-testid=threads-error]").TextContent);
+    }
+
+    [Fact]
+    public void ThreadsNotConfigured_ShowsOperatorGuidance()
+    {
+        Services.GetRequiredService<NavigationManager>().NavigateTo("/social?threadsError=not_configured");
+
+        var cut = Render<Social>();
+
+        Assert.Contains("Threads:AppId", cut.Find("[data-testid=threads-error]").TextContent);
     }
 
     [Fact]

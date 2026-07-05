@@ -153,7 +153,7 @@ else
         var uri = Nav.ToAbsoluteUri(Nav.Uri);
         var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
         if (query.TryGetValue("connected", out var connected) && connected == "threads") _threadsConnected = true;
-        if (query.TryGetValue("threadsError", out var err)) _threadsError = err;
+        if (query.TryGetValue("threadsError", out var err)) _threadsError = FriendlyThreadsError(err!);
 
         await LoadAsync();
     }
@@ -163,6 +163,17 @@ else
         "Bluesky" => "badge-blue",
         "Threads" => "badge-yellow",
         _ => "badge-gray", // Mastodon
+    };
+
+    // The callback/authorize endpoints pass short error codes; platform ArgumentException messages pass
+    // through as-is (they're already human-readable).
+    static string FriendlyThreadsError(string code) => code switch
+    {
+        "not_configured" => "Threads isn't configured on this server yet — the operator needs to set Threads:AppId and Threads:AppSecret (see docs/META_APP_SETUP.md).",
+        "missing_state" or "invalid_state" or "state_mismatch" => "The sign-in attempt couldn't be verified (state check failed). Try connecting again.",
+        "missing_code" => "Meta didn't return an authorization code. Try connecting again.",
+        "plan" => "Social publishing is not available on your plan.",
+        _ => code,
     };
 
     async Task LoadAsync()

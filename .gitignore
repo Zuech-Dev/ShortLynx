@@ -92,3 +92,9 @@ nunit-*.xml
 # MSBuild wildcard expansion on clean builds (CI + Docker). The escaped backslash matches the literal.
 **/bin\\Debug/
 **/obj\\Debug/
+
+# Internal business docs — not for the public repo
+docs/MASTER_PLAN.md
+docs/ANALYTICS_METRICS_PLAN.md
+docs/TRACKING_DISCLOSURE_PLAN.md
+docs/ELV2_LICENSE_PLAN.md

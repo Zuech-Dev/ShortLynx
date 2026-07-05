@@ -14,6 +14,7 @@
     <h1 class="text-2xl font-bold">Social Accounts</h1>
     <div class="flex gap-2">
         <a class="btn btn-outline" href="/social/threads/authorize" data-testid="connect-threads">Connect Threads</a>
+        <a class="btn btn-outline" href="/social/reddit/authorize" data-testid="connect-reddit">Connect Reddit</a>
         <button class="btn btn-primary" data-testid="connect-toggle" @onclick="() => _showConnect = !_showConnect">
             @(_showConnect ? "Cancel" : "+ Connect account")
         </button>
@@ -26,13 +27,13 @@
     encrypted — they are never shown again.
 </p>
 
-@if (_threadsConnected)
+@if (_oauthConnected is not null)
 {
-    <div class="text-green-600 text-sm mb-3" data-testid="threads-connected">Threads account connected.</div>
+    <div class="text-green-600 text-sm mb-3" data-testid="threads-connected">@_oauthConnected account connected.</div>
 }
-@if (_threadsError is not null)
+@if (_oauthError is not null)
 {
-    <div class="text-red-600 text-sm mb-3" data-testid="threads-error">Couldn't connect Threads: @_threadsError</div>
+    <div class="text-red-600 text-sm mb-3" data-testid="threads-error">Couldn't connect @_oauthErrorPlatform: @_oauthError</div>
 }
 
 @if (_showConnect)
@@ -132,8 +133,8 @@ else
 @code {
     [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
 
-    bool _loaded, _resolved, _showConnect, _busy, _threadsConnected;
-    string? _threadsError;
+    bool _loaded, _resolved, _showConnect, _busy;
+    string? _oauthConnected, _oauthError, _oauthErrorPlatform;
     Guid _uid, _accountId;
     List<ConnectionRow> _connections = [];
     readonly ConnectForm _form = new();
@@ -149,11 +150,17 @@ else
             _accountId = await AccountResolver.ResolveAccountIdAsync(db, _uid, principal.GetAccountId(), principal.Identity?.Name ?? "Personal");
         _resolved = true;
 
-        // Surfaces the result of a redirect back from /social/threads/callback.
+        // Surfaces the result of a redirect back from an OAuth callback (/social/{slug}/callback).
         var uri = Nav.ToAbsoluteUri(Nav.Uri);
         var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
-        if (query.TryGetValue("connected", out var connected) && connected == "threads") _threadsConnected = true;
-        if (query.TryGetValue("threadsError", out var err)) _threadsError = FriendlyThreadsError(err!);
+        if (query.TryGetValue("connected", out var connected))
+            _oauthConnected = PlatformDisplayName((string?)connected);
+        foreach (var slug in new[] { "threads", "reddit" })
+        {
+            if (!query.TryGetValue($"{slug}Error", out var err)) continue;
+            _oauthErrorPlatform = PlatformDisplayName(slug);
+            _oauthError = FriendlyOAuthError(err!, slug);
+        }
 
         await LoadAsync();
     }
@@ -162,19 +169,32 @@ else
     {
         "Bluesky" => "badge-blue",
         "Threads" => "badge-yellow",
+        "Reddit" => "badge-orange",
         _ => "badge-gray", // Mastodon
+    };
+
+    static string? PlatformDisplayName(string? slug) => slug switch
+    {
+        "threads" => "Threads",
+        "reddit" => "Reddit",
+        _ => null,
     };
 
     // The callback/authorize endpoints pass short error codes; platform ArgumentException messages pass
     // through as-is (they're already human-readable).
-    static string FriendlyThreadsError(string code) => code switch
+    static string FriendlyOAuthError(string code, string slug)
     {
-        "not_configured" => "Threads isn't configured on this server yet — the operator needs to set Threads:AppId and Threads:AppSecret (see docs/META_APP_SETUP.md).",
-        "missing_state" or "invalid_state" or "state_mismatch" => "The sign-in attempt couldn't be verified (state check failed). Try connecting again.",
-        "missing_code" => "Meta didn't return an authorization code. Try connecting again.",
-        "plan" => "Social publishing is not available on your plan.",
-        _ => code,
-    };
+        var configSection = slug == "reddit" ? "Reddit" : "Threads";
+        var setupDoc = slug == "reddit" ? "docs/REDDIT_APP_SETUP.md" : "docs/META_APP_SETUP.md";
+        return code switch
+        {
+            "not_configured" => $"{configSection} isn't configured on this server yet — the operator needs to set {configSection}:AppId and {configSection}:AppSecret (see {setupDoc}).",
+            "missing_state" or "invalid_state" or "state_mismatch" => "The sign-in attempt couldn't be verified (state check failed). Try connecting again.",
+            "missing_code" => "The platform didn't return an authorization code. Try connecting again.",
+            "plan" => "Social publishing is not available on your plan.",
+            _ => code,
+        };
+    }
 
     async Task LoadAsync()
     {

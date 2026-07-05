@@ -82,6 +82,14 @@ public interface ISocialConnector
 /// user-supplied credentials (Bluesky/Mastodon). The dashboard drives the redirect; this interface is
 /// what the OAuth authorize/callback endpoints need from the connector.
 /// </summary>
+/// <summary>Resolves the OAuth-capable connector for a platform out of the registered connector set.</summary>
+public static class OAuthConnectorResolver
+{
+    public static IOAuthSocialConnector Require(IEnumerable<ISocialConnector> connectors, SocialPlatform platform)
+        => connectors.OfType<IOAuthSocialConnector>().FirstOrDefault(c => c.Platform == platform)
+           ?? throw new InvalidOperationException($"No OAuth connector is registered for '{platform}'.");
+}
+
 public interface IOAuthSocialConnector : ISocialConnector
 {
     /// <summary>Builds the URL to send the user's browser to, to grant this app access.</summary>

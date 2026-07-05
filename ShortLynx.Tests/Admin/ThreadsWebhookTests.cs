@@ -12,7 +12,7 @@ namespace ShortLynx.Tests.Admin;
 
 // Meta calls these two webhooks server-to-server (no browser, no session) when a user disconnects the
 // app or requests data deletion via Meta's own UI — see docs/META_APP_SETUP.md. AdminFactory's
-// "Meta:AppSecret" test config matches the secret used to sign requests here.
+// "Threads:AppSecret" test config matches the secret used to sign requests here.
 public class ThreadsWebhookTests : IClassFixture<AdminFactory>
 {
     private const string AppSecret = "test-meta-app-secret"; // must match AdminFactory's test config

@@ -66,7 +66,10 @@ spot-checks these URLs.
    > press Enter/Tab so it becomes a chip/pill before saving — a common Meta-dashboard gotcha is the form
    > silently not registering a value that's still sitting as plain text in the input.
 
-6. Note the **App ID** and **App Secret** — see the Railway config section below.
+6. Scroll down on this same settings page to the **Threads app ID** / **Threads app secret** fields —
+   Meta provisions a credential pair dedicated to the Threads product, separate from the app-level
+   **App ID**/**App Secret** shown at the top (which are for the general Meta/Facebook Graph API surface,
+   not used by this connector). **Use the Threads-specific pair** for the Railway config below.
 
 ---
 
@@ -113,16 +116,25 @@ Expect **~2–4 weeks** total for this stage, consistent with the plan doc's est
 
 ## 6. Set the Railway config, then test with a Meta test user
 
-Once you have an **App ID** and **App Secret** (available immediately after app creation — you don't need
-to wait for Tech-Provider Verification to finish to start testing), set these on **both** the `core` and
-`admin` Railway services (both run `ThreadsConnector` — Admin serves the OAuth callback, Core can also
-publish/pull metrics via its `/me/*` API):
+Once you have the **Threads app ID** and **Threads app secret** (available immediately after app
+creation — you don't need to wait for Tech-Provider Verification to finish to start testing), set these
+on **both** the `core` and `admin` Railway services (both run `ThreadsConnector` — Admin serves the OAuth
+callback, Core can also publish/pull metrics via its `/me/*` API):
 
 | Variable | Value |
 |---|---|
-| `Meta__AppId` | the App ID from the dashboard |
-| `Meta__AppSecret` | the App Secret — **never commit this**, Railway env only |
-| `Meta__RedirectUri` | `https://shortlynx.dev/social/threads/callback` (must exactly match what's in the Meta dashboard) |
+| `Threads__AppId` | the **Threads app ID** (not the app-level App ID shown at the top of the settings page) |
+| `Threads__AppSecret` | the **Threads app secret** — **never commit this**, Railway env only |
+| `Threads__RedirectUri` | `https://shortlynx.dev/social/threads/callback` (must exactly match what's in the Meta dashboard) |
+
+> **Two credential pairs live on the same settings page** — the app-level "App ID"/"App secret" at the
+> top (general Meta/Facebook Graph API) and a separate "Threads app ID"/"Threads app secret" further down
+> (specific to the Threads product). `ThreadsConnector` talks to `graph.threads.net`, which authenticates
+> against the **Threads-specific** pair — using the app-level one instead will fail token exchange.
+>
+> This is deliberately its own `Threads:*` config section, not a shared `Meta:*` one — Facebook and
+> Instagram (Phase 3+) will each get their own connector and their own config section the same way,
+> since each Meta product tends to provision its own credential pair rather than sharing one app-wide.
 
 Then, **before** full App Review completes, you can test the whole flow end-to-end using a **Meta test
 user** (App Dashboard → Roles → Test Users) — test users get an approved-permission sandbox without

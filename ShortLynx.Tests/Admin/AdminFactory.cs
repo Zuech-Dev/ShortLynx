@@ -41,7 +41,7 @@ public sealed class AdminFactory : WebApplicationFactory<AdminEntryPoint>, IAsyn
             {
                 ["ApiKey:HmacSecret"] = "test-hmac-secret-at-least-32-chars!",
                 ["Email:Mode"] = "Log",
-                ["Meta:AppSecret"] = "test-meta-app-secret",
+                ["Threads:AppSecret"] = "test-meta-app-secret",
             });
         });
 

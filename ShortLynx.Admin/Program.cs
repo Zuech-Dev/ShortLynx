@@ -122,7 +122,7 @@ const string ThreadsOAuthStateCookiePurpose = "ShortLynx.ThreadsOAuthState";
 app.MapGet("/social/threads/authorize", (
         HttpContext http,
         IOAuthSocialConnector connector,
-        IOptions<MetaOptions> metaOptions,
+        IOptions<ThreadsOptions> threadsOptions,
         IDataProtectionProvider dataProtection) =>
     {
         var state = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(16));
@@ -135,7 +135,7 @@ app.MapGet("/social/threads/authorize", (
             MaxAge = TimeSpan.FromMinutes(10),
         });
 
-        return Results.Redirect(connector.BuildAuthorizeUrl(metaOptions.Value.RedirectUri, state));
+        return Results.Redirect(connector.BuildAuthorizeUrl(threadsOptions.Value.RedirectUri, state));
     })
     .RequireAuthorization();
 
@@ -144,7 +144,7 @@ app.MapGet("/social/threads/authorize", (
 app.MapGet("/social/threads/callback", async (
         HttpContext http, string? code, string? state, string? error,
         IOAuthSocialConnector connector,
-        IOptions<MetaOptions> metaOptions,
+        IOptions<ThreadsOptions> threadsOptions,
         IDataProtectionProvider dataProtection,
         IDbContextFactory<ShortLynxDbContext> dbFactory,
         ISocialConnectionService socialConnections,
@@ -187,7 +187,7 @@ app.MapGet("/social/threads/callback", async (
 
         try
         {
-            var identity = await connector.ExchangeAuthorizationCodeAsync(code, metaOptions.Value.RedirectUri, ct);
+            var identity = await connector.ExchangeAuthorizationCodeAsync(code, threadsOptions.Value.RedirectUri, ct);
             await socialConnections.ConnectFromIdentityAsync(
                 accountId, userId.Value, SocialPlatform.Threads, identity, instanceUrl: null, ct);
         }
@@ -209,12 +209,12 @@ app.MapGet("/social/threads/callback", async (
 // HMAC verification is the only thing standing between this and anyone deleting anyone's connection.
 app.MapPost("/webhooks/threads/deauthorize", async (
         HttpRequest request,
-        IOptions<MetaOptions> metaOptions,
+        IOptions<ThreadsOptions> threadsOptions,
         IDbContextFactory<ShortLynxDbContext> dbFactory,
         CancellationToken ct) =>
     {
         var form = await request.ReadFormAsync(ct);
-        if (!MetaSignedRequestParser.TryParse(form["signed_request"], metaOptions.Value.AppSecret, out var payload))
+        if (!MetaSignedRequestParser.TryParse(form["signed_request"], threadsOptions.Value.AppSecret, out var payload))
             return Results.BadRequest();
 
         await using var db = await dbFactory.CreateDbContextAsync(ct);
@@ -230,12 +230,12 @@ app.MapPost("/webhooks/threads/deauthorize", async (
 // Data Deletion Callback spec requires.
 app.MapPost("/webhooks/threads/delete", async (
         HttpRequest request,
-        IOptions<MetaOptions> metaOptions,
+        IOptions<ThreadsOptions> threadsOptions,
         IDbContextFactory<ShortLynxDbContext> dbFactory,
         CancellationToken ct) =>
     {
         var form = await request.ReadFormAsync(ct);
-        if (!MetaSignedRequestParser.TryParse(form["signed_request"], metaOptions.Value.AppSecret, out var payload))
+        if (!MetaSignedRequestParser.TryParse(form["signed_request"], threadsOptions.Value.AppSecret, out var payload))
             return Results.BadRequest();
 
         await using var db = await dbFactory.CreateDbContextAsync(ct);

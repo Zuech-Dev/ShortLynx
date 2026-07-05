@@ -31,7 +31,7 @@ public class ThreadsConnectorTests
     }
 
     private static ThreadsConnector Make(QueuedHandler handler, string appSecret = "test-app-secret")
-        => new(new HttpClient(handler), Options.Create(new MetaOptions
+        => new(new HttpClient(handler), Options.Create(new ThreadsOptions
         {
             AppId = "test-app-id", AppSecret = appSecret, RedirectUri = "https://shortlynx.dev/social/threads/callback",
         }));

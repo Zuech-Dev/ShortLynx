@@ -117,6 +117,27 @@ public class ClickAggregatorTests
     }
 
     [Fact]
+    public void Summarize_LocalHourlyDistribution_UsesVisitorTimezone()
+    {
+        // 14:00 UTC is 09:00 in America/Chicago (CDT, UTC-5, July). Rows without a stored zone
+        // (e.g. GeoIP off or privacy signal) are excluded from the local series, never guessed.
+        var at = new DateTimeOffset(2026, 7, 1, 14, 0, 0, TimeSpan.Zero);
+        var rows = new[]
+        {
+            Row("a", clickedAt: at) with { TimeZone = "America/Chicago" },
+            Row("b", clickedAt: at) with { TimeZone = "America/Chicago" },
+            Row("c", clickedAt: at), // no zone
+            Row("d", clickedAt: at) with { TimeZone = "Not/AZone" }, // unknown zone dropped
+        };
+
+        var b = ClickAggregator.Summarize(rows);
+
+        Assert.Equal(4, b.HourlyDistribution[14].Count);      // UTC series counts everything
+        Assert.Equal(2, b.LocalHourlyDistribution[9].Count);  // local series only the zoned rows
+        Assert.Equal(2, b.LocalHourlyDistribution.Sum(h => h.Count));
+    }
+
+    [Fact]
     public void Summarize_TalliesNavigationTypes()
     {
         var rows =

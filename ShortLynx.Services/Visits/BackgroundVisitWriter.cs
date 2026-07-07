@@ -80,6 +80,7 @@ public sealed class BackgroundVisitWriter(
                     Os = d.Os,
                     ReferrerHost = d.ReferrerHost,
                     Country = d.Country,
+                    TimeZone = d.TimeZone,
                     Language = d.Language,
                     NavigationType = d.NavigationType,
                     UtmSource = utm.Source,
@@ -110,6 +111,7 @@ public sealed class BackgroundVisitWriter(
                     Os = d.Os,
                     ReferrerHost = d.ReferrerHost,
                     Country = d.Country,
+                    TimeZone = d.TimeZone,
                     Language = d.Language,
                     NavigationType = d.NavigationType,
                     UtmSource = utm.Source,
@@ -133,20 +135,22 @@ public sealed class BackgroundVisitWriter(
     // Reduces a visit's raw signals to the stored low-entropy dimensions. A privacy signal (DNT / Sec-GPC)
     // suppresses every derived dimension — the click still counts, but carries no profile.
     private (ClickSource Source, DeviceType Device, string? Browser, string? Os, string? ReferrerHost,
-        string? Country, string? Language, string? NavigationType) Derive(VisitEvent e)
+        string? Country, string? TimeZone, string? Language, string? NavigationType) Derive(VisitEvent e)
     {
         if (e.PrivacySignal)
-            return (ClickSource.Direct, DeviceType.Unknown, null, null, null, null, null, null);
+            return (ClickSource.Direct, DeviceType.Unknown, null, null, null, null, null, null, null);
 
         var ua = uaParser.Parse(e.UserAgent);
         var nav = string.IsNullOrWhiteSpace(e.SecFetchSite) ? null : e.SecFetchSite.Trim().ToLowerInvariant();
+        var geo = geoIp.Resolve(e.RawIp);
         return (
             SourceDetector.DetectSource(e.Referrer),
             ua.Device,
             ua.Browser,
             ua.Os,
             referrerReducer.Host(e.Referrer),
-            geoIp.ResolveCountry(e.RawIp),
+            geo.Country,
+            geo.TimeZone,
             languageReducer.Primary(e.AcceptLanguage),
             nav);
     }

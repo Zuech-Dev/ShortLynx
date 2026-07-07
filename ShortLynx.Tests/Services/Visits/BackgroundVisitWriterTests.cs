@@ -29,7 +29,7 @@ public class BackgroundVisitWriterTests
             new ShortLynx.Services.Analytics.UserAgentParser(),
             new ShortLynx.Services.Analytics.ReferrerReducer(),
             new ShortLynx.Services.Analytics.LanguageReducer(),
-            new ShortLynx.Services.Analytics.NullGeoIpResolver());
+            new StubGeoIpResolver());
         return (sink, db, writer);
     }
 
@@ -191,6 +191,8 @@ public class BackgroundVisitWriterTests
         Assert.Equal("t.co", stored.ReferrerHost);      // host only, www stripped, path/query dropped
         Assert.Equal("en", stored.Language);
         Assert.Equal("cross-site", stored.NavigationType);
+        Assert.Equal("US", stored.Country);
+        Assert.Equal("America/Chicago", stored.TimeZone);
         Assert.Equal("newsletter", stored.UtmSource);
         Assert.Equal("email", stored.UtmMedium);
         Assert.Equal("launch", stored.UtmCampaign);
@@ -228,6 +230,8 @@ public class BackgroundVisitWriterTests
         Assert.Null(stored.ReferrerHost);
         Assert.Null(stored.Language);
         Assert.Null(stored.NavigationType);
+        Assert.Null(stored.Country);   // geo suppressed under a privacy signal too
+        Assert.Null(stored.TimeZone);
         Assert.Null(stored.UtmSource); // UTM suppressed under a privacy signal like every dimension
         Assert.Equal(ShortLynx.Data.Enums.DeviceType.Unknown, stored.Device);
     }
@@ -270,5 +274,12 @@ public class BackgroundVisitWriterTests
         var h1 = BackgroundVisitWriter.HashIp("203.0.113.7", "pepper-A");
         var h2 = BackgroundVisitWriter.HashIp("203.0.113.7", "pepper-B");
         Assert.NotEqual(h1, h2);
+    }
+
+    // Fixed geo answer so tests can assert the writer stores exactly country + timezone and no more.
+    private sealed class StubGeoIpResolver : ShortLynx.Services.Analytics.IGeoIpResolver
+    {
+        public ShortLynx.Services.Analytics.GeoLocation Resolve(string rawIp)
+            => new("US", "America/Chicago");
     }
 }

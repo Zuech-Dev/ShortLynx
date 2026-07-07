@@ -20,6 +20,9 @@ public class VisitEntity
     public string? Os { get; set; }
     public string? ReferrerHost { get; set; }
     public string? Country { get; set; }
+    // IANA timezone (e.g. "America/Chicago") from GeoIP -- the only sub-country geo signal stored;
+    // enables local-hour analysis without any coordinates (MASTER_PLAN P1).
+    public string? TimeZone { get; set; }
     public string? Language { get; set; }
     public string? NavigationType { get; set; }
 

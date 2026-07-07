@@ -13,6 +13,7 @@ public readonly record struct VisitRow(
     string? Country = null,
     string? Language = null,
     string? NavigationType = null,
+    string? TimeZone = null,
     string? UtmSource = null,
     string? UtmMedium = null,
     string? UtmCampaign = null);
@@ -56,6 +57,9 @@ public sealed record ClickBreakdown(
     IReadOnlyList<LabelCount> UtmMediums,
     IReadOnlyList<LabelCount> UtmCampaigns,
     IReadOnlyList<HourlyClicks> HourlyDistribution,
+    // Hour-of-day in the *visitor's* timezone (from the stored IANA zone; rows without one are
+    // excluded), so "when do people click" reflects their morning, not the server's.
+    IReadOnlyList<HourlyClicks> LocalHourlyDistribution,
     long BotClicks,
     long HumanClicks,
     long HumanUniqueClicks);
@@ -101,6 +105,14 @@ public static class ClickAggregator
         var byHour = rows.GroupBy(r => r.ClickedAt.UtcDateTime.Hour).ToDictionary(g => g.Key, g => g.LongCount());
         var hourly = Enumerable.Range(0, 24).Select(h => new HourlyClicks(h, byHour.GetValueOrDefault(h))).ToList();
 
+        // Same buckets in the visitor's local time, for rows where GeoIP stored an IANA zone.
+        var byLocalHour = rows
+            .Select(r => LocalHour(r.ClickedAt, r.TimeZone))
+            .Where(h => h is not null)
+            .GroupBy(h => h!.Value)
+            .ToDictionary(g => g.Key, g => g.LongCount());
+        var localHourly = Enumerable.Range(0, 24).Select(h => new HourlyClicks(h, byLocalHour.GetValueOrDefault(h))).ToList();
+
         var humanRows = rows.Where(r => r.Device != DeviceType.Bot).ToList();
 
         return new ClickBreakdown(
@@ -120,9 +132,32 @@ public static class ClickAggregator
             UtmMediums: Tally(rows, r => r.UtmMedium),
             UtmCampaigns: Tally(rows, r => r.UtmCampaign),
             HourlyDistribution: hourly,
+            LocalHourlyDistribution: localHourly,
             BotClicks: rows.Count - humanRows.Count,
             HumanClicks: humanRows.Count,
             HumanUniqueClicks: humanRows.Select(r => r.HashedIp).Distinct().Count());
+    }
+
+    // Converts a click instant to the visitor's local hour. IANA ids resolve via ICU on all
+    // supported platforms; unknown/garbage zones drop the row from the local distribution only.
+    private static readonly Dictionary<string, TimeZoneInfo?> TzCache = new(StringComparer.Ordinal);
+
+    private static int? LocalHour(DateTimeOffset clickedAt, string? ianaZone)
+    {
+        if (string.IsNullOrEmpty(ianaZone)) return null;
+
+        TimeZoneInfo? tz;
+        lock (TzCache)
+        {
+            if (!TzCache.TryGetValue(ianaZone, out tz))
+            {
+                try { tz = TimeZoneInfo.FindSystemTimeZoneById(ianaZone); }
+                catch (Exception ex) when (ex is TimeZoneNotFoundException or InvalidTimeZoneException) { tz = null; }
+                TzCache[ianaZone] = tz;
+            }
+        }
+
+        return tz is null ? null : TimeZoneInfo.ConvertTime(clickedAt, tz).Hour;
     }
 
     // Tallies a nullable string dimension, dropping nulls/blanks (e.g. unknown or privacy-suppressed),

@@ -34,6 +34,7 @@
     .badge-green { @apply bg-green-100 text-green-800; }
     .badge-red { @apply bg-red-100 text-red-800; }
     .badge-yellow { @apply bg-yellow-100 text-yellow-800; }
+    .badge-orange { @apply bg-orange-100 text-orange-800; }
 
     .field-label { @apply block text-sm font-medium text-gray-700 mb-1; }
     .field-input {

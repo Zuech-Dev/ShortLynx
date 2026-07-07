@@ -162,7 +162,16 @@ Tiers: **A (open, build first): Bluesky, Mastodon** · **B (official, gated): Th
 - ⬜ **Meta's own approval process** (Business Portfolio, Tech-Provider Verification, the
   `threads_basic`/`threads_content_publish`/`threads_manage_insights` permission review) — entirely on
   Meta's side; ~2–4 weeks. Walkthrough + exact Railway config: [META_APP_SETUP.md](META_APP_SETUP.md) §6-7.
-- ⬜ Reddit app pre-approval; submit + read, respect per-subreddit rules + rate limits.
+- ✅ **Reddit connector** — OAuth (authorization-code + permanent-duration refresh token, HTTP Basic at
+  the token endpoint, mandatory descriptive User-Agent), publish as **self posts to the user's own
+  profile only** (`u_{username}` — arbitrary-subreddit posting deliberately excluded: per-subreddit
+  self-promotion rules make it a ban magnet), metrics via `/api/info` (score → Likes, comments →
+  Replies; Reddit exposes no views). The dashboard's OAuth endpoints are now a shared per-platform flow
+  (`/social/{threads|reddit}/authorize|callback`), with connectors resolved platform-keyed out of the
+  registered set.
+- ⬜ **Reddit's own approval process** (app registration + data-API access request; ~2–4 weeks; dev
+  works pre-approval with the app owner's own account) — walkthrough + exact Railway config:
+  [REDDIT_APP_SETUP.md](REDDIT_APP_SETUP.md).
 
 ### Phase 3 — Conversions loop + Substack
 - Outbound: per-account **webhooks**; **Meta CAPI / TikTok Events / GA4 MP** click→conversion (hashed

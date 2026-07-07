@@ -13,6 +13,8 @@
     --color-red-300: oklch(80.8% 0.114 19.571);
     --color-red-600: oklch(57.7% 0.245 27.325);
     --color-red-800: oklch(44.4% 0.177 26.899);
+    --color-orange-100: oklch(95.4% 0.038 75.164);
+    --color-orange-800: oklch(47% 0.157 37.304);
     --color-yellow-50: oklch(98.7% 0.026 102.212);
     --color-yellow-100: oklch(97.3% 0.071 103.193);
     --color-yellow-200: oklch(94.5% 0.129 101.54);
@@ -869,6 +871,10 @@
   .badge-yellow {
     background-color: var(--color-yellow-100);
     color: var(--color-yellow-800);
+  }
+  .badge-orange {
+    background-color: var(--color-orange-100);
+    color: var(--color-orange-800);
   }
   .field-label {
     margin-bottom: var(--spacing);

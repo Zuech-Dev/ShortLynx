@@ -88,6 +88,33 @@ public class MeLinksAnalyticsTests : IClassFixture<ApiFactory>
         Assert.Equal(2, body.HourlyDistribution[14].Count);  // Day2 clicks at 14:00 UTC
     }
 
+    [Fact]
+    public async Task AnalyticsExport_ReturnsAggregateCsv()
+    {
+        var (client, _, _) = await _factory.CreateSessionClientAsync();
+        var link = await (await client.PostAsJsonAsync("/me/links", new CreateMyLinkRequest("https://example.com")))
+            .Content.ReadFromJsonAsync<LinkResponse>();
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ShortLynxDbContext>();
+            var shortCodeId = await db.ShortCodeEntities
+                .Where(s => s.LinkId == link!.Id).Select(s => s.Id).FirstAsync();
+            db.VisitEntities.AddRange(Enumerable.Range(0, 10).Select(i =>
+                Visit(shortCodeId, $"ip{i}", ClickSource.Twitter, DeviceType.Mobile, Day1)));
+            await db.SaveChangesAsync();
+        }
+
+        var resp = await client.GetAsync($"/me/links/{link!.Id}/analytics/export");
+        Assert.Equal("text/csv", resp.Content.Headers.ContentType!.MediaType);
+        var csv = await resp.Content.ReadAsStringAsync();
+
+        Assert.StartsWith("section,key,clicks,unique_clicks", csv);
+        Assert.Contains("source,Twitter,10,", csv);
+        // Aggregate-only: no hashed IPs, no per-click rows.
+        Assert.DoesNotContain("ip0", csv);
+    }
+
     private static VisitEntity Visit(Guid shortCodeId, string ip, ClickSource source, DeviceType device, DateTimeOffset at)
         => new()
         {

@@ -19,4 +19,10 @@ public class VisitSinkOptions
     /// when empty, geo resolution is disabled entirely. Free download, MaxMind account required.
     /// </summary>
     public string? GeoIpDatabasePath { get; set; }
+
+    /// <summary>
+    /// Delete visit rows older than this many days (nightly prune). Null -- the default -- keeps
+    /// analytics forever; self-hosters set this directly, the hosted tier drives it per plan.
+    /// </summary>
+    public int? AnalyticsRetentionDays { get; set; }
 }

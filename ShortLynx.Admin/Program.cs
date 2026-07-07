@@ -111,6 +111,50 @@ app.MapGet("/qr/{linkId:guid}", async (
     })
     .RequireAuthorization();
 
+// Aggregate-only analytics CSV downloads for the dashboard (MASTER_PLAN P2: never row-per-click).
+// Same authenticated-GET pattern as /qr; linked from the link/campaign detail pages.
+app.MapGet("/export/link/{linkId:guid}", async (
+        Guid linkId, ClaimsPrincipal user,
+        IDbContextFactory<ShortLynxDbContext> dbFactory, CancellationToken ct) =>
+    {
+        var userId = user.GetUserId();
+        if (userId is null) return Results.Unauthorized();
+
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var accountId = await AccountResolver.ResolveAccountIdAsync(
+            db, userId.Value, user.GetAccountId(), user.Identity?.Name ?? "Personal", ct);
+
+        var link = await db.LinkEntities.FirstOrDefaultAsync(l => l.Id == linkId && l.AccountId == accountId, ct);
+        if (link is null) return Results.NotFound();
+
+        var rows = await ShortLynx.Services.Analytics.AnalyticsExportQueries.LoadLinkRowsAsync(db, link, ct);
+        var csv = ShortLynx.Services.Analytics.ClickBreakdownCsv.Format(
+            ShortLynx.Services.Analytics.ClickAggregator.Summarize(rows));
+        return Results.File(System.Text.Encoding.UTF8.GetBytes(csv), "text/csv", $"link-{linkId}-analytics.csv");
+    })
+    .RequireAuthorization();
+
+app.MapGet("/export/campaign/{campaignId:guid}", async (
+        Guid campaignId, ClaimsPrincipal user,
+        IDbContextFactory<ShortLynxDbContext> dbFactory, CancellationToken ct) =>
+    {
+        var userId = user.GetUserId();
+        if (userId is null) return Results.Unauthorized();
+
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var accountId = await AccountResolver.ResolveAccountIdAsync(
+            db, userId.Value, user.GetAccountId(), user.Identity?.Name ?? "Personal", ct);
+
+        if (!await db.CampaignEntities.AnyAsync(c => c.Id == campaignId && c.AccountId == accountId, ct))
+            return Results.NotFound();
+
+        var rows = await ShortLynx.Services.Analytics.AnalyticsExportQueries.LoadCampaignRowsAsync(db, campaignId, accountId, ct);
+        var csv = ShortLynx.Services.Analytics.ClickBreakdownCsv.Format(
+            ShortLynx.Services.Analytics.ClickAggregator.Summarize(rows));
+        return Results.File(System.Text.Encoding.UTF8.GetBytes(csv), "text/csv", $"campaign-{campaignId}-analytics.csv");
+    })
+    .RequireAuthorization();
+
 // ── Social OAuth (Threads, Reddit) + Meta App Review webhooks ───────────────────────────────────
 // The Threads routes exist because Meta's app dashboard requires exact, working URLs before it will
 // accept an App Review submission (docs/META_APP_SETUP.md); Reddit mirrors the same registered-URL

@@ -112,6 +112,8 @@ public static class ServiceExtensions
         services.AddSingleton<InMemoryVisitEventSink>();
         services.AddSingleton<IVisitEventSink>(sp => sp.GetRequiredService<InMemoryVisitEventSink>());
         services.AddHostedService<BackgroundVisitWriter>();
+        // Nightly retention prune; no-op unless VisitSink:AnalyticsRetentionDays is set.
+        services.AddHostedService<VisitRetentionService>();
 
         return services;
     }

@@ -245,6 +245,13 @@ else
     }
 
     <ClickBreakdownCard Breakdown="_breakdown" />
+        @if (_breakdown is { TotalClicks: > 0 })
+        {
+            <div class="mb-4 -mt-2">
+                <a class="btn btn-outline" href="/export/link/@Id" download data-testid="export-csv"
+                   title="Aggregate statistics only — the same breakdowns shown above, never individual clicks.">Download CSV</a>
+            </div>
+        }
 
     @if (_link.Mode == LinkMode.UserAttributed)
     {

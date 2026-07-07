@@ -54,6 +54,14 @@ else
 
     <ClickBreakdownCard Breakdown="_breakdown" Title="Campaign clicks" />
 
+    @if (_breakdown is { TotalClicks: > 0 })
+    {
+        <div class="mb-4 -mt-2">
+            <a class="btn btn-outline" href="/export/campaign/@Id" download data-testid="export-csv"
+               title="Aggregate statistics only — the same breakdowns shown above, never individual clicks.">Download CSV</a>
+        </div>
+    }
+
     @if (_breakdown is null || _breakdown.TotalClicks == 0)
     {
         <p class="text-gray-500" data-testid="no-clicks">No clicks recorded for this campaign yet.</p>

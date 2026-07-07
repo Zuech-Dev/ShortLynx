@@ -171,6 +171,40 @@ public class MeLinksController(
             codeStats, b.Sources, b.Devices, b.Timeline, b.HourlyDistribution));
     }
 
+    // GET /me/links/{id}/analytics/export — the same aggregate breakdown as /analytics, as CSV.
+    // Aggregate-only by decision (MASTER_PLAN P2): there is deliberately no row-per-click export.
+    [HttpGet("{id:guid}/analytics/export")]
+    public async Task<IActionResult> AnalyticsExport(Guid id, CancellationToken ct)
+    {
+        var link = await db.LinkEntities.FirstOrDefaultAsync(l => l.Id == id && l.AccountId == AccountId, ct);
+        if (link is null) return NotFound();
+
+        List<VisitRow> rows;
+        if (link.Mode == LinkMode.Anonymous)
+        {
+            var sc = await db.ShortCodeEntities.FirstOrDefaultAsync(x => x.LinkId == id, ct);
+            rows = sc is null
+                ? []
+                : (await db.VisitEntities.Where(v => v.ShortCodeId == sc.Id)
+                        .Select(v => new { v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Browser, v.Os, v.Country, v.Language, v.NavigationType, v.TimeZone, v.UtmSource, v.UtmMedium, v.UtmCampaign })
+                        .ToListAsync(ct))
+                    .Select(v => new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Browser, v.Os, v.Country, v.Language, v.NavigationType, v.TimeZone, v.UtmSource, v.UtmMedium, v.UtmCampaign))
+                    .ToList();
+        }
+        else
+        {
+            var codeIds = await db.UserLinkCodeEntities.Where(c => c.LinkId == id).Select(c => c.Id).ToListAsync(ct);
+            rows = (await db.UserVisitEntities.Where(v => codeIds.Contains(v.UserLinkCodeId))
+                    .Select(v => new { v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Browser, v.Os, v.Country, v.Language, v.NavigationType, v.TimeZone, v.UtmSource, v.UtmMedium, v.UtmCampaign })
+                    .ToListAsync(ct))
+                .Select(v => new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Browser, v.Os, v.Country, v.Language, v.NavigationType, v.TimeZone, v.UtmSource, v.UtmMedium, v.UtmCampaign))
+                .ToList();
+        }
+
+        var csv = ClickBreakdownCsv.Format(ClickAggregator.Summarize(rows));
+        return File(System.Text.Encoding.UTF8.GetBytes(csv), "text/csv", $"link-{id}-analytics.csv");
+    }
+
     // POST /me/links/{id}/publish — post the link's short URL to connected social accounts.
     [HttpPost("{id:guid}/publish")]
     public async Task<IActionResult> Publish(

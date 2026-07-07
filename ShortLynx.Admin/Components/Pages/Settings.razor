@@ -1,0 +1,129 @@
+@page "/settings"
+@attribute [Authorize]
+@inject IDbContextFactory<ShortLynxDbContext> DbFactory
+
+<PageTitle>Settings — ShortLynx Admin</PageTitle>
+
+<h1 class="text-2xl font-bold mb-3">Settings</h1>
+
+@if (!_loaded)
+{
+    <p class="text-gray-500">Loading…</p>
+}
+else
+{
+    <div class="card mb-4" data-testid="privacy-compliance">
+        <div class="card-body">
+            <h5 class="card-title">Privacy &amp; Compliance</h5>
+            <p class="text-gray-500 text-sm mb-3">
+                User-attributed links record per-recipient click attribution, which you are responsible
+                for disclosing to your recipients. Until a privacy policy URL is configured here,
+                ShortLynx shows recipients its own tracking disclosure before completing those redirects
+                — and lets them continue anonymized or decline.
+            </p>
+
+            <div class="max-w-[520px] flex flex-col gap-3">
+                <div>
+                    <label class="field-label">Privacy Policy URL</label>
+                    <input class="field-input" type="url" placeholder="https://example.com/privacy"
+                           @bind="_privacyUrl" data-testid="privacy-url"/>
+                </div>
+                <div>
+                    <label class="field-label">Terms of Service URL <span class="text-gray-400">(optional)</span></label>
+                    <input class="field-input" type="url" placeholder="https://example.com/terms"
+                           @bind="_termsUrl" data-testid="terms-url"/>
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(_privacyUrl))
+                {
+                    <label class="inline-flex items-start gap-2 text-sm">
+                        <input type="checkbox" class="mt-0.5" @bind="_confirmed" data-testid="privacy-confirm"/>
+                        <span>I confirm my privacy policy discloses that links I share may record click
+                        attribution data, including device type and general location.</span>
+                    </label>
+                }
+
+                <div class="flex items-center gap-3">
+                    <button class="btn btn-primary" @onclick="SaveAsync" data-testid="privacy-save">Save</button>
+                    @if (_saved)
+                    {
+                        <span class="text-green-600 text-sm" data-testid="privacy-saved">Saved.</span>
+                    }
+                    @if (_error is not null)
+                    {
+                        <span class="text-red-600 text-sm" data-testid="privacy-error">@_error</span>
+                    }
+                </div>
+
+                @if (_hasPolicy)
+                {
+                    <div class="text-sm text-green-700" data-testid="privacy-configured">
+                        ✓ Privacy policy configured — recipients will not see a ShortLynx disclosure interstitial.
+                    </div>
+                }
+                else
+                {
+                    <div class="text-sm text-amber-700" data-testid="privacy-missing">
+                        Recipients of your user-attributed links currently see the ShortLynx tracking
+                        disclosure before the redirect completes.
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    bool _loaded, _saved, _confirmed, _hasPolicy;
+    string? _privacyUrl, _termsUrl, _error;
+    Guid _accountId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var principal = (await AuthState).User;
+        var userId = principal.GetUserId();
+        if (userId is null) return;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _accountId = await AccountResolver.ResolveAccountIdAsync(
+            db, userId.Value, principal.GetAccountId(), principal.Identity?.Name ?? "Personal");
+
+        var account = await db.AccountEntities.FirstAsync(a => a.Id == _accountId);
+        _privacyUrl = account.PrivacyPolicyUrl;
+        _termsUrl = account.TermsOfServiceUrl;
+        _hasPolicy = !string.IsNullOrWhiteSpace(_privacyUrl);
+        _confirmed = _hasPolicy; // an already-saved URL was confirmed when it was saved
+        _loaded = true;
+    }
+
+    async Task SaveAsync()
+    {
+        _saved = false;
+        _error = null;
+
+        var privacy = Normalize(_privacyUrl);
+        var terms = Normalize(_termsUrl);
+
+        if (privacy is not null && !IsHttpsUrl(privacy)) { _error = "Privacy policy must be an https:// URL."; return; }
+        if (terms is not null && !IsHttpsUrl(terms)) { _error = "Terms of service must be an https:// URL."; return; }
+        // The confirmation is the operator's assertion of disclosure — the URL is not accepted without it.
+        if (privacy is not null && !_confirmed) { _error = "Please confirm your policy discloses link tracking."; return; }
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var account = await db.AccountEntities.FirstAsync(a => a.Id == _accountId);
+        account.PrivacyPolicyUrl = privacy;
+        account.TermsOfServiceUrl = terms;
+        await db.SaveChangesAsync();
+
+        _hasPolicy = privacy is not null;
+        _saved = true;
+    }
+
+    static string? Normalize(string? url)
+        => string.IsNullOrWhiteSpace(url) ? null : url.Trim();
+
+    static bool IsHttpsUrl(string url)
+        => Uri.TryCreate(url, UriKind.Absolute, out var u) && u.Scheme == Uri.UriSchemeHttps;
+}

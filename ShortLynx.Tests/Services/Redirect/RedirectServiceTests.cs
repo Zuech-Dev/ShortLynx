@@ -199,14 +199,20 @@ public class RedirectServiceTests
 
         var first = await MakeSvc(db.CreateContext(), sharedCache).LookupAsync("claimme1");
         Assert.NotNull(first);
+        Assert.True(first!.IsOneTimeUse);
 
-        // The first lookup itself must have claimed the code.
+        // Lookup alone must NOT claim — the handler claims after any disclosure choice, so rendering
+        // the interstitial can't burn the code (TRACKING_DISCLOSURE_PLAN).
         await using (var ctx = db.CreateContext())
-        {
-            var ulc = await ctx.UserLinkCodeEntities.FindAsync(ulcId);
-            Assert.True(ulc!.IsUsed);
-        }
+            Assert.False((await ctx.UserLinkCodeEntities.FindAsync(ulcId))!.IsUsed);
 
+        // The explicit claim wins exactly once.
+        Assert.True(await MakeSvc(db.CreateContext(), sharedCache).TryClaimOneTimeAsync(first.UserLinkCodeId!.Value));
+        Assert.False(await MakeSvc(db.CreateContext(), sharedCache).TryClaimOneTimeAsync(first.UserLinkCodeId!.Value));
+        await using (var ctx = db.CreateContext())
+            Assert.True((await ctx.UserLinkCodeEntities.FindAsync(ulcId))!.IsUsed);
+
+        // A claimed code no longer resolves.
         var second = await MakeSvc(db.CreateContext(), sharedCache).LookupAsync("claimme1");
         Assert.Null(second);
     }
@@ -388,8 +394,10 @@ public class RedirectServiceTests
         await using (var ctx = db.CreateContext())
             Assert.False((await ctx.UserLinkCodeEntities.FindAsync(ulcId))!.IsUsed);
 
-        // Correct host resolves and consumes it.
-        Assert.NotNull(await MakeSvc(db.CreateContext()).LookupAsync("pin1time", host));
+        // Correct host resolves (claiming is the handler's explicit follow-up step).
+        var entry = await MakeSvc(db.CreateContext()).LookupAsync("pin1time", host);
+        Assert.NotNull(entry);
+        Assert.True(await MakeSvc(db.CreateContext()).TryClaimOneTimeAsync(entry!.UserLinkCodeId!.Value));
         await using (var ctx = db.CreateContext())
             Assert.True((await ctx.UserLinkCodeEntities.FindAsync(ulcId))!.IsUsed);
     }
@@ -458,5 +466,63 @@ public class RedirectServiceTests
         Assert.NotNull(result);
         Assert.Contains("utm_source=newsletter", result!.OriginalUrl);
         Assert.Contains("utm_medium=email", result.OriginalUrl);
+    }
+
+    [Fact]
+    public async Task LookupAsync_Mode2_RequiresDisclosure_WhenOperatorHasNoPrivacyPolicy()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+        var (account, link) = await SeedLinkAsync(db);
+
+        await using (var ctx = db.CreateContext())
+        {
+            ctx.UserLinkCodeEntities.Add(EntityFactory.UserLinkCode(link.Id, Guid.CreateVersion7(), "disc0001"));
+            await ctx.SaveChangesAsync();
+        }
+
+        var entry = await MakeSvc(db.CreateContext()).LookupAsync("disc0001");
+
+        Assert.NotNull(entry);
+        Assert.True(entry!.DisclosureRequired);
+        Assert.Equal(account.Id, entry.AccountId);
+        Assert.Equal(account.Name, entry.OperatorName);
+    }
+
+    [Fact]
+    public async Task LookupAsync_Mode2_SkipsDisclosure_WhenOperatorHasPrivacyPolicy()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+        var (account, link) = await SeedLinkAsync(db);
+
+        await using (var ctx = db.CreateContext())
+        {
+            var acc = await ctx.AccountEntities.FindAsync(account.Id);
+            acc!.PrivacyPolicyUrl = "https://example.com/privacy";
+            ctx.UserLinkCodeEntities.Add(EntityFactory.UserLinkCode(link.Id, Guid.CreateVersion7(), "disc0002"));
+            await ctx.SaveChangesAsync();
+        }
+
+        var entry = await MakeSvc(db.CreateContext()).LookupAsync("disc0002");
+
+        Assert.NotNull(entry);
+        Assert.False(entry!.DisclosureRequired);
+    }
+
+    [Fact]
+    public async Task LookupAsync_Mode1_NeverRequiresDisclosure()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+        var (_, link) = await SeedLinkAsync(db);
+
+        await using (var ctx = db.CreateContext())
+        {
+            ctx.ShortCodeEntities.Add(EntityFactory.ShortCode(link.Id, "anon0001"));
+            await ctx.SaveChangesAsync();
+        }
+
+        var entry = await MakeSvc(db.CreateContext()).LookupAsync("anon0001");
+
+        Assert.NotNull(entry);
+        Assert.False(entry!.DisclosureRequired);
     }
 }

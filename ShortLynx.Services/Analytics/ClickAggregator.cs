@@ -12,7 +12,10 @@ public readonly record struct VisitRow(
     string? Os = null,
     string? Country = null,
     string? Language = null,
-    string? NavigationType = null);
+    string? NavigationType = null,
+    string? UtmSource = null,
+    string? UtmMedium = null,
+    string? UtmCampaign = null);
 
 /// <summary>Clicks attributed to one platform (see <see cref="ClickSource"/>).</summary>
 public sealed record SourceCount(string Source, long Count);
@@ -48,6 +51,10 @@ public sealed record ClickBreakdown(
     IReadOnlyList<LabelCount> Languages,
     IReadOnlyList<LabelCount> Countries,
     IReadOnlyList<LabelCount> NavigationTypes,
+    // Operator-provided campaign labels off the inbound query string; k-anonymised like the rest.
+    IReadOnlyList<LabelCount> UtmSources,
+    IReadOnlyList<LabelCount> UtmMediums,
+    IReadOnlyList<LabelCount> UtmCampaigns,
     IReadOnlyList<HourlyClicks> HourlyDistribution,
     long BotClicks,
     long HumanClicks,
@@ -109,6 +116,9 @@ public static class ClickAggregator
             Languages: Tally(rows, r => r.Language),
             Countries: Tally(rows, r => r.Country),
             NavigationTypes: Tally(rows, r => r.NavigationType),
+            UtmSources: Tally(rows, r => r.UtmSource),
+            UtmMediums: Tally(rows, r => r.UtmMedium),
+            UtmCampaigns: Tally(rows, r => r.UtmCampaign),
             HourlyDistribution: hourly,
             BotClicks: rows.Count - humanRows.Count,
             HumanClicks: humanRows.Count,

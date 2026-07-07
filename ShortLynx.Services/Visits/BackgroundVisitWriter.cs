@@ -67,6 +67,7 @@ public sealed class BackgroundVisitWriter(
             .Select(e =>
             {
                 var d = Derive(e);
+                var utm = ParseUtm(e);
                 return new VisitEntity
                 {
                     Id = Guid.CreateVersion7(),
@@ -81,6 +82,11 @@ public sealed class BackgroundVisitWriter(
                     Country = d.Country,
                     Language = d.Language,
                     NavigationType = d.NavigationType,
+                    UtmSource = utm.Source,
+                    UtmMedium = utm.Medium,
+                    UtmCampaign = utm.Campaign,
+                    UtmTerm = utm.Term,
+                    UtmContent = utm.Content,
                 };
             })
             .ToList();
@@ -90,6 +96,7 @@ public sealed class BackgroundVisitWriter(
             .Select(e =>
             {
                 var d = Derive(e);
+                var utm = ParseUtm(e);
                 return new UserVisitEntity
                 {
                     Id = Guid.CreateVersion7(),
@@ -105,6 +112,11 @@ public sealed class BackgroundVisitWriter(
                     Country = d.Country,
                     Language = d.Language,
                     NavigationType = d.NavigationType,
+                    UtmSource = utm.Source,
+                    UtmMedium = utm.Medium,
+                    UtmCampaign = utm.Campaign,
+                    UtmTerm = utm.Term,
+                    UtmContent = utm.Content,
                 };
             })
             .ToList();
@@ -112,6 +124,11 @@ public sealed class BackgroundVisitWriter(
         if (mode1.Count > 0) await dbOps.BulkInsertVisitsAsync(mode1, ct);
         if (mode2.Count > 0) await dbOps.BulkInsertUserVisitsAsync(mode2, ct);
     }
+
+    // UTM tags ride the inbound query string; like every dimension they are suppressed under a
+    // privacy signal, and the raw query is never persisted.
+    private static UtmTags ParseUtm(VisitEvent e)
+        => e.PrivacySignal ? UtmTags.Empty : UtmParser.Parse(e.RawQuery);
 
     // Reduces a visit's raw signals to the stored low-entropy dimensions. A privacy signal (DNT / Sec-GPC)
     // suppresses every derived dimension — the click still counts, but carries no profile.

@@ -165,6 +165,9 @@
             ("By language", b.Languages, "languages"),
             ("By country", b.Countries, "countries"),
             ("By navigation", b.NavigationTypes, "navigation-types"),
+            ("By UTM source", b.UtmSources, "utm-sources"),
+            ("By UTM medium", b.UtmMediums, "utm-mediums"),
+            ("By UTM campaign", b.UtmCampaigns, "utm-campaigns"),
         }.Where(x => x.Item2.Count > 0).ToList();
 
     // Bar size as a percent of a basis (total clicks for source/device, busiest day for the timeline). Clamped 0–100.

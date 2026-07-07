@@ -23,5 +23,14 @@ public class VisitEntity
     public string? Language { get; set; }
     public string? NavigationType { get; set; }
 
+    // UTM tags from the inbound short-link query string (?utm_source=...), parsed and truncated at
+    // write time. Operator-provided campaign labels, not visitor signals -- but still nulled under a
+    // privacy signal like every other dimension.
+    public string? UtmSource { get; set; }
+    public string? UtmMedium { get; set; }
+    public string? UtmCampaign { get; set; }
+    public string? UtmTerm { get; set; }
+    public string? UtmContent { get; set; }
+
     public virtual ShortCodeEntity ShortCode { get; set; } = null!;
 }

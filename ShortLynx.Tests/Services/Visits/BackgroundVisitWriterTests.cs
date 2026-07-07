@@ -175,7 +175,8 @@ public class BackgroundVisitWriterTests
             UserAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile/15E148 Safari/604.1",
             ClickedAt: DateTimeOffset.UtcNow,
             AcceptLanguage: "en-US,en;q=0.9",
-            SecFetchSite: "cross-site");
+            SecFetchSite: "cross-site",
+            RawQuery: "?utm_source=newsletter&utm_medium=email&utm_campaign=launch&other=dropped");
 
         await writer.StartAsync(cts.Token);
         await sink.EnqueueAsync(evt);
@@ -190,6 +191,10 @@ public class BackgroundVisitWriterTests
         Assert.Equal("t.co", stored.ReferrerHost);      // host only, www stripped, path/query dropped
         Assert.Equal("en", stored.Language);
         Assert.Equal("cross-site", stored.NavigationType);
+        Assert.Equal("newsletter", stored.UtmSource);
+        Assert.Equal("email", stored.UtmMedium);
+        Assert.Equal("launch", stored.UtmCampaign);
+        Assert.Null(stored.UtmTerm); // absent tag stays null; non-UTM params are never stored
     }
 
     [Fact]
@@ -208,7 +213,8 @@ public class BackgroundVisitWriterTests
             ClickedAt: DateTimeOffset.UtcNow,
             AcceptLanguage: "en-US",
             SecFetchSite: "cross-site",
-            PrivacySignal: true);
+            PrivacySignal: true,
+            RawQuery: "?utm_source=newsletter");
 
         await writer.StartAsync(cts.Token);
         await sink.EnqueueAsync(evt);
@@ -222,6 +228,7 @@ public class BackgroundVisitWriterTests
         Assert.Null(stored.ReferrerHost);
         Assert.Null(stored.Language);
         Assert.Null(stored.NavigationType);
+        Assert.Null(stored.UtmSource); // UTM suppressed under a privacy signal like every dimension
         Assert.Equal(ShortLynx.Data.Enums.DeviceType.Unknown, stored.Device);
     }
 

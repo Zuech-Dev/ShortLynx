@@ -32,4 +32,11 @@ public sealed record CampaignAnalyticsResponse(
     IReadOnlyList<DailyClicks> Timeline,
     // All 24 UTC hour-of-day buckets (zero-filled), for send-window analysis.
     IReadOnlyList<HourlyClicks> HourlyDistribution,
+    // Mode 2 recipient engagement: provisioned codes across the campaign's user-attributed links,
+    // how many were clicked at least once, and how fast (minutes from code creation to first click;
+    // percentiles are null until a code has been clicked). Zeroes when the campaign has no Mode 2 links.
+    int RecipientsTotal,
+    int RecipientsClicked,
+    double? MedianTimeToFirstClickMinutes,
+    double? P90TimeToFirstClickMinutes,
     IReadOnlyList<CampaignLinkClicks> Links);

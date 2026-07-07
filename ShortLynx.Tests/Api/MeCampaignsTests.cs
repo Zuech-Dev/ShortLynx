@@ -227,6 +227,13 @@ public class MeCampaignsTests : IClassFixture<ApiFactory>
         // single "Other" bucket — the total is preserved but no small bucket is ever exposed.
         Assert.Equal(5, body.Sources.Sum(s => s.Count));
         Assert.Equal(new SourceCount("Other", 5), Assert.Single(body.Sources));
+
+        // Mode 2 engagement: both provisioned codes were clicked, so the click rate is 2/2 and the
+        // time-to-first-click percentiles are populated.
+        Assert.Equal(2, body.RecipientsTotal);
+        Assert.Equal(2, body.RecipientsClicked);
+        Assert.NotNull(body.MedianTimeToFirstClickMinutes);
+        Assert.NotNull(body.P90TimeToFirstClickMinutes);
         Assert.Equal(2, body.Timeline.Count); // Day1, Day2
         Assert.Equal(Day1, body.FirstClickAt);
         Assert.Equal(Day2, body.LastClickAt);

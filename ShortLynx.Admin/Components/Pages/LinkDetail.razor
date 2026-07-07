@@ -295,6 +295,13 @@ else
         }
         else
         {
+            // Engagement segments: how many provisioned codes have been clicked at least once.
+            var clicked = _userRows.Count(r => r.Clicks > 0);
+            var ratePct = (int)Math.Round(100.0 * clicked / _userRows.Count);
+            <div class="flex items-center gap-3 mb-2 text-sm" data-testid="code-engagement">
+                <span class="font-medium">@clicked of @_userRows.Count clicked (@ratePct%)</span>
+                <span class="flex-1 max-w-[240px] bg-gray-100 rounded h-2"><span class="block bg-green-500 h-2 rounded" style="width:@ratePct%"></span></span>
+            </div>
             <table class="data-table">
                 <thead>
                 <tr><th>Recipient</th><th>Code</th><th class="text-right">Clicks</th><th>QR</th></tr>

@@ -96,11 +96,41 @@ public class MeCampaignsController(ICampaignService campaigns, ShortLynxDbContex
             .ToList();
 
         var b = ClickAggregator.Summarize(tagged.Select(x => x.Row).ToList());
+        var engagement = await RecipientEngagementAsync(links.Select(l => l.Id).ToList(), ct);
         return Ok(new CampaignAnalyticsResponse(
             campaign.Id, campaign.Name, links.Count,
             b.TotalClicks, b.UniqueClicks, b.HumanClicks, b.HumanUniqueClicks, b.BotClicks,
             b.FirstClickAt, b.LastClickAt,
-            b.Sources, b.Devices, b.Timeline, b.HourlyDistribution, perLink));
+            b.Sources, b.Devices, b.Timeline, b.HourlyDistribution,
+            engagement.RecipientsTotal, engagement.RecipientsClicked,
+            engagement.MedianTimeToFirstClickMinutes, engagement.P90TimeToFirstClickMinutes,
+            perLink));
+    }
+
+    // Mode 2 engagement across the campaign's user-attributed links: joins each provisioned code to
+    // its earliest visit, then reduces via the pure RecipientEngagement helper.
+    private async Task<RecipientEngagementStats> RecipientEngagementAsync(List<Guid> linkIds, CancellationToken ct)
+    {
+        if (linkIds.Count == 0) return RecipientEngagement.Compute([]);
+
+        var codes = await db.UserLinkCodeEntities
+            .Where(c => linkIds.Contains(c.LinkId))
+            .Select(c => new { c.Id, c.CreatedAt })
+            .ToListAsync(ct);
+        if (codes.Count == 0) return RecipientEngagement.Compute([]);
+
+        // Grouped client-side: SQLite (dev/tests) cannot translate Min over DateTimeOffset.
+        var codeIds = codes.Select(c => c.Id).ToList();
+        var firstClicks = (await db.UserVisitEntities
+                .Where(v => codeIds.Contains(v.UserLinkCodeId))
+                .Select(v => new { v.UserLinkCodeId, v.ClickedAt })
+                .ToListAsync(ct))
+            .GroupBy(v => v.UserLinkCodeId)
+            .ToDictionary(g => g.Key, g => g.Min(v => v.ClickedAt));
+
+        return RecipientEngagement.Compute(codes
+            .Select(c => (c.CreatedAt, firstClicks.TryGetValue(c.Id, out var f) ? f : (DateTimeOffset?)null))
+            .ToList());
     }
 
     // Resolves every visit for the given links, tagged with its link id. Anonymous links resolve via

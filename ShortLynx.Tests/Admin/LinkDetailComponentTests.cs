@@ -237,8 +237,8 @@ public class LinkDetailComponentTests : BunitContext
         var cut = Render<LinkDetail>(p => p.Add(c => c.Id, id));
 
         Assert.NotNull(cut.Find("[data-testid=click-breakdown]"));
-        Assert.Equal("3", cut.Find("[data-testid=total-clicks]").TextContent.Trim());
-        Assert.Equal("2", cut.Find("[data-testid=unique-clicks]").TextContent.Trim()); // ip1, ip2
+        Assert.Equal("11", cut.Find("[data-testid=total-clicks]").TextContent.Trim());
+        Assert.Equal("10", cut.Find("[data-testid=unique-clicks]").TextContent.Trim()); // ip1 deduped
         Assert.Contains("Twitter", cut.Find("[data-testid=sources]").InnerHtml);
         Assert.Contains("Mobile", cut.Find("[data-testid=devices]").InnerHtml);
         Assert.NotNull(cut.Find("[data-testid=timeline]"));
@@ -247,8 +247,8 @@ public class LinkDetailComponentTests : BunitContext
         Assert.NotNull(cut.Find("[data-testid=range-30]"));
         // Per-bar hover tooltip carries the date plus that day's total and unique counts (3 total, 2 unique).
         Assert.NotEmpty(cut.FindAll("[data-testid=bar-tooltip]"));
-        Assert.Contains("Total clicks: 3", cut.Markup);
-        Assert.Contains("Unique clicks: 2", cut.Markup);
+        Assert.Contains("Total clicks: 11", cut.Markup);
+        Assert.Contains("Unique clicks: 10", cut.Markup);
         // New Phase 0.5 dimensions surface in the breakdown card...
         Assert.Contains("Safari", cut.Find("[data-testid=browsers]").InnerHtml);
         Assert.Contains("iOS", cut.Find("[data-testid=operating-systems]").InnerHtml);
@@ -286,10 +286,12 @@ public class LinkDetailComponentTests : BunitContext
         };
         db.LinkEntities.Add(link);
         db.ShortCodeEntities.Add(sc);
-        db.VisitEntities.AddRange(
-            Visit(sc.Id, "ip1", ClickSource.Twitter, DeviceType.Mobile, "Safari", "iOS", "en"),
-            Visit(sc.Id, "ip1", ClickSource.Twitter, DeviceType.Mobile, "Safari", "iOS", "en"),
-            Visit(sc.Id, "ip2", ClickSource.Direct, DeviceType.Desktop, "Chrome", "Windows", "fr"));
+        // Ten Twitter/Mobile/Safari clicks so those buckets clear the k=10 anonymity threshold
+        // (ip1 clicks twice ⇒ dedupes), plus one Direct/Chrome click that folds into "Other".
+        db.VisitEntities.AddRange(Enumerable.Range(0, 10).Select(i =>
+            Visit(sc.Id, $"ip{Math.Max(1, i)}", ClickSource.Twitter, DeviceType.Mobile, "Safari", "iOS", "en")));
+        db.VisitEntities.Add(
+            Visit(sc.Id, "ipX", ClickSource.Direct, DeviceType.Desktop, "Chrome", "Windows", "fr"));
         db.SaveChanges();
         return link.Id;
 

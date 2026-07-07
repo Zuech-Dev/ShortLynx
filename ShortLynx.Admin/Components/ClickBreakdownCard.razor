@@ -6,10 +6,17 @@
         <div class="card-body">
             <h5 class="card-title">@Title</h5>
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-                <div><div class="text-2xl font-bold" data-testid="total-clicks">@b.TotalClicks</div><div class="text-gray-500 text-sm">Total clicks</div></div>
                 <div>
-                    <div class="text-2xl font-bold" data-testid="unique-clicks">@b.UniqueClicks</div>
-                    <div class="text-gray-500 text-sm" title="Distinct hashed IPs. The hash rotates hourly for privacy, so this dedupes repeat clicks within an hour rather than counting lifetime-unique visitors.">Unique (per hr)</div>
+                    <div class="text-2xl font-bold" data-testid="total-clicks">@b.HumanClicks</div>
+                    <div class="text-gray-500 text-sm" title="Clicks from real visitors. Automated traffic (crawlers, email-client link checkers) is counted separately so campaign numbers reflect people, not robots.">Clicks</div>
+                    @if (b.BotClicks > 0)
+                    {
+                        <div class="text-xs text-gray-400" data-testid="bot-clicks">+@b.BotClicks bot@(b.BotClicks == 1 ? "" : "s") filtered</div>
+                    }
+                </div>
+                <div>
+                    <div class="text-2xl font-bold" data-testid="unique-clicks">@b.HumanUniqueClicks</div>
+                    <div class="text-gray-500 text-sm" title="Distinct hashed IPs (bots excluded). The hash rotates hourly for privacy, so this dedupes repeat clicks within an hour rather than counting lifetime-unique visitors.">Unique (per hr)</div>
                 </div>
                 <div><div class="text-sm font-medium">@(b.FirstClickAt?.ToString("yyyy-MM-dd") ?? "—")</div><div class="text-gray-500 text-sm">First click</div></div>
                 <div><div class="text-sm font-medium">@(b.LastClickAt?.ToString("yyyy-MM-dd") ?? "—")</div><div class="text-gray-500 text-sm">Last click</div></div>
@@ -115,6 +122,28 @@
                     </div>
                 </div>
             </div>
+
+            @{ var hourMax = Math.Max(1, b.HourlyDistribution.Max(h => h.Count)); }
+            <div class="mt-4" data-testid="hourly">
+                <h6 class="font-semibold text-sm mb-2">Clicks by hour of day</h6>
+                <div class="flex gap-px h-16 border-l border-b border-gray-200 pl-1">
+                    @foreach (var h in b.HourlyDistribution)
+                    {
+                        <div class="flex-1 h-full flex items-end group relative" data-testid="hour-bar">
+                            <div class="w-full bg-teal-400 hover:bg-teal-600 rounded-t @(h.Count > 0 ? "min-h-[2px]" : "")"
+                                 style="height:@BarPct(h.Count, hourMax)%"></div>
+                            <div class="hidden group-hover:block absolute bottom-full left-1/2 -translate-x-1/2 mb-1 z-10 whitespace-nowrap rounded bg-gray-900 text-white text-[11px] leading-tight px-2 py-1 shadow-lg pointer-events-none">
+                                <div class="font-semibold">@($"{h.Hour:00}:00–{h.Hour:00}:59") UTC</div>
+                                <div>Clicks: @h.Count</div>
+                            </div>
+                        </div>
+                    }
+                </div>
+                <div class="flex justify-between text-[10px] text-gray-400 mt-1">
+                    <span>00</span><span>06</span><span>12</span><span>18</span><span>23</span>
+                </div>
+                <div class="text-center text-[10px] text-gray-500 font-medium mt-0.5">Hour of day (UTC)</div>
+            </div>
         </div>
     </div>
 }
@@ -135,6 +164,7 @@
             ("By OS", b.OperatingSystems, "operating-systems"),
             ("By language", b.Languages, "languages"),
             ("By country", b.Countries, "countries"),
+            ("By navigation", b.NavigationTypes, "navigation-types"),
         }.Where(x => x.Item2.Count > 0).ToList();
 
     // Bar size as a percent of a basis (total clicks for source/device, busiest day for the timeline). Clamped 0–100.

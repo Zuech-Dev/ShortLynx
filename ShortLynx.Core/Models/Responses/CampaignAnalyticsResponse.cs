@@ -21,9 +21,15 @@ public sealed record CampaignAnalyticsResponse(
     int LinkCount,
     long TotalClicks,
     long UniqueClicks,
+    // Human/bot split as on LinkAnalyticsResponse: HumanClicks + BotClicks = TotalClicks.
+    long HumanClicks,
+    long HumanUniqueClicks,
+    long BotClicks,
     DateTimeOffset? FirstClickAt,
     DateTimeOffset? LastClickAt,
     IReadOnlyList<SourceCount> Sources,
     IReadOnlyList<DeviceCount> Devices,
     IReadOnlyList<DailyClicks> Timeline,
+    // All 24 UTC hour-of-day buckets (zero-filled), for send-window analysis.
+    IReadOnlyList<HourlyClicks> HourlyDistribution,
     IReadOnlyList<CampaignLinkClicks> Links);

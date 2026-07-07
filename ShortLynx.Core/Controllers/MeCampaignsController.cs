@@ -98,8 +98,9 @@ public class MeCampaignsController(ICampaignService campaigns, ShortLynxDbContex
         var b = ClickAggregator.Summarize(tagged.Select(x => x.Row).ToList());
         return Ok(new CampaignAnalyticsResponse(
             campaign.Id, campaign.Name, links.Count,
-            b.TotalClicks, b.UniqueClicks, b.FirstClickAt, b.LastClickAt,
-            b.Sources, b.Devices, b.Timeline, perLink));
+            b.TotalClicks, b.UniqueClicks, b.HumanClicks, b.HumanUniqueClicks, b.BotClicks,
+            b.FirstClickAt, b.LastClickAt,
+            b.Sources, b.Devices, b.Timeline, b.HourlyDistribution, perLink));
     }
 
     // Resolves every visit for the given links, tagged with its link id. Anonymous links resolve via

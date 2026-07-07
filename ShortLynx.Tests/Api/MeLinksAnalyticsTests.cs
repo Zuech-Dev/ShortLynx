@@ -43,39 +43,49 @@ public class MeLinksAnalyticsTests : IClassFixture<ApiFactory>
         var link = await (await client.PostAsJsonAsync("/me/links", new CreateMyLinkRequest("https://example.com")))
             .Content.ReadFromJsonAsync<LinkResponse>();
 
-        // Seed visits directly: two from one device/IP (dedup), then two more on a second day.
+        // Seed ten Twitter/Mobile clicks (clears the k=10 anonymity threshold; the first two share an
+        // IP+hour so they dedupe) plus two below-threshold sources that must fold into "Other".
         using (var scope = _factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<ShortLynxDbContext>();
             var shortCodeId = await db.ShortCodeEntities
                 .Where(s => s.LinkId == link!.Id).Select(s => s.Id).FirstAsync();
 
+            db.VisitEntities.AddRange(Enumerable.Range(0, 10).Select(i =>
+                Visit(shortCodeId, $"ip{Math.Max(1, i)}", ClickSource.Twitter, DeviceType.Mobile, Day1)));
             db.VisitEntities.AddRange(
-                Visit(shortCodeId, "ip1", ClickSource.Twitter, DeviceType.Mobile, Day1),
-                Visit(shortCodeId, "ip1", ClickSource.Twitter, DeviceType.Mobile, Day1), // same IP+hour ⇒ not unique
-                Visit(shortCodeId, "ip2", ClickSource.Bluesky, DeviceType.Desktop, Day2),
-                Visit(shortCodeId, "ip3", ClickSource.Direct, DeviceType.Desktop, Day2));
+                Visit(shortCodeId, "ipA", ClickSource.Bluesky, DeviceType.Desktop, Day2),
+                Visit(shortCodeId, "ipB", ClickSource.Direct, DeviceType.Desktop, Day2));
             await db.SaveChangesAsync();
         }
 
         var body = await (await client.GetAsync($"/me/links/{link!.Id}/analytics"))
             .Content.ReadFromJsonAsync<LinkAnalyticsResponse>();
 
-        Assert.Equal(4, body!.TotalClicks);
-        Assert.Equal(3, body.UniqueClicks); // ip1, ip2, ip3
+        Assert.Equal(12, body!.TotalClicks);
+        Assert.Equal(11, body.UniqueClicks); // ip1 appears twice (i=0 and i=1) ⇒ ip1–ip9 + ipA + ipB
+        Assert.Equal(12, body.HumanClicks);  // no bot rows seeded
+        Assert.Equal(0, body.BotClicks);
 
-        Assert.Equal(2, body.Sources.Single(s => s.Source == nameof(ClickSource.Twitter)).Count);
-        Assert.Equal(1, body.Sources.Single(s => s.Source == nameof(ClickSource.Bluesky)).Count);
-        Assert.Equal(4, body.Sources.Sum(s => s.Count));
+        // Twitter (10) survives the k=10 threshold; Bluesky (1) and Direct (1) fold into "Other".
+        Assert.Equal(10, body.Sources.Single(s => s.Source == nameof(ClickSource.Twitter)).Count);
+        Assert.Equal(2, body.Sources.Single(s => s.Source == "Other").Count);
+        Assert.Equal(12, body.Sources.Sum(s => s.Count));
+        Assert.DoesNotContain(body.Sources, s => s.Source == nameof(ClickSource.Bluesky));
 
-        Assert.Equal(2, body.Devices.Single(d => d.Device == nameof(DeviceType.Desktop)).Count);
-        Assert.Equal(2, body.Devices.Single(d => d.Device == nameof(DeviceType.Mobile)).Count);
+        // Mobile (10) survives; Desktop (2) is below threshold and folds.
+        Assert.Equal(10, body.Devices.Single(d => d.Device == nameof(DeviceType.Mobile)).Count);
+        Assert.Equal(2, body.Devices.Single(d => d.Device == "Other").Count);
 
         Assert.Equal(2, body.Timeline.Count);
-        Assert.Equal(2, body.Timeline.Single(t => t.Date == new DateOnly(2026, 6, 20)).Count);
+        Assert.Equal(10, body.Timeline.Single(t => t.Date == new DateOnly(2026, 6, 20)).Count);
         Assert.Equal(2, body.Timeline.Single(t => t.Date == new DateOnly(2026, 6, 21)).Count);
         Assert.Equal(Day1, body.FirstClickAt);
         Assert.Equal(Day2, body.LastClickAt);
+
+        Assert.Equal(24, body.HourlyDistribution.Count);
+        Assert.Equal(10, body.HourlyDistribution[10].Count); // Day1 clicks at 10:00 UTC
+        Assert.Equal(2, body.HourlyDistribution[14].Count);  // Day2 clicks at 14:00 UTC
     }
 
     private static VisitEntity Visit(Guid shortCodeId, string ip, ClickSource source, DeviceType device, DateTimeOffset at)

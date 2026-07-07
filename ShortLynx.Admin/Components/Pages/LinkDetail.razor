@@ -408,10 +408,10 @@ else
             {
                 _shortUrl = await ShortUrlBuilder.BuildAsync(db, _link, sc.Code, DashboardOpts.Value.PublicBaseUrl);
                 var raw = await db.VisitEntities.Where(v => v.ShortCodeId == sc.Id)
-                    .Select(v => new { v.HashedIp, v.Source, v.Device, v.ClickedAt, v.ReferrerHost, v.Browser, v.Os, v.Country, v.Language })
+                    .Select(v => new { v.HashedIp, v.Source, v.Device, v.ClickedAt, v.ReferrerHost, v.Browser, v.Os, v.Country, v.Language, v.NavigationType })
                     .ToListAsync();
                 _breakdown = ClickAggregator.Summarize(
-                    raw.Select(v => new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Browser, v.Os, v.Country, v.Language)).ToList());
+                    raw.Select(v => new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Browser, v.Os, v.Country, v.Language, v.NavigationType)).ToList());
                 _clicks = raw.Select(v => new ClickRow(v.ClickedAt, v.Source, v.Device, v.ReferrerHost, v.Browser, v.Os, v.Country, v.Language)).ToList();
             }
         }
@@ -434,10 +434,10 @@ else
                 clickMap.GetValueOrDefault(c.Id, 0))).ToList();
 
             var raw = await db.UserVisitEntities.Where(v => codeIds.Contains(v.UserLinkCodeId))
-                .Select(v => new { v.HashedIp, v.Source, v.Device, v.ClickedAt, v.ReferrerHost, v.Browser, v.Os, v.Country, v.Language })
+                .Select(v => new { v.HashedIp, v.Source, v.Device, v.ClickedAt, v.ReferrerHost, v.Browser, v.Os, v.Country, v.Language, v.NavigationType })
                 .ToListAsync();
             _breakdown = ClickAggregator.Summarize(
-                raw.Select(v => new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Browser, v.Os, v.Country, v.Language)).ToList());
+                raw.Select(v => new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Browser, v.Os, v.Country, v.Language, v.NavigationType)).ToList());
             _clicks = raw.Select(v => new ClickRow(v.ClickedAt, v.Source, v.Device, v.ReferrerHost, v.Browser, v.Os, v.Country, v.Language)).ToList();
         }
 

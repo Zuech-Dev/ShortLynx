@@ -62,30 +62,41 @@ public sealed class RedirectService(
 
         var pinnedHost = ulc.Link.CustomDomain?.Domain;
 
-        // Reject the wrong host *before* claiming a one-time code, so a mismatched request can't burn it.
         if (!HostMatches(pinnedHost, host)) return null;
 
-        // One-time-use codes that have been redeemed must not redirect again.
-        if (ulc.IsOneTimeUse)
-        {
-            if (ulc.IsUsed) return null;
+        // Already-redeemed one-time codes must not resolve. Claiming happens in TryClaimOneTimeAsync,
+        // invoked by the handler after any disclosure choice — lookup alone never burns the code.
+        if (ulc.IsOneTimeUse && ulc.IsUsed) return null;
 
-            // Atomically claim the code: only the request that flips IsUsed from false wins, so two
-            // concurrent hits can't both redirect. No DateTimeOffset in the predicate (SQLite-safe).
-            var claimed = await db.UserLinkCodeEntities
-                .Where(x => x.Id == ulc.Id && !x.IsUsed)
-                .ExecuteUpdateAsync(s => s.SetProperty(x => x.IsUsed, true), ct);
+        // Disclosure gate (TRACKING_DISCLOSURE_PLAN): required whenever the owning account has no
+        // privacy policy URL configured. Account name is shown on the interstitial.
+        var account = await db.AccountEntities
+            .Where(a => a.Id == ulc.Link.AccountId)
+            .Select(a => new { a.Name, a.PrivacyPolicyUrl })
+            .FirstOrDefaultAsync(ct);
 
-            if (claimed == 0) return null;
-        }
-
-        var mode2Entry = new RedirectCacheEntry(BuildDestination(ulc.Link), null, ulc.Id, ulc.UserId, pinnedHost);
+        var mode2Entry = new RedirectCacheEntry(
+            BuildDestination(ulc.Link), null, ulc.Id, ulc.UserId, pinnedHost,
+            DisclosureRequired: string.IsNullOrWhiteSpace(account?.PrivacyPolicyUrl),
+            AccountId: ulc.Link.AccountId,
+            OperatorName: account?.Name,
+            IsOneTimeUse: ulc.IsOneTimeUse);
 
         // Don't cache one-time-use codes — the IsUsed flag changes after first use.
         if (!ulc.IsOneTimeUse)
             cache.Set(key, mode2Entry, _cacheOpts);
 
         return mode2Entry;
+    }
+
+    public async Task<bool> TryClaimOneTimeAsync(Guid userLinkCodeId, CancellationToken ct = default)
+    {
+        // Atomic claim: only the request that flips IsUsed from false wins, so two concurrent hits
+        // can't both redirect. No DateTimeOffset in the predicate (SQLite-safe).
+        var claimed = await db.UserLinkCodeEntities
+            .Where(x => x.Id == userLinkCodeId && !x.IsUsed)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.IsUsed, true), ct);
+        return claimed > 0;
     }
 
     // Resolves the click-through target: the link's destination with the campaign's UTM template merged

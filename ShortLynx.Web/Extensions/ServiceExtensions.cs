@@ -54,10 +54,19 @@ public static class ServiceExtensions
         services.AddSingleton<ShortLynx.Services.Analytics.IUserAgentParser, ShortLynx.Services.Analytics.UserAgentParser>();
         services.AddSingleton<ShortLynx.Services.Analytics.IReferrerReducer, ShortLynx.Services.Analytics.ReferrerReducer>();
         services.AddSingleton<ShortLynx.Services.Analytics.ILanguageReducer, ShortLynx.Services.Analytics.LanguageReducer>();
-        services.AddSingleton<ShortLynx.Services.Analytics.IGeoIpResolver, ShortLynx.Services.Analytics.NullGeoIpResolver>();
+        // GeoLite2 resolver when a database is configured (country + timezone only); no-op otherwise.
+        services.AddSingleton<ShortLynx.Services.Analytics.IGeoIpResolver>(sp =>
+        {
+            var path = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<VisitSinkOptions>>().Value.GeoIpDatabasePath;
+            return !string.IsNullOrWhiteSpace(path) && File.Exists(path)
+                ? new ShortLynx.Services.Analytics.MaxMindGeoIpResolver(path)
+                : new ShortLynx.Services.Analytics.NullGeoIpResolver();
+        });
         services.AddSingleton<InMemoryVisitEventSink>();
         services.AddSingleton<IVisitEventSink>(sp => sp.GetRequiredService<InMemoryVisitEventSink>());
         services.AddHostedService<BackgroundVisitWriter>();
+        // Nightly retention prune; no-op unless VisitSink:AnalyticsRetentionDays is set.
+        services.AddHostedService<VisitRetentionService>();
 
         return services;
     }

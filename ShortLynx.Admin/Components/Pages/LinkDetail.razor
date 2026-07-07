@@ -245,6 +245,13 @@ else
     }
 
     <ClickBreakdownCard Breakdown="_breakdown" />
+        @if (_breakdown is { TotalClicks: > 0 })
+        {
+            <div class="mb-4 -mt-2">
+                <a class="btn btn-outline" href="/export/link/@Id" download data-testid="export-csv"
+                   title="Aggregate statistics only — the same breakdowns shown above, never individual clicks.">Download CSV</a>
+            </div>
+        }
 
     @if (_link.Mode == LinkMode.UserAttributed)
     {
@@ -295,6 +302,13 @@ else
         }
         else
         {
+            // Engagement segments: how many provisioned codes have been clicked at least once.
+            var clicked = _userRows.Count(r => r.Clicks > 0);
+            var ratePct = (int)Math.Round(100.0 * clicked / _userRows.Count);
+            <div class="flex items-center gap-3 mb-2 text-sm" data-testid="code-engagement">
+                <span class="font-medium">@clicked of @_userRows.Count clicked (@ratePct%)</span>
+                <span class="flex-1 max-w-[240px] bg-gray-100 rounded h-2"><span class="block bg-green-500 h-2 rounded" style="width:@ratePct%"></span></span>
+            </div>
             <table class="data-table">
                 <thead>
                 <tr><th>Recipient</th><th>Code</th><th class="text-right">Clicks</th><th>QR</th></tr>
@@ -408,10 +422,10 @@ else
             {
                 _shortUrl = await ShortUrlBuilder.BuildAsync(db, _link, sc.Code, DashboardOpts.Value.PublicBaseUrl);
                 var raw = await db.VisitEntities.Where(v => v.ShortCodeId == sc.Id)
-                    .Select(v => new { v.HashedIp, v.Source, v.Device, v.ClickedAt, v.ReferrerHost, v.Browser, v.Os, v.Country, v.Language })
+                    .Select(v => new { v.HashedIp, v.Source, v.Device, v.ClickedAt, v.ReferrerHost, v.Browser, v.Os, v.Country, v.Language, v.NavigationType, v.TimeZone, v.UtmSource, v.UtmMedium, v.UtmCampaign })
                     .ToListAsync();
                 _breakdown = ClickAggregator.Summarize(
-                    raw.Select(v => new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Browser, v.Os, v.Country, v.Language)).ToList());
+                    raw.Select(v => new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Browser, v.Os, v.Country, v.Language, v.NavigationType, v.TimeZone, v.UtmSource, v.UtmMedium, v.UtmCampaign)).ToList());
                 _clicks = raw.Select(v => new ClickRow(v.ClickedAt, v.Source, v.Device, v.ReferrerHost, v.Browser, v.Os, v.Country, v.Language)).ToList();
             }
         }
@@ -434,10 +448,10 @@ else
                 clickMap.GetValueOrDefault(c.Id, 0))).ToList();
 
             var raw = await db.UserVisitEntities.Where(v => codeIds.Contains(v.UserLinkCodeId))
-                .Select(v => new { v.HashedIp, v.Source, v.Device, v.ClickedAt, v.ReferrerHost, v.Browser, v.Os, v.Country, v.Language })
+                .Select(v => new { v.HashedIp, v.Source, v.Device, v.ClickedAt, v.ReferrerHost, v.Browser, v.Os, v.Country, v.Language, v.NavigationType, v.TimeZone, v.UtmSource, v.UtmMedium, v.UtmCampaign })
                 .ToListAsync();
             _breakdown = ClickAggregator.Summarize(
-                raw.Select(v => new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Browser, v.Os, v.Country, v.Language)).ToList());
+                raw.Select(v => new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Browser, v.Os, v.Country, v.Language, v.NavigationType, v.TimeZone, v.UtmSource, v.UtmMedium, v.UtmCampaign)).ToList());
             _clicks = raw.Select(v => new ClickRow(v.ClickedAt, v.Source, v.Device, v.ReferrerHost, v.Browser, v.Os, v.Country, v.Language)).ToList();
         }
 

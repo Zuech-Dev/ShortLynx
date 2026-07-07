@@ -67,6 +67,7 @@ public sealed class BackgroundVisitWriter(
             .Select(e =>
             {
                 var d = Derive(e);
+                var utm = ParseUtm(e);
                 return new VisitEntity
                 {
                     Id = Guid.CreateVersion7(),
@@ -79,8 +80,14 @@ public sealed class BackgroundVisitWriter(
                     Os = d.Os,
                     ReferrerHost = d.ReferrerHost,
                     Country = d.Country,
+                    TimeZone = d.TimeZone,
                     Language = d.Language,
                     NavigationType = d.NavigationType,
+                    UtmSource = utm.Source,
+                    UtmMedium = utm.Medium,
+                    UtmCampaign = utm.Campaign,
+                    UtmTerm = utm.Term,
+                    UtmContent = utm.Content,
                 };
             })
             .ToList();
@@ -90,6 +97,7 @@ public sealed class BackgroundVisitWriter(
             .Select(e =>
             {
                 var d = Derive(e);
+                var utm = ParseUtm(e);
                 return new UserVisitEntity
                 {
                     Id = Guid.CreateVersion7(),
@@ -103,8 +111,14 @@ public sealed class BackgroundVisitWriter(
                     Os = d.Os,
                     ReferrerHost = d.ReferrerHost,
                     Country = d.Country,
+                    TimeZone = d.TimeZone,
                     Language = d.Language,
                     NavigationType = d.NavigationType,
+                    UtmSource = utm.Source,
+                    UtmMedium = utm.Medium,
+                    UtmCampaign = utm.Campaign,
+                    UtmTerm = utm.Term,
+                    UtmContent = utm.Content,
                 };
             })
             .ToList();
@@ -113,23 +127,30 @@ public sealed class BackgroundVisitWriter(
         if (mode2.Count > 0) await dbOps.BulkInsertUserVisitsAsync(mode2, ct);
     }
 
+    // UTM tags ride the inbound query string; like every dimension they are suppressed under a
+    // privacy signal, and the raw query is never persisted.
+    private static UtmTags ParseUtm(VisitEvent e)
+        => e.PrivacySignal ? UtmTags.Empty : UtmParser.Parse(e.RawQuery);
+
     // Reduces a visit's raw signals to the stored low-entropy dimensions. A privacy signal (DNT / Sec-GPC)
     // suppresses every derived dimension — the click still counts, but carries no profile.
     private (ClickSource Source, DeviceType Device, string? Browser, string? Os, string? ReferrerHost,
-        string? Country, string? Language, string? NavigationType) Derive(VisitEvent e)
+        string? Country, string? TimeZone, string? Language, string? NavigationType) Derive(VisitEvent e)
     {
         if (e.PrivacySignal)
-            return (ClickSource.Direct, DeviceType.Unknown, null, null, null, null, null, null);
+            return (ClickSource.Direct, DeviceType.Unknown, null, null, null, null, null, null, null);
 
         var ua = uaParser.Parse(e.UserAgent);
         var nav = string.IsNullOrWhiteSpace(e.SecFetchSite) ? null : e.SecFetchSite.Trim().ToLowerInvariant();
+        var geo = geoIp.Resolve(e.RawIp);
         return (
             SourceDetector.DetectSource(e.Referrer),
             ua.Device,
             ua.Browser,
             ua.Os,
             referrerReducer.Host(e.Referrer),
-            geoIp.ResolveCountry(e.RawIp),
+            geo.Country,
+            geo.TimeZone,
             languageReducer.Primary(e.AcceptLanguage),
             nav);
     }

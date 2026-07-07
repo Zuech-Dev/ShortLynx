@@ -16,4 +16,7 @@ public sealed record VisitEvent(
     DateTimeOffset ClickedAt,
     string? AcceptLanguage = null,
     string? SecFetchSite = null,
-    bool PrivacySignal = false);
+    bool PrivacySignal = false,
+    // Raw query string of the inbound request; UTM tags are parsed out (and everything else
+    // discarded) in the writer, keeping with the derive-at-write-time discipline.
+    string? RawQuery = null);

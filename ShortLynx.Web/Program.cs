@@ -72,7 +72,8 @@ app.MapGet("/{code}", async (
         ClickedAt: DateTimeOffset.UtcNow,
         AcceptLanguage: acceptLanguage.Length > 0 ? acceptLanguage : null,
         SecFetchSite: secFetchSite.Length > 0 ? secFetchSite : null,
-        PrivacySignal: privacySignal));
+        PrivacySignal: privacySignal,
+        RawQuery: ctx.Request.QueryString.HasValue ? ctx.Request.QueryString.Value : null));
 
     return Results.Redirect(entry.OriginalUrl, permanent: false);
 }).RequireRateLimiting("redirect");

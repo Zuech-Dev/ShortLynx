@@ -96,10 +96,59 @@ public class MeCampaignsController(ICampaignService campaigns, ShortLynxDbContex
             .ToList();
 
         var b = ClickAggregator.Summarize(tagged.Select(x => x.Row).ToList());
+        var engagement = await RecipientEngagementAsync(links.Select(l => l.Id).ToList(), ct);
         return Ok(new CampaignAnalyticsResponse(
             campaign.Id, campaign.Name, links.Count,
-            b.TotalClicks, b.UniqueClicks, b.FirstClickAt, b.LastClickAt,
-            b.Sources, b.Devices, b.Timeline, perLink));
+            b.TotalClicks, b.UniqueClicks, b.HumanClicks, b.HumanUniqueClicks, b.BotClicks,
+            b.FirstClickAt, b.LastClickAt,
+            b.Sources, b.Devices, b.Timeline, b.HourlyDistribution,
+            engagement.RecipientsTotal, engagement.RecipientsClicked,
+            engagement.MedianTimeToFirstClickMinutes, engagement.P90TimeToFirstClickMinutes,
+            perLink));
+    }
+
+    // GET /me/campaigns/{id}/analytics/export — the campaign-wide aggregate breakdown as CSV.
+    // Aggregate-only by decision (MASTER_PLAN P2): there is deliberately no row-per-click export.
+    [HttpGet("{id:guid}/analytics/export")]
+    public async Task<IActionResult> AnalyticsExport(Guid id, CancellationToken ct)
+    {
+        var campaign = await campaigns.GetAsync(id, AccountId, ct);
+        if (campaign is null) return NotFound();
+
+        var linkIds = await db.LinkEntities
+            .Where(l => l.CampaignId == id && l.AccountId == AccountId)
+            .Select(l => l.Id)
+            .ToListAsync(ct);
+        var tagged = await GatherVisitsAsync(linkIds, ct);
+
+        var csv = ClickBreakdownCsv.Format(ClickAggregator.Summarize(tagged.Select(x => x.Row).ToList()));
+        return File(System.Text.Encoding.UTF8.GetBytes(csv), "text/csv", $"campaign-{id}-analytics.csv");
+    }
+
+    // Mode 2 engagement across the campaign's user-attributed links: joins each provisioned code to
+    // its earliest visit, then reduces via the pure RecipientEngagement helper.
+    private async Task<RecipientEngagementStats> RecipientEngagementAsync(List<Guid> linkIds, CancellationToken ct)
+    {
+        if (linkIds.Count == 0) return RecipientEngagement.Compute([]);
+
+        var codes = await db.UserLinkCodeEntities
+            .Where(c => linkIds.Contains(c.LinkId))
+            .Select(c => new { c.Id, c.CreatedAt })
+            .ToListAsync(ct);
+        if (codes.Count == 0) return RecipientEngagement.Compute([]);
+
+        // Grouped client-side: SQLite (dev/tests) cannot translate Min over DateTimeOffset.
+        var codeIds = codes.Select(c => c.Id).ToList();
+        var firstClicks = (await db.UserVisitEntities
+                .Where(v => codeIds.Contains(v.UserLinkCodeId))
+                .Select(v => new { v.UserLinkCodeId, v.ClickedAt })
+                .ToListAsync(ct))
+            .GroupBy(v => v.UserLinkCodeId)
+            .ToDictionary(g => g.Key, g => g.Min(v => v.ClickedAt));
+
+        return RecipientEngagement.Compute(codes
+            .Select(c => (c.CreatedAt, firstClicks.TryGetValue(c.Id, out var f) ? f : (DateTimeOffset?)null))
+            .ToList());
     }
 
     // Resolves every visit for the given links, tagged with its link id. Anonymous links resolve via
@@ -120,10 +169,10 @@ public class MeCampaignsController(ICampaignService campaigns, ShortLynxDbContex
             var scIds = shortCodeToLink.Keys.ToList();
             var visits = await db.VisitEntities
                 .Where(v => scIds.Contains(v.ShortCodeId))
-                .Select(v => new { v.ShortCodeId, v.HashedIp, v.Source, v.Device, v.ClickedAt })
+                .Select(v => new { v.ShortCodeId, v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Browser, v.Os, v.Country, v.Language, v.NavigationType, v.TimeZone, v.UtmSource, v.UtmMedium, v.UtmCampaign })
                 .ToListAsync(ct);
             tagged.AddRange(visits.Select(v =>
-                (shortCodeToLink[v.ShortCodeId], new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt))));
+                (shortCodeToLink[v.ShortCodeId], new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Browser, v.Os, v.Country, v.Language, v.NavigationType, v.TimeZone, v.UtmSource, v.UtmMedium, v.UtmCampaign))));
         }
 
         // Mode 2: user-link code → link.
@@ -137,10 +186,10 @@ public class MeCampaignsController(ICampaignService campaigns, ShortLynxDbContex
             var codeIds = codeToLink.Keys.ToList();
             var userVisits = await db.UserVisitEntities
                 .Where(v => codeIds.Contains(v.UserLinkCodeId))
-                .Select(v => new { v.UserLinkCodeId, v.HashedIp, v.Source, v.Device, v.ClickedAt })
+                .Select(v => new { v.UserLinkCodeId, v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Browser, v.Os, v.Country, v.Language, v.NavigationType, v.TimeZone, v.UtmSource, v.UtmMedium, v.UtmCampaign })
                 .ToListAsync(ct);
             tagged.AddRange(userVisits.Select(v =>
-                (codeToLink[v.UserLinkCodeId], new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt))));
+                (codeToLink[v.UserLinkCodeId], new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Browser, v.Os, v.Country, v.Language, v.NavigationType, v.TimeZone, v.UtmSource, v.UtmMedium, v.UtmCampaign))));
         }
 
         return tagged;

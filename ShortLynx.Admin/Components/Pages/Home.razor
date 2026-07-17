@@ -70,8 +70,11 @@ else
         // All counts scoped to the current account.
         _totalLinks = await db.LinkEntities
             .CountAsync(l => l.AccountId == accountId);
+        // Two tiles by design — clicks on shared/anonymous codes vs. per-recipient (Mode 2) codes.
+        // Not routed through LinkVisitQueries.CountForAccountAsync (which sums both into one number)
+        // because these are shown separately.
         _totalClicks = await db.VisitEntities
-            .CountAsync(v => v.ShortCode.Link.AccountId == accountId);
+            .CountAsync(v => v.ShortCode!.Link.AccountId == accountId);
         _totalUserClicks = await db.UserVisitEntities
             .CountAsync(v => v.UserLinkCode.Link.AccountId == accountId);
         _totalApiKeys = await db.ApiKeyEntities

@@ -180,11 +180,15 @@ Tiers: **A (open, build first): Bluesky, Mastodon** · **B (official, gated): Th
 - Substack: pull publication RSS to auto-create tracked links; embeds. (No write API.)
 
 ### Deliberately not building — aggregators & Hootsuite/Buffer integration
-Broader platform reach (LinkedIn, X, TikTok, …) via an aggregator, and integrating into Hootsuite/Buffer,
-are **deferred with reasons recorded** — including the standing rule that an aggregator, if ever adopted,
-is **bring-your-own-key only and never bundled** (bundling would put a third party between users and their
-accounts, contradicting the product's whole posture). Full reasoning, evidence, revisit triggers, and open
-questions: **[SOCIAL_AGGREGATOR_STRATEGY.md](SOCIAL_AGGREGATOR_STRATEGY.md)**.
+Broader platform reach (LinkedIn, X, TikTok, …) via a posting aggregator is **deferred**, and integrating
+*into* Hootsuite/Buffer is not a viable path (as of 2026-07 both gate their APIs against new third-party
+apps). Standing rule if an aggregator is ever adopted: **bring-your-own-key only, never bundled** — a
+bundled aggregator would put a third party between users and their own social accounts, which contradicts
+the self-hosted, own-your-data posture the rest of this design protects. Native connectors stay the
+default path.
+
+The unblocked route to those tools is the Phase 3 **webhooks** above: Zapier/Make already speak
+Buffer/Hootsuite, so users can wire it up themselves without either vendor's blessing.
 
 ---
 

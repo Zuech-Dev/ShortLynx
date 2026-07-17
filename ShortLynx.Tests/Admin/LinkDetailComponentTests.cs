@@ -18,13 +18,13 @@ public class LinkDetailComponentTests : BunitContext
 {
     private sealed class FakePublishService : ShortLynx.Services.Social.ISocialPublishService
     {
-        public readonly List<(Guid AccountId, Guid LinkId, Guid[] ConnectionIds, string? Text, string ShortUrl)> Calls = [];
+        public readonly List<(Guid AccountId, Guid LinkId, Guid[] ConnectionIds, string? Text, string? PublicBaseUrl)> Calls = [];
 
         public Task<IReadOnlyList<ShortLynx.Services.Social.PublishResult>> PublishLinkAsync(
             Guid accountId, Guid linkId, IReadOnlyCollection<Guid> connectionIds,
-            string? text, string shortUrl, CancellationToken ct = default)
+            string? text, string? publicBaseUrl, CancellationToken ct = default)
         {
-            Calls.Add((accountId, linkId, [.. connectionIds], text, shortUrl));
+            Calls.Add((accountId, linkId, [.. connectionIds], text, publicBaseUrl));
             IReadOnlyList<ShortLynx.Services.Social.PublishResult> results =
                 connectionIds.Select(id => new ShortLynx.Services.Social.PublishResult(
                     id, "me.bsky.social", true,
@@ -204,7 +204,8 @@ public class LinkDetailComponentTests : BunitContext
         Assert.Equal(linkId, call.LinkId);
         Assert.Equal([connectionId], call.ConnectionIds);
         Assert.Equal("Big news!", call.Text);
-        Assert.Equal("https://s.example/abc12345", call.ShortUrl);
+        // The page passes the deployment's base URL; the publish service mints each post's own code off it.
+        Assert.Equal("https://s.example", call.PublicBaseUrl);
 
         // Result list + refreshed published-posts table render.
         Assert.Contains("view post", cut.Find("[data-testid=publish-results]").InnerHtml);

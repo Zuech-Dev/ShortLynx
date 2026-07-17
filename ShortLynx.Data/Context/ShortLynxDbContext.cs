@@ -21,6 +21,7 @@ public partial class ShortLynxDbContext(DbContextOptions<ShortLynxDbContext> opt
     public DbSet<RefreshTokenEntity> RefreshTokenEntities { get; set; }
     public DbSet<SocialConnectionEntity> SocialConnectionEntities { get; set; }
     public DbSet<SocialPostEntity> SocialPostEntities { get; set; }
+    public DbSet<SocialPostCodeEntity> SocialPostCodeEntities { get; set; }
     public DbSet<MagicLinkTokenEntity> MagicLinkTokenEntities { get; set; }
     public DbSet<ShortCodeEntity> ShortCodeEntities { get; set; }
     public DbSet<UserAccountEntity> UserAccountEntities { get; set; }

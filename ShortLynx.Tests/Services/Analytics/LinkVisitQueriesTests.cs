@@ -92,6 +92,43 @@ public class LinkVisitQueriesTests
     }
 
     [Fact]
+    public async Task PerPostCodeClicks_CountTowardTheLink_AndAttributeToTheirPost()
+    {
+        // The payoff of per-post attribution: two posts of the same link, on the same platform, get
+        // distinct codes. Clicks on each land in Visits (same table as the shared code) and roll up to
+        // the link — but each click's SocialPostCodeId ties it to exactly one post.
+        await using var db = await TestDatabase.CreateAsync();
+        var account = EntityFactory.Account();
+        var link = EntityFactory.AnonymousLink(account.Id);
+        var shared = EntityFactory.ShortCode(link.Id, "shared00");
+        var postA = new SocialPostCodeEntity { Id = Guid.CreateVersion7(), LinkId = link.Id, Code = "postAAAA", CreatedAt = DateTimeOffset.UtcNow, IsActive = true };
+        var postB = new SocialPostCodeEntity { Id = Guid.CreateVersion7(), LinkId = link.Id, Code = "postBBBB", CreatedAt = DateTimeOffset.UtcNow, IsActive = true };
+        await using (var ctx = db.CreateContext())
+        {
+            ctx.AddRange(account, link, shared, postA, postB);
+            ctx.Add(Visit(shared.Id));                                  // 1 organic
+            ctx.AddRange(PostVisit(postA.Id), PostVisit(postA.Id));    // 2 from post A
+            ctx.Add(PostVisit(postB.Id));                              // 1 from post B
+            await ctx.SaveChangesAsync();
+        }
+
+        await using var verify = db.CreateContext();
+        // All four count toward the link.
+        Assert.Equal(4, (await LinkVisitQueries.CountByLinkAsync(verify, [link.Id]))[link.Id]);
+        Assert.Equal(4, (await LinkVisitQueries.LoadLinkRowsAsync(verify, link)).Count);
+
+        // And each post's clicks are separable — referrer alone never could.
+        Assert.Equal(2, await verify.VisitEntities.CountAsync(v => v.SocialPostCodeId == postA.Id));
+        Assert.Equal(1, await verify.VisitEntities.CountAsync(v => v.SocialPostCodeId == postB.Id));
+    }
+
+    private static VisitEntity PostVisit(Guid postCodeId) => new()
+    {
+        Id = Guid.CreateVersion7(), SocialPostCodeId = postCodeId,
+        ClickedAt = DateTimeOffset.UtcNow, HashedIp = "h", Source = ClickSource.Direct, Device = DeviceType.Mobile,
+    };
+
+    [Fact]
     public async Task RowsByLink_TagsEachClickWithItsLink()
     {
         await using var db = await TestDatabase.CreateAsync();

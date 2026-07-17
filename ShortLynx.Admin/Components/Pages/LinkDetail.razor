@@ -505,7 +505,10 @@ else
         {
             await using var scope = ScopeFactory.CreateAsyncScope();
             var publisher = scope.ServiceProvider.GetRequiredService<ISocialPublishService>();
-            var results = await publisher.PublishLinkAsync(_accountId, Id, [.. _publishTargets], _publishText, _shortUrl);
+            // The publisher mints a per-post code off this base URL (a pinned custom domain still wins
+            // inside ShortUrlBuilder), so it takes the base rather than this link's shared short URL.
+            var results = await publisher.PublishLinkAsync(
+                _accountId, Id, [.. _publishTargets], _publishText, DashboardOpts.Value.PublicBaseUrl);
             _publishResults = results
                 .Select(r => new PublishResultRow(r.Handle, r.Success, r.Post?.PostUrl, r.Error))
                 .ToList();

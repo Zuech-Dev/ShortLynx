@@ -18,11 +18,18 @@ public sealed record PublishResult(
 public interface ISocialPublishService
 {
     /// <summary>
-    /// Composes the post (appends <paramref name="shortUrl"/> unless the text already contains it) and
-    /// publishes it to each connection. Throws <see cref="EntitlementException"/> when the plan gates
+    /// Publishes a link to each connection, minting a **distinct short code per post** so its clicks
+    /// attribute exactly (rather than being guessed from a referrer that can't separate two posts on the
+    /// same platform, and is absent for most app traffic). Each post's own URL is appended to
+    /// <paramref name="text"/>; if the author already included a short URL of their own, their text is
+    /// posted verbatim and that post falls back to referrer attribution.
+    ///
+    /// <paramref name="publicBaseUrl"/> is the deployment's public short-link base (a verified pinned
+    /// custom domain still wins per <c>ShortUrlBuilder</c>) — the caller supplies it because the config
+    /// key differs per host app. Throws <see cref="EntitlementException"/> when the plan gates
     /// publishing; per-connection problems are reported in the results, not thrown.
     /// </summary>
     Task<IReadOnlyList<PublishResult>> PublishLinkAsync(
         Guid accountId, Guid linkId, IReadOnlyCollection<Guid> connectionIds,
-        string? text, string shortUrl, CancellationToken ct = default);
+        string? text, string? publicBaseUrl, CancellationToken ct = default);
 }

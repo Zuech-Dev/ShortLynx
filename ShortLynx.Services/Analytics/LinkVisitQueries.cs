@@ -53,7 +53,7 @@ public static class LinkVisitQueries
         {
             var scIds = shortCodeToLink.Keys.ToList();
             var visits = await db.VisitEntities
-                .Where(v => scIds.Contains(v.ShortCodeId))
+                .Where(v => v.ShortCodeId != null && scIds.Contains(v.ShortCodeId.Value))
                 .Select(v => new
                 {
                     v.ShortCodeId, v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Browser, v.Os,
@@ -63,7 +63,35 @@ public static class LinkVisitQueries
                 .ToListAsync(ct);
 
             tagged.AddRange(visits.Select(v => new LinkVisitRow(
-                shortCodeToLink[v.ShortCodeId],
+                shortCodeToLink[v.ShortCodeId!.Value],
+                ToRow(v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Browser, v.Os, v.Country,
+                      v.Language, v.NavigationType, v.TimeZone, v.UtmSource, v.UtmMedium,
+                      v.UtmCampaign, v.ReferrerHost))));
+        }
+
+        // Per-post codes → Visits. Each published social post gets its own code (SocialPostCodeEntity),
+        // so its clicks land in the same table as shared-code clicks but attribute exactly to the post
+        // rather than being guessed from a referrer.
+        var postCodeToLink = await db.SocialPostCodeEntities
+            .Where(c => linkIds.Contains(c.LinkId))
+            .Select(c => new { c.Id, c.LinkId })
+            .ToDictionaryAsync(x => x.Id, x => x.LinkId, ct);
+
+        if (postCodeToLink.Count > 0)
+        {
+            var postCodeIds = postCodeToLink.Keys.ToList();
+            var postVisits = await db.VisitEntities
+                .Where(v => v.SocialPostCodeId != null && postCodeIds.Contains(v.SocialPostCodeId.Value))
+                .Select(v => new
+                {
+                    v.SocialPostCodeId, v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Browser, v.Os,
+                    v.Country, v.Language, v.NavigationType, v.TimeZone, v.UtmSource, v.UtmMedium,
+                    v.UtmCampaign, v.ReferrerHost,
+                })
+                .ToListAsync(ct);
+
+            tagged.AddRange(postVisits.Select(v => new LinkVisitRow(
+                postCodeToLink[v.SocialPostCodeId!.Value],
                 ToRow(v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Browser, v.Os, v.Country,
                       v.Language, v.NavigationType, v.TimeZone, v.UtmSource, v.UtmMedium,
                       v.UtmCampaign, v.ReferrerHost))));
@@ -134,8 +162,12 @@ public static class LinkVisitQueries
                 .FirstOrDefaultAsync(ct);
             if (sc is null) return [];
 
-            var clicks = await db.VisitEntities.LongCountAsync(v => v.ShortCodeId == sc.Id, ct);
-            return [new CodeClickCount(sc.Id, sc.Code, null, clicks)];
+            // Anonymous links carry the shared code plus a code per published post; the "code count"
+            // shown for the link is all of them summed (per-post breakdown lives in the posts view).
+            var sharedClicks = await db.VisitEntities.LongCountAsync(v => v.ShortCodeId == sc.Id, ct);
+            var postClicks = await db.VisitEntities.LongCountAsync(
+                v => v.SocialPostCode!.LinkId == link.Id, ct);
+            return [new CodeClickCount(sc.Id, sc.Code, null, sharedClicks + postClicks)];
         }
 
         var codes = await db.UserLinkCodeEntities
@@ -166,11 +198,19 @@ public static class LinkVisitQueries
 
         // Counted server-side rather than by loading rows — list views can span every link in an account.
         var shared = await db.VisitEntities
-            .Where(v => linkIds.Contains(v.ShortCode.LinkId))
-            .GroupBy(v => v.ShortCode.LinkId)
+            .Where(v => v.ShortCodeId != null && linkIds.Contains(v.ShortCode!.LinkId))
+            .GroupBy(v => v.ShortCode!.LinkId)
             .Select(g => new { LinkId = g.Key, Clicks = g.LongCount() })
             .ToListAsync(ct);
         foreach (var s in shared) counts[s.LinkId] = s.Clicks;
+
+        var post = await db.VisitEntities
+            .Where(v => v.SocialPostCodeId != null && linkIds.Contains(v.SocialPostCode!.LinkId))
+            .GroupBy(v => v.SocialPostCode!.LinkId)
+            .Select(g => new { LinkId = g.Key, Clicks = g.LongCount() })
+            .ToListAsync(ct);
+        foreach (var p in post)
+            counts[p.LinkId] = counts.GetValueOrDefault(p.LinkId) + p.Clicks;
 
         var recipient = await db.UserVisitEntities
             .Where(v => linkIds.Contains(v.UserLinkCode.LinkId))
@@ -183,9 +223,11 @@ public static class LinkVisitQueries
         return counts;
     }
 
-    /// <summary>Total clicks across every link in an account.</summary>
+    /// <summary>Total clicks across every link in an account (all code types).</summary>
     public static async Task<long> CountForAccountAsync(
         ShortLynxDbContext db, Guid accountId, CancellationToken ct = default)
-        => await db.VisitEntities.LongCountAsync(v => v.ShortCode.Link.AccountId == accountId, ct)
+        => await db.VisitEntities.LongCountAsync(
+               v => (v.ShortCodeId != null && v.ShortCode!.Link.AccountId == accountId)
+                 || (v.SocialPostCodeId != null && v.SocialPostCode!.Link.AccountId == accountId), ct)
          + await db.UserVisitEntities.LongCountAsync(v => v.UserLinkCode.Link.AccountId == accountId, ct);
 }

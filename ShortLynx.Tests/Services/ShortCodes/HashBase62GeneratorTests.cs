@@ -76,7 +76,7 @@ public class HashBase62GeneratorTests
     public void Generate_NullUserId_DoesNotThrow()
     {
         var gen = Make(8);
-        var code = gen.Generate(Guid.CreateVersion7(), userId: null, attempt: 0);
+        var code = gen.Generate(Guid.CreateVersion7(), discriminator: null, attempt: 0);
         Assert.Equal(8, code.Length);
     }
 

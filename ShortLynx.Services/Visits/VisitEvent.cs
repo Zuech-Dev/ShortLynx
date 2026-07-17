@@ -10,6 +10,9 @@ public sealed record VisitEvent(
     Guid? ShortCodeId,
     Guid? UserLinkCodeId,
     Guid? UserId,
+    // Set when the click came in on a code minted for one social post — recorded on the same Visits
+    // row shape as a shared-code click, just attributed to the post instead of guessed from a referrer.
+    Guid? SocialPostCodeId,
     string RawIp,
     string? Referrer,
     string? UserAgent,

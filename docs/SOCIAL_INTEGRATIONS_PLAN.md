@@ -176,7 +176,15 @@ Tiers: **A (open, build first): Bluesky, Mastodon** · **B (official, gated): Th
 ### Phase 3 — Conversions loop + Substack
 - Outbound: per-account **webhooks**; **Meta CAPI / TikTok Events / GA4 MP** click→conversion (hashed
   email advanced matching available for user-attributed links — opt-in only, requires explicit disclosure).
+  Webhooks double as the unblocked path to Hootsuite/Buffer/etc. via Zapier/Make — see below.
 - Substack: pull publication RSS to auto-create tracked links; embeds. (No write API.)
+
+### Deliberately not building — aggregators & Hootsuite/Buffer integration
+Broader platform reach (LinkedIn, X, TikTok, …) via an aggregator, and integrating into Hootsuite/Buffer,
+are **deferred with reasons recorded** — including the standing rule that an aggregator, if ever adopted,
+is **bring-your-own-key only and never bundled** (bundling would put a third party between users and their
+accounts, contradicting the product's whole posture). Full reasoning, evidence, revisit triggers, and open
+questions: **[SOCIAL_AGGREGATOR_STRATEGY.md](SOCIAL_AGGREGATOR_STRATEGY.md)**.
 
 ---
 

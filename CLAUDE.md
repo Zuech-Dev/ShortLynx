@@ -31,6 +31,11 @@ version-string difference, since different Tailwind versions format output sligh
 for identical input. If you ever need to (re)fetch the CLI, use the pinned URL the `WarnTailwindMissing`
 build warning prints (or `.github/workflows/ci.yml`), never `/releases/latest/...`.
 
+**Always run the CLI from *within* the project directory** (`cd ShortLynx.Admin && ./tools/tailwindcss -i Styles/app.tailwind.css -o wwwroot/css/tailwind.css`),
+never from the repo root: Tailwind v4 auto-detects sources relative to the CLI's working directory, and
+CI runs from the project dir — a repo-root regen scans the whole repo and bakes other projects' utilities
+into the CSS, which then fails CI's staleness check with mysterious extra lines.
+
 **When you change any Razor/`.cshtml` markup that affects classes used** (Admin or Web), regenerate and
 commit the CSS as the very last step before committing/pushing — with no `dotnet build`/`dotnet test` in
 between the regen and the `git add`/`git commit`. Running the build again in between re-invokes the

@@ -57,6 +57,12 @@ namespace ShortLynx.Data.PostgreSql.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<string>("PrivacyPolicyUrl")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TermsOfServiceUrl")
+                        .HasColumnType("text");
+
                     b.HasKey("Id");
 
                     b.ToTable("Accounts");
@@ -591,11 +597,29 @@ namespace ShortLynx.Data.PostgreSql.Migrations
                     b.Property<int>("Source")
                         .HasColumnType("integer");
 
+                    b.Property<string>("TimeZone")
+                        .HasColumnType("text");
+
                     b.Property<Guid?>("UserId")
                         .HasColumnType("uuid");
 
                     b.Property<Guid>("UserLinkCodeId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("UtmCampaign")
+                        .HasColumnType("text");
+
+                    b.Property<string>("UtmContent")
+                        .HasColumnType("text");
+
+                    b.Property<string>("UtmMedium")
+                        .HasColumnType("text");
+
+                    b.Property<string>("UtmSource")
+                        .HasColumnType("text");
+
+                    b.Property<string>("UtmTerm")
+                        .HasColumnType("text");
 
                     b.HasKey("Id");
 
@@ -645,6 +669,24 @@ namespace ShortLynx.Data.PostgreSql.Migrations
 
                     b.Property<int>("Source")
                         .HasColumnType("integer");
+
+                    b.Property<string>("TimeZone")
+                        .HasColumnType("text");
+
+                    b.Property<string>("UtmCampaign")
+                        .HasColumnType("text");
+
+                    b.Property<string>("UtmContent")
+                        .HasColumnType("text");
+
+                    b.Property<string>("UtmMedium")
+                        .HasColumnType("text");
+
+                    b.Property<string>("UtmSource")
+                        .HasColumnType("text");
+
+                    b.Property<string>("UtmTerm")
+                        .HasColumnType("text");
 
                     b.HasKey("Id");
 

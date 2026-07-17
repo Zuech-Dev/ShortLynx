@@ -24,10 +24,29 @@ public class AdminServiceResolutionTests : IClassFixture<AdminFactory>
     [InlineData(typeof(ShortLynx.Services.Social.ISocialPublishService))]
     [InlineData(typeof(ShortLynx.Services.Social.ISocialMetricsService))]
     [InlineData(typeof(ShortLynx.Services.Social.ITokenProtector))]
-    [InlineData(typeof(ShortLynx.Services.Social.IOAuthSocialConnector))]
+    // OAuth connectors register as concrete typed clients (a single IOAuthSocialConnector registration
+    // can't hold two implementations); the endpoints resolve them per-platform out of the connector set.
+    [InlineData(typeof(ShortLynx.Services.Social.ThreadsConnector))]
+    [InlineData(typeof(ShortLynx.Services.Social.RedditConnector))]
     public void PageService_IsRegistered(Type serviceType)
     {
         using var scope = _factory.Services.CreateScope();
         Assert.NotNull(scope.ServiceProvider.GetRequiredService(serviceType));
+    }
+
+    [Fact]
+    public void ConnectorSet_ResolvesOAuthConnector_PerPlatform()
+    {
+        using var scope = _factory.Services.CreateScope();
+        var connectors = scope.ServiceProvider
+            .GetRequiredService<IEnumerable<ShortLynx.Services.Social.ISocialConnector>>()
+            .ToList();
+
+        // The per-platform resolution the OAuth endpoints depend on — a regression here would surface
+        // as the wrong platform's consent screen, not a DI error.
+        Assert.Equal(ShortLynx.Data.Enums.SocialPlatform.Threads,
+            ShortLynx.Services.Social.OAuthConnectorResolver.Require(connectors, ShortLynx.Data.Enums.SocialPlatform.Threads).Platform);
+        Assert.Equal(ShortLynx.Data.Enums.SocialPlatform.Reddit,
+            ShortLynx.Services.Social.OAuthConnectorResolver.Require(connectors, ShortLynx.Data.Enums.SocialPlatform.Reddit).Platform);
     }
 }

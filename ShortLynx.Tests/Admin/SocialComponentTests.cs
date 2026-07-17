@@ -97,6 +97,37 @@ public class SocialComponentTests : BunitContext
     }
 
     [Fact]
+    public void ConnectRedditLink_PointsAtOAuthAuthorizeEndpoint()
+    {
+        var cut = Render<Social>();
+
+        var link = cut.Find("[data-testid=connect-reddit]");
+        Assert.Equal("/social/reddit/authorize", link.GetAttribute("href"));
+    }
+
+    [Fact]
+    public void RedditErrorQueryParam_ShowsFriendlyErrorBanner()
+    {
+        Services.GetRequiredService<NavigationManager>().NavigateTo("/social?redditError=not_configured");
+
+        var cut = Render<Social>();
+
+        var banner = cut.Find("[data-testid=threads-error]").TextContent;
+        Assert.Contains("Reddit", banner);
+        Assert.Contains("Reddit:AppId", banner);
+    }
+
+    [Fact]
+    public void ConnectedReddit_ShowsSuccessBanner()
+    {
+        Services.GetRequiredService<NavigationManager>().NavigateTo("/social?connected=reddit");
+
+        var cut = Render<Social>();
+
+        Assert.Contains("Reddit account connected", cut.Find("[data-testid=threads-connected]").TextContent);
+    }
+
+    [Fact]
     public void ConnectedQueryParam_ShowsThreadsSuccessBanner()
     {
         Services.GetRequiredService<NavigationManager>().NavigateTo("/social?connected=threads");
@@ -107,13 +138,24 @@ public class SocialComponentTests : BunitContext
     }
 
     [Fact]
-    public void ThreadsErrorQueryParam_ShowsErrorBanner()
+    public void ThreadsErrorQueryParam_ShowsFriendlyErrorBanner()
     {
         Services.GetRequiredService<NavigationManager>().NavigateTo("/social?threadsError=state_mismatch");
 
         var cut = Render<Social>();
 
-        Assert.Contains("state_mismatch", cut.Find("[data-testid=threads-error]").TextContent);
+        // Short error codes from the OAuth endpoints map to human-readable text, not raw codes.
+        Assert.Contains("state check failed", cut.Find("[data-testid=threads-error]").TextContent);
+    }
+
+    [Fact]
+    public void ThreadsNotConfigured_ShowsOperatorGuidance()
+    {
+        Services.GetRequiredService<NavigationManager>().NavigateTo("/social?threadsError=not_configured");
+
+        var cut = Render<Social>();
+
+        Assert.Contains("Threads:AppId", cut.Find("[data-testid=threads-error]").TextContent);
     }
 
     [Fact]

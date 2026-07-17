@@ -61,13 +61,18 @@ public static class ServiceExtensions
         // Social connectors (one per platform, typed HttpClients) + the account-scoped connection service.
         services.AddHttpClient<ShortLynx.Services.Social.ISocialConnector, ShortLynx.Services.Social.BlueskyConnector>();
         services.AddHttpClient<ShortLynx.Services.Social.ISocialConnector, ShortLynx.Services.Social.MastodonConnector>();
-        // Threads is OAuth-only (gated, Meta App Review) — the authorize/callback endpoints live on
-        // Admin, but Core's /me/links/{id}/publish and the metrics puller both run ISocialConnector
-        // over any connected platform, so Threads needs to be part of this collection here too.
+        // OAuth-only platforms (Threads, Reddit) — the authorize/callback endpoints live on Admin, but
+        // Core's /me/links/{id}/publish and the metrics puller both run ISocialConnector over any
+        // connected platform, so they're part of this collection here too (concrete typed clients,
+        // bridged; a single IOAuthSocialConnector registration can't hold two implementations).
         services.Configure<ShortLynx.Services.Social.ThreadsOptions>(configuration.GetSection("Threads"));
-        services.AddHttpClient<ShortLynx.Services.Social.IOAuthSocialConnector, ShortLynx.Services.Social.ThreadsConnector>();
+        services.AddHttpClient<ShortLynx.Services.Social.ThreadsConnector>();
         services.AddScoped<ShortLynx.Services.Social.ISocialConnector>(
-            sp => sp.GetRequiredService<ShortLynx.Services.Social.IOAuthSocialConnector>());
+            sp => sp.GetRequiredService<ShortLynx.Services.Social.ThreadsConnector>());
+        services.Configure<ShortLynx.Services.Social.RedditOptions>(configuration.GetSection("Reddit"));
+        services.AddHttpClient<ShortLynx.Services.Social.RedditConnector>();
+        services.AddScoped<ShortLynx.Services.Social.ISocialConnector>(
+            sp => sp.GetRequiredService<ShortLynx.Services.Social.RedditConnector>());
         services.AddScoped<ShortLynx.Services.Social.ISocialConnectionService, ShortLynx.Services.Social.SocialConnectionService>();
         services.AddScoped<ShortLynx.Services.Social.ISocialPublishService, ShortLynx.Services.Social.SocialPublishService>();
         services.Configure<ShortLynx.Services.Social.SocialMetricsOptions>(configuration.GetSection("SocialMetrics"));
@@ -96,10 +101,19 @@ public static class ServiceExtensions
         services.AddSingleton<ShortLynx.Services.Analytics.IUserAgentParser, ShortLynx.Services.Analytics.UserAgentParser>();
         services.AddSingleton<ShortLynx.Services.Analytics.IReferrerReducer, ShortLynx.Services.Analytics.ReferrerReducer>();
         services.AddSingleton<ShortLynx.Services.Analytics.ILanguageReducer, ShortLynx.Services.Analytics.LanguageReducer>();
-        services.AddSingleton<ShortLynx.Services.Analytics.IGeoIpResolver, ShortLynx.Services.Analytics.NullGeoIpResolver>();
+        // GeoLite2 resolver when a database is configured (country + timezone only); no-op otherwise.
+        services.AddSingleton<ShortLynx.Services.Analytics.IGeoIpResolver>(sp =>
+        {
+            var path = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<VisitSinkOptions>>().Value.GeoIpDatabasePath;
+            return !string.IsNullOrWhiteSpace(path) && File.Exists(path)
+                ? new ShortLynx.Services.Analytics.MaxMindGeoIpResolver(path)
+                : new ShortLynx.Services.Analytics.NullGeoIpResolver();
+        });
         services.AddSingleton<InMemoryVisitEventSink>();
         services.AddSingleton<IVisitEventSink>(sp => sp.GetRequiredService<InMemoryVisitEventSink>());
         services.AddHostedService<BackgroundVisitWriter>();
+        // Nightly retention prune; no-op unless VisitSink:AnalyticsRetentionDays is set.
+        services.AddHostedService<VisitRetentionService>();
 
         return services;
     }

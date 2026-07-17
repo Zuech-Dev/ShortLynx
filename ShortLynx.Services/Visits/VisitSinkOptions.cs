@@ -12,4 +12,17 @@ public class VisitSinkOptions
     /// user-secrets / env (VisitSink:IpHashPepper). Empty default for dev/tests.
     /// </summary>
     public string IpHashPepper { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Absolute path to a MaxMind GeoLite2-City database (.mmdb). When set and the file exists,
+    /// visits get Country + IANA TimeZone dimensions (and nothing finer -- see IGeoIpResolver);
+    /// when empty, geo resolution is disabled entirely. Free download, MaxMind account required.
+    /// </summary>
+    public string? GeoIpDatabasePath { get; set; }
+
+    /// <summary>
+    /// Delete visit rows older than this many days (nightly prune). Null -- the default -- keeps
+    /// analytics forever; self-hosters set this directly, the hosted tier drives it per plan.
+    /// </summary>
+    public int? AnalyticsRetentionDays { get; set; }
 }

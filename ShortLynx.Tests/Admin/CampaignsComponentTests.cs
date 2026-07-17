@@ -147,10 +147,11 @@ public class CampaignDetailComponentTests : BunitContext
                 CreatedAt = DateTimeOffset.UtcNow, IsActive = true,
             };
             db.AddRange(campaign, link, sc);
-            db.VisitEntities.AddRange(
-                Visit(sc.Id, "ip1", ClickSource.Twitter, DeviceType.Mobile),
-                Visit(sc.Id, "ip1", ClickSource.Twitter, DeviceType.Mobile),
-                Visit(sc.Id, "ip2", ClickSource.Direct, DeviceType.Desktop));
+            // Ten Twitter clicks so the bucket clears the k=10 anonymity threshold (ip1 clicks
+            // twice ⇒ dedupes), plus one Direct click that folds into "Other".
+            db.VisitEntities.AddRange(Enumerable.Range(0, 10).Select(i =>
+                Visit(sc.Id, $"ip{Math.Max(1, i)}", ClickSource.Twitter, DeviceType.Mobile)));
+            db.VisitEntities.Add(Visit(sc.Id, "ipX", ClickSource.Direct, DeviceType.Desktop));
             db.SaveChanges();
             campaignId = campaign.Id;
         }
@@ -158,8 +159,8 @@ public class CampaignDetailComponentTests : BunitContext
         var cut = Render<CampaignDetail>(p => p.Add(c => c.Id, campaignId));
 
         cut.WaitForElement("[data-testid=click-breakdown]");
-        Assert.Equal("3", cut.Find("[data-testid=total-clicks]").TextContent.Trim());
-        Assert.Equal("2", cut.Find("[data-testid=unique-clicks]").TextContent.Trim());
+        Assert.Equal("11", cut.Find("[data-testid=total-clicks]").TextContent.Trim());
+        Assert.Equal("10", cut.Find("[data-testid=unique-clicks]").TextContent.Trim());
         Assert.Contains("Twitter", cut.Find("[data-testid=sources]").InnerHtml);
         Assert.NotNull(cut.Find("[data-testid=link-table]"));
     }

@@ -54,6 +54,24 @@ app.MapGet("/{code}", async (
     var entry = await redirectSvc.LookupAsync(code, ctx.Request.Host.Host, ctx.RequestAborted);
     if (entry is null) return Results.NotFound();
 
+    // Mode 2 disclosure gate: when the operator has no privacy policy, the recipient must have made
+    // a choice (30-day preference cookie) before any tracking fires; otherwise pause on the
+    // interstitial. "anon" is honoured exactly like a DNT header.
+    var anonByChoice = false;
+    if (entry is { DisclosureRequired: true, UserLinkCodeId: not null })
+    {
+        var pref = ctx.Request.Cookies[$"sl_pref_{entry.AccountId}"];
+        if (pref is not ("allow" or "anon"))
+            return Results.Redirect($"/disclosure/{Uri.EscapeDataString(code)}", permanent: false);
+        anonByChoice = pref == "anon";
+    }
+
+    // One-time codes are claimed here — after the disclosure choice — so rendering the interstitial
+    // can't burn them. Losing the race (or a replay) behaves like an unknown code.
+    if (entry is { IsOneTimeUse: true, UserLinkCodeId: not null } &&
+        !await redirectSvc.TryClaimOneTimeAsync(entry.UserLinkCodeId.Value, ctx.RequestAborted))
+        return Results.NotFound();
+
     var ip = ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown";
     var referrer = ctx.Request.Headers.Referer.ToString();
     var ua = ctx.Request.Headers.UserAgent.ToString();
@@ -72,7 +90,8 @@ app.MapGet("/{code}", async (
         ClickedAt: DateTimeOffset.UtcNow,
         AcceptLanguage: acceptLanguage.Length > 0 ? acceptLanguage : null,
         SecFetchSite: secFetchSite.Length > 0 ? secFetchSite : null,
-        PrivacySignal: privacySignal));
+        PrivacySignal: privacySignal || anonByChoice,
+        RawQuery: ctx.Request.QueryString.HasValue ? ctx.Request.QueryString.Value : null));
 
     return Results.Redirect(entry.OriginalUrl, permanent: false);
 }).RequireRateLimiting("redirect");

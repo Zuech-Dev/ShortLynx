@@ -14,5 +14,12 @@ public class AccountEntity
     public DateTimeOffset CreatedAt { get; set; }
     public bool IsActive { get; set; }
 
+    // Privacy & compliance (TRACKING_DISCLOSURE_PLAN): when PrivacyPolicyUrl is unset, Mode 2
+    // (user-attributed) redirects pause on a ShortLynx disclosure interstitial where the recipient
+    // chooses to continue tracked, continue anonymized, or cancel. Setting the URL asserts the
+    // operator discloses link tracking themselves (they must confirm this in the dashboard).
+    public string? PrivacyPolicyUrl { get; set; }
+    public string? TermsOfServiceUrl { get; set; }
+
     public virtual ICollection<MembershipEntity> Memberships { get; set; } = [];
 }

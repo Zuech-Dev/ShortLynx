@@ -212,8 +212,9 @@ public class LinksController(ILinkService linkService, ShortLynxDbContext db) : 
         var b = ClickAggregator.Summarize(rows);
         return Ok(new LinkAnalyticsResponse(
             id, link.OriginalUrl, link.Mode.ToString(),
-            b.TotalClicks, b.UniqueClicks, b.FirstClickAt, b.LastClickAt,
-            codeStats, b.Sources, b.Devices, b.Timeline));
+            b.TotalClicks, b.UniqueClicks, b.HumanClicks, b.HumanUniqueClicks, b.BotClicks,
+            b.FirstClickAt, b.LastClickAt,
+            codeStats, b.Sources, b.Devices, b.Timeline, b.HourlyDistribution));
     }
 
     private static LinkResponse ToLinkResponse(LinkEntity link, string shortCode) =>

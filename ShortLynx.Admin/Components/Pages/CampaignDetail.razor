@@ -25,7 +25,42 @@ else
         <span class="badge badge-gray">@_links.Count link@(_links.Count == 1 ? "" : "s")</span>
     </div>
 
+    @if (_engagement is { RecipientsTotal: > 0 } e)
+    {
+        <div class="card mb-4" data-testid="recipient-engagement">
+            <div class="card-body">
+                <h5 class="card-title">Recipient engagement</h5>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div>
+                        <div class="text-2xl font-bold" data-testid="click-rate">@ClickRatePct(e)%</div>
+                        <div class="text-gray-500 text-sm">Click rate</div>
+                    </div>
+                    <div>
+                        <div class="text-2xl font-bold" data-testid="recipients-clicked">@e.RecipientsClicked <span class="text-base font-normal text-gray-500">of @e.RecipientsTotal</span></div>
+                        <div class="text-gray-500 text-sm">Recipients clicked</div>
+                    </div>
+                    <div>
+                        <div class="text-sm font-medium">@FormatMinutes(e.MedianTimeToFirstClickMinutes)</div>
+                        <div class="text-gray-500 text-sm" title="Half of the recipients who clicked did so within this time of their code being created.">Median time to click</div>
+                    </div>
+                    <div>
+                        <div class="text-sm font-medium">@FormatMinutes(e.P90TimeToFirstClickMinutes)</div>
+                        <div class="text-gray-500 text-sm" title="90% of the recipients who clicked did so within this time of their code being created.">p90 time to click</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
     <ClickBreakdownCard Breakdown="_breakdown" Title="Campaign clicks" />
+
+    @if (_breakdown is { TotalClicks: > 0 })
+    {
+        <div class="mb-4 -mt-2">
+            <a class="btn btn-outline" href="/export/campaign/@Id" download data-testid="export-csv"
+               title="Aggregate statistics only — the same breakdowns shown above, never individual clicks.">Download CSV</a>
+        </div>
+    }
 
     @if (_breakdown is null || _breakdown.TotalClicks == 0)
     {
@@ -62,6 +97,7 @@ else
     Guid _uid, _accountId;
     string _name = string.Empty;
     ClickBreakdown? _breakdown;
+    RecipientEngagementStats? _engagement;
     List<LinkRow> _links = [];
 
     protected override async Task OnParametersSetAsync()
@@ -113,10 +149,10 @@ else
             var scIds = scToLink.Keys.ToList();
             var visits = await db.VisitEntities
                 .Where(v => scIds.Contains(v.ShortCodeId))
-                .Select(v => new { v.ShortCodeId, v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Browser, v.Os, v.Country, v.Language })
+                .Select(v => new { v.ShortCodeId, v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Browser, v.Os, v.Country, v.Language, v.NavigationType, v.TimeZone, v.UtmSource, v.UtmMedium, v.UtmCampaign })
                 .ToListAsync();
             tagged.AddRange(visits.Select(v =>
-                (scToLink[v.ShortCodeId], new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Browser, v.Os, v.Country, v.Language))));
+                (scToLink[v.ShortCodeId], new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Browser, v.Os, v.Country, v.Language, v.NavigationType, v.TimeZone, v.UtmSource, v.UtmMedium, v.UtmCampaign))));
         }
 
         var codeToLink = await db.UserLinkCodeEntities
@@ -128,13 +164,30 @@ else
             var codeIds = codeToLink.Keys.ToList();
             var uvisits = await db.UserVisitEntities
                 .Where(v => codeIds.Contains(v.UserLinkCodeId))
-                .Select(v => new { v.UserLinkCodeId, v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Browser, v.Os, v.Country, v.Language })
+                .Select(v => new { v.UserLinkCodeId, v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Browser, v.Os, v.Country, v.Language, v.NavigationType, v.TimeZone, v.UtmSource, v.UtmMedium, v.UtmCampaign })
                 .ToListAsync();
             tagged.AddRange(uvisits.Select(v =>
-                (codeToLink[v.UserLinkCodeId], new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Browser, v.Os, v.Country, v.Language))));
+                (codeToLink[v.UserLinkCodeId], new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Browser, v.Os, v.Country, v.Language, v.NavigationType, v.TimeZone, v.UtmSource, v.UtmMedium, v.UtmCampaign))));
         }
 
         _breakdown = ClickAggregator.Summarize(tagged.Select(x => x.Row).ToList());
+
+        // Mode 2 recipient engagement: join each provisioned code to its earliest visit.
+        var engagementCodes = await db.UserLinkCodeEntities
+            .Where(c => linkIds.Contains(c.LinkId))
+            .Select(c => new { c.Id, c.CreatedAt })
+            .ToListAsync();
+        // Grouped client-side: SQLite (dev/tests) cannot translate Min over DateTimeOffset.
+        var engCodeIds = engagementCodes.Select(c => c.Id).ToList();
+        var firstClicks = (await db.UserVisitEntities
+                .Where(v => engCodeIds.Contains(v.UserLinkCodeId))
+                .Select(v => new { v.UserLinkCodeId, v.ClickedAt })
+                .ToListAsync())
+            .GroupBy(v => v.UserLinkCodeId)
+            .ToDictionary(g => g.Key, g => g.Min(v => v.ClickedAt));
+        _engagement = RecipientEngagement.Compute(engagementCodes
+            .Select(c => (c.CreatedAt, firstClicks.TryGetValue(c.Id, out var f) ? f : (DateTimeOffset?)null))
+            .ToList());
 
         var byLink = tagged.ToLookup(x => x.LinkId, x => x.Row);
         _links = links
@@ -151,4 +204,18 @@ else
     }
 
     sealed record LinkRow(Guid Id, string Url, string Mode, long TotalClicks, long UniqueClicks);
+
+    static int ClickRatePct(RecipientEngagementStats e)
+        => e.RecipientsTotal == 0 ? 0 : (int)Math.Round(100.0 * e.RecipientsClicked / e.RecipientsTotal);
+
+    // Human-friendly duration for the time-to-first-click percentiles: minutes under an hour,
+    // hours under two days, days beyond that. "—" until any recipient has clicked.
+    static string FormatMinutes(double? minutes) => minutes switch
+    {
+        null => "—",
+        < 1 => "< 1 min",
+        < 60 => $"{minutes:0} min",
+        < 2880 => $"{minutes / 60:0.#} h",
+        _ => $"{minutes / 1440:0.#} d",
+    };
 }

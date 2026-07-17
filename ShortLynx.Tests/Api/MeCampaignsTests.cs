@@ -7,6 +7,7 @@ using ShortLynx.Core.Models.Responses;
 using ShortLynx.Data.Context;
 using ShortLynx.Data.Entities;
 using ShortLynx.Data.Enums;
+using ShortLynx.Services.Analytics;
 
 namespace ShortLynx.Tests.Api;
 
@@ -222,8 +223,17 @@ public class MeCampaignsTests : IClassFixture<ApiFactory>
         Assert.Equal(2, body.Links.Single(l => l.LinkId == anon.Id).UniqueClicks);
         Assert.Equal(2, body.Links.Single(l => l.LinkId == attr.Id).TotalClicks);
 
+        // Every platform here has fewer than the k=10 anonymity threshold, so they all fold into a
+        // single "Other" bucket — the total is preserved but no small bucket is ever exposed.
         Assert.Equal(5, body.Sources.Sum(s => s.Count));
-        Assert.Equal(2, body.Sources.Single(s => s.Source == nameof(ClickSource.Twitter)).Count);
+        Assert.Equal(new SourceCount("Other", 5), Assert.Single(body.Sources));
+
+        // Mode 2 engagement: both provisioned codes were clicked, so the click rate is 2/2 and the
+        // time-to-first-click percentiles are populated.
+        Assert.Equal(2, body.RecipientsTotal);
+        Assert.Equal(2, body.RecipientsClicked);
+        Assert.NotNull(body.MedianTimeToFirstClickMinutes);
+        Assert.NotNull(body.P90TimeToFirstClickMinutes);
         Assert.Equal(2, body.Timeline.Count); // Day1, Day2
         Assert.Equal(Day1, body.FirstClickAt);
         Assert.Equal(Day2, body.LastClickAt);

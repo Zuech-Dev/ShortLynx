@@ -86,12 +86,16 @@ public static class ServiceExtensions
         services.AddSingleton<ITokenProtector, DataProtectionTokenProtector>();
         services.AddHttpClient<ISocialConnector, BlueskyConnector>();
         services.AddHttpClient<ISocialConnector, MastodonConnector>();
-        // Threads is OAuth-only (gated, Meta App Review) — registered as IOAuthSocialConnector for the
-        // dashboard's authorize/callback endpoints, and bridged onto ISocialConnector so it also
-        // participates in publish/metrics like Bluesky/Mastodon.
+        // OAuth-only platforms (gated: Meta App Review / Reddit pre-approval) — registered as concrete
+        // typed clients and bridged onto ISocialConnector so they participate in publish/metrics like
+        // Bluesky/Mastodon; the dashboard's authorize/callback endpoints pick the right one out of the
+        // set via OAuthConnectorResolver (a single IOAuthSocialConnector registration can't hold two).
         services.Configure<ThreadsOptions>(configuration.GetSection("Threads"));
-        services.AddHttpClient<IOAuthSocialConnector, ThreadsConnector>();
-        services.AddScoped<ISocialConnector>(sp => sp.GetRequiredService<IOAuthSocialConnector>());
+        services.AddHttpClient<ThreadsConnector>();
+        services.AddScoped<ISocialConnector>(sp => sp.GetRequiredService<ThreadsConnector>());
+        services.Configure<RedditOptions>(configuration.GetSection("Reddit"));
+        services.AddHttpClient<RedditConnector>();
+        services.AddScoped<ISocialConnector>(sp => sp.GetRequiredService<RedditConnector>());
         services.AddScoped<ISocialConnectionService, SocialConnectionService>();
         services.AddScoped<ISocialPublishService, SocialPublishService>();
         services.Configure<SocialMetricsOptions>(configuration.GetSection("SocialMetrics"));

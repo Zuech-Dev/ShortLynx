@@ -2,7 +2,11 @@ using ShortLynx.Data.Enums;
 
 namespace ShortLynx.Services.Analytics;
 
-/// <summary>A visit reduced to just the fields analytics aggregates over (no IP, no raw UA/referrer).</summary>
+/// <summary>
+/// A visit reduced to the stored, low-entropy fields analytics reads — never the raw IP or raw
+/// UA/referrer. Most are aggregated over; <see cref="ReferrerHost"/> is carried for the per-click table
+/// (it's already reduced to a registrable host at write time, so surfacing it leaks nothing new).
+/// </summary>
 public readonly record struct VisitRow(
     string HashedIp,
     ClickSource Source,
@@ -16,7 +20,8 @@ public readonly record struct VisitRow(
     string? TimeZone = null,
     string? UtmSource = null,
     string? UtmMedium = null,
-    string? UtmCampaign = null);
+    string? UtmCampaign = null,
+    string? ReferrerHost = null);
 
 /// <summary>Clicks attributed to one platform (see <see cref="ClickSource"/>).</summary>
 public sealed record SourceCount(string Source, long Count);

@@ -123,45 +123,10 @@ public class MeLinksController(
         var link = await db.LinkEntities.FirstOrDefaultAsync(l => l.Id == id && l.AccountId == AccountId, ct);
         if (link is null) return NotFound();
 
-        List<CodeClickStats> codeStats;
-        List<VisitRow> rows;
-
-        if (link.Mode == LinkMode.Anonymous)
-        {
-            var sc = await db.ShortCodeEntities.FirstOrDefaultAsync(x => x.LinkId == id, ct);
-            if (sc is null)
-            {
-                codeStats = [];
-                rows = [];
-            }
-            else
-            {
-                rows = (await db.VisitEntities
-                        .Where(v => v.ShortCodeId == sc.Id)
-                        .Select(v => new { v.HashedIp, v.Source, v.Device, v.ClickedAt })
-                        .ToListAsync(ct))
-                    .Select(v => new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt))
-                    .ToList();
-                codeStats = [new CodeClickStats(sc.Code, null, rows.Count)];
-            }
-        }
-        else
-        {
-            var codes = await db.UserLinkCodeEntities.Where(c => c.LinkId == id).ToListAsync(ct);
-            var codeIds = codes.Select(c => c.Id).ToList();
-            var visits = await db.UserVisitEntities
-                .Where(v => codeIds.Contains(v.UserLinkCodeId))
-                .Select(v => new { v.UserLinkCodeId, v.HashedIp, v.Source, v.Device, v.ClickedAt })
-                .ToListAsync(ct);
-
-            var countByCode = visits
-                .GroupBy(v => v.UserLinkCodeId)
-                .ToDictionary(g => g.Key, g => g.LongCount());
-            codeStats = codes
-                .Select(c => new CodeClickStats(c.Code, c.UserId, countByCode.GetValueOrDefault(c.Id, 0)))
-                .ToList();
-            rows = visits.Select(v => new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt)).ToList();
-        }
+        var rows = await LinkVisitQueries.LoadLinkRowsAsync(db, link, ct);
+        var codeStats = (await LinkVisitQueries.LoadCodeCountsAsync(db, link, ct))
+            .Select(c => new CodeClickStats(c.Code, c.UserId, c.Clicks))
+            .ToList();
 
         var b = ClickAggregator.Summarize(rows);
         return Ok(new LinkAnalyticsResponse(

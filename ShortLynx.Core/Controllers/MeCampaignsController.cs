@@ -151,49 +151,11 @@ public class MeCampaignsController(ICampaignService campaigns, ShortLynxDbContex
             .ToList());
     }
 
-    // Resolves every visit for the given links, tagged with its link id. Anonymous links resolve via
-    // their short code → Visits; user-attributed links via their per-recipient codes → UserVisits.
+    // Every visit for the given links, tagged with its link id — see LinkVisitQueries for the rule.
     private async Task<List<(Guid LinkId, VisitRow Row)>> GatherVisitsAsync(List<Guid> linkIds, CancellationToken ct)
-    {
-        var tagged = new List<(Guid, VisitRow)>();
-        if (linkIds.Count == 0) return tagged;
-
-        // Mode 1: short code → link.
-        var shortCodeToLink = await db.ShortCodeEntities
-            .Where(sc => linkIds.Contains(sc.LinkId))
-            .Select(sc => new { sc.Id, sc.LinkId })
-            .ToDictionaryAsync(x => x.Id, x => x.LinkId, ct);
-
-        if (shortCodeToLink.Count > 0)
-        {
-            var scIds = shortCodeToLink.Keys.ToList();
-            var visits = await db.VisitEntities
-                .Where(v => scIds.Contains(v.ShortCodeId))
-                .Select(v => new { v.ShortCodeId, v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Browser, v.Os, v.Country, v.Language, v.NavigationType, v.TimeZone, v.UtmSource, v.UtmMedium, v.UtmCampaign })
-                .ToListAsync(ct);
-            tagged.AddRange(visits.Select(v =>
-                (shortCodeToLink[v.ShortCodeId], new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Browser, v.Os, v.Country, v.Language, v.NavigationType, v.TimeZone, v.UtmSource, v.UtmMedium, v.UtmCampaign))));
-        }
-
-        // Mode 2: user-link code → link.
-        var codeToLink = await db.UserLinkCodeEntities
-            .Where(c => linkIds.Contains(c.LinkId))
-            .Select(c => new { c.Id, c.LinkId })
-            .ToDictionaryAsync(x => x.Id, x => x.LinkId, ct);
-
-        if (codeToLink.Count > 0)
-        {
-            var codeIds = codeToLink.Keys.ToList();
-            var userVisits = await db.UserVisitEntities
-                .Where(v => codeIds.Contains(v.UserLinkCodeId))
-                .Select(v => new { v.UserLinkCodeId, v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Browser, v.Os, v.Country, v.Language, v.NavigationType, v.TimeZone, v.UtmSource, v.UtmMedium, v.UtmCampaign })
-                .ToListAsync(ct);
-            tagged.AddRange(userVisits.Select(v =>
-                (codeToLink[v.UserLinkCodeId], new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Browser, v.Os, v.Country, v.Language, v.NavigationType, v.TimeZone, v.UtmSource, v.UtmMedium, v.UtmCampaign))));
-        }
-
-        return tagged;
-    }
+        => (await LinkVisitQueries.LoadRowsByLinkAsync(db, linkIds, ct))
+            .Select(t => (t.LinkId, t.Row))
+            .ToList();
 
     private async Task<Dictionary<Guid, int>> LinkCountsAsync(CancellationToken ct)
         => await db.LinkEntities

@@ -3,6 +3,7 @@
 @using System.ComponentModel.DataAnnotations
 @using Microsoft.Extensions.DependencyInjection
 @using Microsoft.Extensions.Options
+@using ShortLynx.Services.Analytics
 @using ShortLynx.Services.Links
 @inject IDbContextFactory<ShortLynxDbContext> DbFactory
 @inject IServiceScopeFactory ScopeFactory
@@ -177,29 +178,19 @@ else
 
         var linkIds = links.Select(l => l.Id).ToList();
 
-        var codes = await db.ShortCodeEntities
-            .Where(sc => linkIds.Contains(sc.LinkId))
-            .ToListAsync();
-
-        var codeMap = codes.ToDictionary(sc => sc.LinkId, sc => sc);
-        var codeIds = codes.Select(sc => sc.Id).ToList();
-
-        var visits = await db.VisitEntities
-            .Where(v => codeIds.Contains(v.ShortCodeId))
-            .GroupBy(v => v.ShortCodeId)
-            .Select(g => new { Id = g.Key, Count = g.Count() })
-            .ToListAsync();
-
-        var clickMap = visits.ToDictionary(v => v.Id, v => v.Count);
+        // Shared codes only supply the displayed code for anonymous links; the click *count* comes from
+        // LinkVisitQueries so user-attributed links (whose clicks live in UserVisits) aren't shown as 0.
+        var codeMap = (await db.ShortCodeEntities
+                .Where(sc => linkIds.Contains(sc.LinkId))
+                .Select(sc => new { sc.LinkId, sc.Code })
+                .ToListAsync())
+            .ToDictionary(sc => sc.LinkId, sc => sc.Code);
+        var clickMap = await LinkVisitQueries.CountByLinkAsync(db, linkIds);
 
         _rows = links.Select(l =>
-        {
-            var sc = codeMap.GetValueOrDefault(l.Id);
-            var clicks = sc is not null ? clickMap.GetValueOrDefault(sc.Id, 0) : 0;
-            return new LinkRow(l.Id, l.OriginalUrl, l.Mode.ToString(),
-                sc?.Code ?? string.Empty, l.ApiKey?.Name ?? "Dashboard",
-                l.CreatedAt, clicks);
-        }).ToList();
+            new LinkRow(l.Id, l.OriginalUrl, l.Mode.ToString(),
+                codeMap.GetValueOrDefault(l.Id, string.Empty), l.ApiKey?.Name ?? "Dashboard",
+                l.CreatedAt, (int)clickMap.GetValueOrDefault(l.Id, 0))).ToList();
 
         _loaded = true;
     }

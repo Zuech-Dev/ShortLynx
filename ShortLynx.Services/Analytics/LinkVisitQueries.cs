@@ -11,6 +11,29 @@ public readonly record struct LinkVisitRow(Guid LinkId, VisitRow Row);
 public readonly record struct CodeClickCount(Guid CodeId, string Code, Guid? UserId, long Clicks);
 
 /// <summary>
+/// How a link's clicks split by what we can actually attribute them to. Post clicks are *exact* (the
+/// code identifies the post); organic clicks are everything that arrived on the link's shared code —
+/// QR scans, the copy button, reshares — where a referrer guess (<c>ClickSource</c>) is the only signal
+/// available. Post clicks are a SUBSET of the link's total, never a sibling to be added to it.
+/// </summary>
+public readonly record struct LinkAttributionSplit(
+    long AttributedClicks,
+    long OrganicClicks,
+    IReadOnlyList<PostClickCount> Posts);
+
+/// <summary>Clicks attributed to one published post, with the engagement the platform reported.</summary>
+public readonly record struct PostClickCount(
+    Guid SocialPostId,
+    string Platform,
+    string Handle,
+    string? PostUrl,
+    DateTimeOffset PostedAt,
+    long Clicks,
+    long UniqueClicks,
+    long? Impressions,
+    long? Likes);
+
+/// <summary>
 /// **The** definition of "a click on this link" — every analytics surface reads through here so the rule
 /// lives in one place. A link's clicks come from more than one code table:
 ///
@@ -221,6 +244,54 @@ public static class LinkVisitQueries
             counts[r.LinkId] = counts.GetValueOrDefault(r.LinkId) + r.Clicks;
 
         return counts;
+    }
+
+    /// <summary>
+    /// Splits a link's clicks into what each published post drove versus everything else ("organic" —
+    /// the shared code: QR, copy button, reshares). This is the answer referrer sniffing could never
+    /// give: two posts on the same platform are separable, and it works under DNT/GPC because the code
+    /// identifies the post, not the clicker.
+    /// </summary>
+    public static async Task<LinkAttributionSplit> LoadAttributionSplitAsync(
+        ShortLynxDbContext db, Guid linkId, CancellationToken ct = default)
+    {
+        var posts = await db.SocialPostEntities
+            .Where(p => p.LinkId == linkId)
+            .Select(p => new
+            {
+                p.Id, p.Platform, p.Handle, p.PostUrl, p.PostedAt, p.Impressions, p.Likes,
+            })
+            .ToListAsync(ct);
+
+        // Clicks per post code, plus the hashed IPs so uniques can be counted per post. Pulled as rows
+        // (not GroupBy in SQL) because unique-counting needs the hashes and the set is small.
+        var postClickRows = await db.VisitEntities
+            .Where(v => v.SocialPostCode!.LinkId == linkId && v.SocialPostCode.SocialPostId != null)
+            .Select(v => new { PostId = v.SocialPostCode!.SocialPostId!.Value, v.HashedIp })
+            .ToListAsync(ct);
+
+        var byPost = postClickRows
+            .GroupBy(r => r.PostId)
+            .ToDictionary(
+                g => g.Key,
+                g => (Clicks: g.LongCount(), Unique: g.Select(x => x.HashedIp).Distinct().LongCount()));
+
+        var organic = await db.VisitEntities
+            .LongCountAsync(v => v.ShortCodeId != null && v.ShortCode!.LinkId == linkId, ct);
+
+        return new LinkAttributionSplit(
+            AttributedClicks: postClickRows.Count,
+            OrganicClicks: organic,
+            Posts: posts
+                .Select(p =>
+                {
+                    var stats = byPost.GetValueOrDefault(p.Id);
+                    return new PostClickCount(
+                        p.Id, p.Platform.ToString(), p.Handle, p.PostUrl, p.PostedAt,
+                        stats.Clicks, stats.Unique, p.Impressions, p.Likes);
+                })
+                .OrderByDescending(p => p.Clicks)
+                .ToList());
     }
 
     /// <summary>Total clicks across every link in an account (all code types).</summary>

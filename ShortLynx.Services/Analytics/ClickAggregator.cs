@@ -67,7 +67,17 @@ public sealed record ClickBreakdown(
     IReadOnlyList<HourlyClicks> LocalHourlyDistribution,
     long BotClicks,
     long HumanClicks,
-    long HumanUniqueClicks);
+    long HumanUniqueClicks,
+    // Repeat-click signal. IMPORTANT: the IP hash rotates hourly by design, so a "unique" is really a
+    // distinct clicker *within one clock hour*. These therefore measure repeat clicking in a short
+    // burst (double-taps, re-opening a post, prefetch) — NOT whether someone came back the next day,
+    // which the hashing deliberately makes unknowable. Surfaces must say "within an hour" or they lie.
+    long RepeatClicks = 0,
+    double ClicksPerUnique = 0,
+    // How many uniques clicked exactly once, exactly twice, or three-plus times.
+    long UniquesClickedOnce = 0,
+    long UniquesClickedTwice = 0,
+    long UniquesClickedThreePlus = 0);
 
 /// <summary>
 /// Reduces a set of visits to click totals plus platform/device/daily and browser/OS/language/country
@@ -120,6 +130,15 @@ public static class ClickAggregator
 
         var humanRows = rows.Where(r => r.Device != DeviceType.Bot).ToList();
 
+        // Repeat clicking, measured over human rows only — a bot hammering a link would otherwise
+        // dominate the ratio and make it read as engagement. Bounded to one hour by the rotating hash
+        // (see the ClickBreakdown remarks); callers must label it as such.
+        var clicksPerHumanIp = humanRows
+            .GroupBy(r => r.HashedIp)
+            .Select(g => g.LongCount())
+            .ToList();
+        var humanUnique = clicksPerHumanIp.Count;
+
         return new ClickBreakdown(
             TotalClicks: rows.Count,
             UniqueClicks: rows.Select(r => r.HashedIp).Distinct().Count(),
@@ -140,7 +159,12 @@ public static class ClickAggregator
             LocalHourlyDistribution: localHourly,
             BotClicks: rows.Count - humanRows.Count,
             HumanClicks: humanRows.Count,
-            HumanUniqueClicks: humanRows.Select(r => r.HashedIp).Distinct().Count());
+            HumanUniqueClicks: humanUnique,
+            RepeatClicks: humanRows.Count - humanUnique,
+            ClicksPerUnique: humanUnique == 0 ? 0 : Math.Round((double)humanRows.Count / humanUnique, 2),
+            UniquesClickedOnce: clicksPerHumanIp.Count(c => c == 1),
+            UniquesClickedTwice: clicksPerHumanIp.Count(c => c == 2),
+            UniquesClickedThreePlus: clicksPerHumanIp.Count(c => c >= 3));
     }
 
     // Converts a click instant to the visitor's local hour. IANA ids resolve via ICU on all

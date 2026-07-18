@@ -137,17 +137,21 @@ public class MeCampaignsController(ICampaignService campaigns, ShortLynxDbContex
             .ToListAsync(ct);
         if (codes.Count == 0) return RecipientEngagement.Compute([]);
 
-        // Grouped client-side: SQLite (dev/tests) cannot translate Min over DateTimeOffset.
+        // Grouped client-side: SQLite (dev/tests) cannot translate Min over DateTimeOffset. The same
+        // rows give the per-recipient click count — repeat clicks here are exact and unbounded in time
+        // (a recipient code identifies the person, so no hash and no dedup window is involved).
         var codeIds = codes.Select(c => c.Id).ToList();
-        var firstClicks = (await db.UserVisitEntities
+        var byCode = (await db.UserVisitEntities
                 .Where(v => codeIds.Contains(v.UserLinkCodeId))
                 .Select(v => new { v.UserLinkCodeId, v.ClickedAt })
                 .ToListAsync(ct))
             .GroupBy(v => v.UserLinkCodeId)
-            .ToDictionary(g => g.Key, g => g.Min(v => v.ClickedAt));
+            .ToDictionary(g => g.Key, g => (First: g.Min(v => v.ClickedAt), Clicks: g.LongCount()));
 
         return RecipientEngagement.Compute(codes
-            .Select(c => (c.CreatedAt, firstClicks.TryGetValue(c.Id, out var f) ? f : (DateTimeOffset?)null))
+            .Select(c => byCode.TryGetValue(c.Id, out var s)
+                ? (c.CreatedAt, (DateTimeOffset?)s.First, s.Clicks)
+                : (c.CreatedAt, null, 0L))
             .ToList());
     }
 

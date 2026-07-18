@@ -16,6 +16,40 @@ public class ClickAggregatorTests
         => Enumerable.Range(0, n).Select(make);
 
     [Fact]
+    public void Summarize_RepeatClicks_MeasureReturningClickers_NotBots()
+    {
+        // Three humans: one clicked 3×, one clicked 2×, one clicked once (6 clicks / 3 uniques).
+        // Plus a bot hammering 5× — excluded, or it would masquerade as engagement.
+        var rows = new List<VisitRow>
+        {
+            Row("a"), Row("a"), Row("a"),
+            Row("b"), Row("b"),
+            Row("c"),
+        };
+        rows.AddRange(Many(5, _ => Row("bot", device: DeviceType.Bot)));
+
+        var b = ClickAggregator.Summarize(rows);
+
+        Assert.Equal(6, b.HumanClicks);
+        Assert.Equal(3, b.HumanUniqueClicks);
+        Assert.Equal(3, b.RepeatClicks);        // 6 human clicks − 3 distinct clickers
+        Assert.Equal(2.0, b.ClicksPerUnique);   // 6 / 3, bot excluded from both
+        Assert.Equal(1, b.UniquesClickedOnce);
+        Assert.Equal(1, b.UniquesClickedTwice);
+        Assert.Equal(1, b.UniquesClickedThreePlus);
+    }
+
+    [Fact]
+    public void Summarize_NoClicks_YieldsZeroRepeatStats()
+    {
+        var b = ClickAggregator.Summarize([]);
+
+        Assert.Equal(0, b.RepeatClicks);
+        Assert.Equal(0, b.ClicksPerUnique); // no divide-by-zero
+        Assert.Equal(0, b.UniquesClickedOnce);
+    }
+
+    [Fact]
     public void Summarize_TalliesStringDimensions_DroppingNulls()
     {
         // Chrome and "en" clear the k=10 threshold; the null-browser/null-language row is dropped

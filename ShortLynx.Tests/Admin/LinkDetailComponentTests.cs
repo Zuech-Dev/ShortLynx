@@ -18,13 +18,13 @@ public class LinkDetailComponentTests : BunitContext
 {
     private sealed class FakePublishService : ShortLynx.Services.Social.ISocialPublishService
     {
-        public readonly List<(Guid AccountId, Guid LinkId, Guid[] ConnectionIds, string? Text, string ShortUrl)> Calls = [];
+        public readonly List<(Guid AccountId, Guid LinkId, Guid[] ConnectionIds, string? Text, string? PublicBaseUrl)> Calls = [];
 
         public Task<IReadOnlyList<ShortLynx.Services.Social.PublishResult>> PublishLinkAsync(
             Guid accountId, Guid linkId, IReadOnlyCollection<Guid> connectionIds,
-            string? text, string shortUrl, CancellationToken ct = default)
+            string? text, string? publicBaseUrl, CancellationToken ct = default)
         {
-            Calls.Add((accountId, linkId, [.. connectionIds], text, shortUrl));
+            Calls.Add((accountId, linkId, [.. connectionIds], text, publicBaseUrl));
             IReadOnlyList<ShortLynx.Services.Social.PublishResult> results =
                 connectionIds.Select(id => new ShortLynx.Services.Social.PublishResult(
                     id, "me.bsky.social", true,
@@ -204,7 +204,8 @@ public class LinkDetailComponentTests : BunitContext
         Assert.Equal(linkId, call.LinkId);
         Assert.Equal([connectionId], call.ConnectionIds);
         Assert.Equal("Big news!", call.Text);
-        Assert.Equal("https://s.example/abc12345", call.ShortUrl);
+        // The page passes the deployment's base URL; the publish service mints each post's own code off it.
+        Assert.Equal("https://s.example", call.PublicBaseUrl);
 
         // Result list + refreshed published-posts table render.
         Assert.Contains("view post", cut.Find("[data-testid=publish-results]").InnerHtml);
@@ -268,6 +269,67 @@ public class LinkDetailComponentTests : BunitContext
         Assert.Equal("https://s.example/abc12345", link.GetAttribute("href"));
         Assert.Contains("https://s.example/abc12345", link.TextContent);
         Assert.NotNull(cut.Find("[data-testid=copy-short-url]"));
+    }
+
+    [Fact]
+    public void RepeatClicks_ShownWithTheWithinAnHourCaveat()
+    {
+        // The seeded visits have ip1 clicking twice, so there's exactly one repeat click.
+        var linkId = SeedAnonymousLinkWithVisits();
+
+        var cut = Render<LinkDetail>(p => p.Add(c => c.Id, linkId));
+
+        var repeat = cut.Find("[data-testid=repeat-clicks]").TextContent;
+        // The caveat is non-negotiable: without it the number reads as "came back later", which the
+        // hourly-rotating hash makes unknowable.
+        Assert.Contains("within a single hour", repeat);
+        Assert.Contains("clicked once", repeat);
+    }
+
+    [Fact]
+    public void PostsTable_ShowsExactPerPostClicks_AndAttributedVsOrganicSplit()
+    {
+        var linkId = SeedAnonymousLink(); // shared code "abc12345"
+        var factory = Services.GetRequiredService<IDbContextFactory<ShortLynxDbContext>>();
+        using (var db = factory.CreateDbContext())
+        {
+            var sharedCodeId = db.ShortCodeEntities.Single(c => c.LinkId == linkId).Id;
+            var post = new SocialPostEntity
+            {
+                Id = Guid.CreateVersion7(), AccountId = _accountId, LinkId = linkId,
+                Platform = SocialPlatform.Bluesky, Handle = "me.bsky.social", ExternalPostId = "at://x",
+                PostUrl = "https://bsky.app/x", Text = "hi", PostedAt = DateTimeOffset.UtcNow, Likes = 40,
+            };
+            var postCode = new SocialPostCodeEntity
+            {
+                Id = Guid.CreateVersion7(), LinkId = linkId, SocialPostId = post.Id,
+                Code = "postcode", CreatedAt = DateTimeOffset.UtcNow, IsActive = true,
+            };
+            db.AddRange(post, postCode);
+            // 2 clicks traced to the post, 1 organic on the shared code.
+            db.VisitEntities.AddRange(
+                PostVisit(postCode.Id, "p1"), PostVisit(postCode.Id, "p2"), SharedVisit(sharedCodeId, "o1"));
+            db.SaveChanges();
+        }
+
+        var cut = Render<LinkDetail>(p => p.Add(c => c.Id, linkId));
+
+        Assert.Equal("2", cut.Find("[data-testid=post-clicks]").TextContent.Trim());
+        var split = cut.Find("[data-testid=attribution-split]").TextContent;
+        Assert.Contains("2", split);
+        Assert.Contains("1", split);
+        Assert.Contains("organic", split);
+
+        static VisitEntity PostVisit(Guid codeId, string ip) => new()
+        {
+            Id = Guid.CreateVersion7(), SocialPostCodeId = codeId, HashedIp = ip,
+            Source = ClickSource.Direct, Device = DeviceType.Mobile, ClickedAt = DateTimeOffset.UtcNow,
+        };
+        static VisitEntity SharedVisit(Guid codeId, string ip) => new()
+        {
+            Id = Guid.CreateVersion7(), ShortCodeId = codeId, HashedIp = ip,
+            Source = ClickSource.Direct, Device = DeviceType.Desktop, ClickedAt = DateTimeOffset.UtcNow,
+        };
     }
 
     private Guid SeedAnonymousLinkWithVisits()

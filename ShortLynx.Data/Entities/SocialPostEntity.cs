@@ -45,4 +45,11 @@ public class SocialPostEntity
     public virtual AccountEntity Account { get; set; } = null!;
     public virtual LinkEntity Link { get; set; } = null!;
     public virtual SocialConnectionEntity? SocialConnection { get; set; }
+
+    /// <summary>
+    /// This post's own attribution code, if one was minted (see <see cref="SocialPostCodeEntity"/>).
+    /// Absent when the author inlined their own short URL — those posts fall back to referrer-based
+    /// <c>ClickSource</c> attribution.
+    /// </summary>
+    public virtual SocialPostCodeEntity? SocialPostCode { get; set; }
 }

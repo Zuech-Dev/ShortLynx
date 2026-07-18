@@ -84,6 +84,7 @@ app.MapGet("/{code}", async (
         ShortCodeId: entry.ShortCodeId,
         UserLinkCodeId: entry.UserLinkCodeId,
         UserId: entry.UserId,
+        SocialPostCodeId: entry.SocialPostCodeId,
         RawIp: ip,
         Referrer: referrer.Length > 0 ? referrer : null,
         UserAgent: ua.Length > 0 ? ua : null,

@@ -69,9 +69,36 @@ public partial class ShortLynxDbContext
                 {
                     entity.HasKey(e => e.Id);
                     entity.HasOne<ShortCodeEntity>(e => e.ShortCode).WithMany();
+                    // A visit arrives on either the link's shared code or one post's code; the FK that's
+                    // set identifies which. Indexed because per-post analytics reads by it.
+                    entity.HasOne(e => e.SocialPostCode)
+                          .WithMany()
+                          .HasForeignKey(e => e.SocialPostCodeId)
+                          .OnDelete(DeleteBehavior.Cascade);
+                    entity.HasIndex(e => e.SocialPostCodeId);
                     entity.Property(e => e.Id).ValueGeneratedNever();
                     entity.Property(e => e.Source).HasConversion<int>();
                     entity.Property(e => e.Device).HasConversion<int>();
+                }
+            )
+           .Entity<SocialPostCodeEntity>(entity =>
+                {
+                    entity.HasKey(e => e.Id);
+                    entity.Property(e => e.Id).ValueGeneratedNever();
+                    // Many codes per link (unlike ShortCodes' one-per-link) — the UserLinkCodes shape.
+                    entity.HasIndex(e => e.LinkId);
+                    entity.HasIndex(e => e.Code).IsUnique();
+                    entity.HasOne(e => e.Link)
+                          .WithMany()
+                          .HasForeignKey(e => e.LinkId)
+                          .OnDelete(DeleteBehavior.Cascade);
+                    // SetNull, not Cascade: deleting a link already cascades to both the post and the
+                    // code, so a second cascade path here is redundant (and SQL Server rejects those).
+                    entity.HasOne(e => e.SocialPost)
+                          .WithMany()
+                          .HasForeignKey(e => e.SocialPostId)
+                          .OnDelete(DeleteBehavior.SetNull);
+                    entity.HasIndex(e => e.SocialPostId);
                 }
             )
            .Entity<UserVisitEntity>(entity =>
@@ -213,6 +240,8 @@ public partial class ShortLynxDbContext
                           .WithMany()
                           .HasForeignKey(e => e.SocialConnectionId)
                           .OnDelete(DeleteBehavior.SetNull);
+                    // The post's own attribution code is owned by SocialPostCodeEntity (it points here),
+                    // because the code must exist before the post does — it goes in the post's text.
                 }
             )
            .Entity<SocialConnectionEntity>(entity =>

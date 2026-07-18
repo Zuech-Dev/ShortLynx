@@ -12,6 +12,7 @@ public class InMemoryVisitEventSinkTests
         ShortCodeId: Guid.CreateVersion7(),
         UserLinkCodeId: null,
         UserId: null,
+        SocialPostCodeId: null,
         RawIp: "1.2.3.4",
         Referrer: null,
         UserAgent: null,

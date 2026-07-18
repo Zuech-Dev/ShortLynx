@@ -81,9 +81,10 @@ public class MeLinkPublishTests : IClassFixture<ApiFactory>
         Assert.True(target.Success);
         Assert.Equal("https://bsky.app/profile/me.bsky.social/post/rk1", target.PostUrl);
 
-        // The composed post carries the link's short code (the tracked URL is the point).
-        Assert.Contains(link.ShortCode, connector.LastPublishedText);
+        // The composed post carries a per-post code (NOT the link's shared code) so its clicks
+        // attribute exactly to this post — that's the whole point of per-post attribution.
         Assert.StartsWith("Big news!", connector.LastPublishedText);
+        Assert.DoesNotContain(link.ShortCode, connector.LastPublishedText);
 
         var posts = await (await client.GetAsync($"/me/links/{link.Id}/posts"))
             .Content.ReadFromJsonAsync<List<SocialPostResponse>>();

@@ -137,38 +137,8 @@ else
             .ToListAsync();
         var linkIds = links.Select(l => l.Id).ToList();
 
-        // (linkId, row) across both link modes: anonymous short codes → Visits, recipient codes → UserVisits.
-        var tagged = new List<(Guid LinkId, VisitRow Row)>();
-
-        var scToLink = await db.ShortCodeEntities
-            .Where(sc => linkIds.Contains(sc.LinkId))
-            .Select(sc => new { sc.Id, sc.LinkId })
-            .ToDictionaryAsync(x => x.Id, x => x.LinkId);
-        if (scToLink.Count > 0)
-        {
-            var scIds = scToLink.Keys.ToList();
-            var visits = await db.VisitEntities
-                .Where(v => scIds.Contains(v.ShortCodeId))
-                .Select(v => new { v.ShortCodeId, v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Browser, v.Os, v.Country, v.Language, v.NavigationType, v.TimeZone, v.UtmSource, v.UtmMedium, v.UtmCampaign })
-                .ToListAsync();
-            tagged.AddRange(visits.Select(v =>
-                (scToLink[v.ShortCodeId], new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Browser, v.Os, v.Country, v.Language, v.NavigationType, v.TimeZone, v.UtmSource, v.UtmMedium, v.UtmCampaign))));
-        }
-
-        var codeToLink = await db.UserLinkCodeEntities
-            .Where(c => linkIds.Contains(c.LinkId))
-            .Select(c => new { c.Id, c.LinkId })
-            .ToDictionaryAsync(x => x.Id, x => x.LinkId);
-        if (codeToLink.Count > 0)
-        {
-            var codeIds = codeToLink.Keys.ToList();
-            var uvisits = await db.UserVisitEntities
-                .Where(v => codeIds.Contains(v.UserLinkCodeId))
-                .Select(v => new { v.UserLinkCodeId, v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Browser, v.Os, v.Country, v.Language, v.NavigationType, v.TimeZone, v.UtmSource, v.UtmMedium, v.UtmCampaign })
-                .ToListAsync();
-            tagged.AddRange(uvisits.Select(v =>
-                (codeToLink[v.UserLinkCodeId], new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Browser, v.Os, v.Country, v.Language, v.NavigationType, v.TimeZone, v.UtmSource, v.UtmMedium, v.UtmCampaign))));
-        }
+        // Every click across the campaign's links, tagged by link — see LinkVisitQueries for the rule.
+        var tagged = await LinkVisitQueries.LoadRowsByLinkAsync(db, linkIds);
 
         _breakdown = ClickAggregator.Summarize(tagged.Select(x => x.Row).ToList());
 
@@ -177,16 +147,19 @@ else
             .Where(c => linkIds.Contains(c.LinkId))
             .Select(c => new { c.Id, c.CreatedAt })
             .ToListAsync();
-        // Grouped client-side: SQLite (dev/tests) cannot translate Min over DateTimeOffset.
+        // Grouped client-side: SQLite (dev/tests) cannot translate Min over DateTimeOffset. The same
+        // rows yield each recipient's click count — exact repeat engagement, no hash/dedup window.
         var engCodeIds = engagementCodes.Select(c => c.Id).ToList();
-        var firstClicks = (await db.UserVisitEntities
+        var byCode = (await db.UserVisitEntities
                 .Where(v => engCodeIds.Contains(v.UserLinkCodeId))
                 .Select(v => new { v.UserLinkCodeId, v.ClickedAt })
                 .ToListAsync())
             .GroupBy(v => v.UserLinkCodeId)
-            .ToDictionary(g => g.Key, g => g.Min(v => v.ClickedAt));
+            .ToDictionary(g => g.Key, g => (First: g.Min(v => v.ClickedAt), Clicks: g.LongCount()));
         _engagement = RecipientEngagement.Compute(engagementCodes
-            .Select(c => (c.CreatedAt, firstClicks.TryGetValue(c.Id, out var f) ? f : (DateTimeOffset?)null))
+            .Select(c => byCode.TryGetValue(c.Id, out var s)
+                ? (c.CreatedAt, (DateTimeOffset?)s.First, s.Clicks)
+                : (c.CreatedAt, null, 0L))
             .ToList());
 
         var byLink = tagged.ToLookup(x => x.LinkId, x => x.Row);

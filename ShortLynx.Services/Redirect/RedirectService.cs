@@ -16,7 +16,7 @@ public sealed class RedirectService(
 
     // Sentinel cached for unknown codes so a flood of random codes can't hit the DB on every request.
     // Compared by reference; never returned to callers.
-    private static readonly RedirectCacheEntry NegativeSentinel = new(string.Empty, null, null, null);
+    private static readonly RedirectCacheEntry NegativeSentinel = new(string.Empty, null, null, null, null);
 
     private readonly MemoryCacheEntryOptions _cacheOpts = new MemoryCacheEntryOptions()
         .SetSlidingExpiration(TimeSpan.FromSeconds(options.Value.CacheSlidingExpirationSeconds))
@@ -41,7 +41,25 @@ public sealed class RedirectService(
 
         if (sc is not null)
         {
-            var entry = new RedirectCacheEntry(BuildDestination(sc.Link), sc.Id, null, null, sc.Link.CustomDomain?.Domain);
+            var entry = new RedirectCacheEntry(
+                BuildDestination(sc.Link), sc.Id, null, null, null, sc.Link.CustomDomain?.Domain);
+            cache.Set(key, entry, _cacheOpts);
+            return EnforceHost(entry, host);
+        }
+
+        // A social post's own code. Checked before Mode 2 because these are anonymous-link codes like
+        // Mode 1 — same handling, no recipient identity and so no disclosure gate — and social traffic
+        // is the hotter path.
+        var spc = await db.SocialPostCodeEntities
+            .Include(x => x.Link).ThenInclude(l => l.CustomDomain)
+            .Include(x => x.Link).ThenInclude(l => l.Campaign)
+            .Where(x => x.Code == code && x.IsActive && x.Link.IsActive)
+            .FirstOrDefaultAsync(ct);
+
+        if (spc is not null)
+        {
+            var entry = new RedirectCacheEntry(
+                BuildDestination(spc.Link), null, null, null, spc.Id, spc.Link.CustomDomain?.Domain);
             cache.Set(key, entry, _cacheOpts);
             return EnforceHost(entry, host);
         }
@@ -76,7 +94,7 @@ public sealed class RedirectService(
             .FirstOrDefaultAsync(ct);
 
         var mode2Entry = new RedirectCacheEntry(
-            BuildDestination(ulc.Link), null, ulc.Id, ulc.UserId, pinnedHost,
+            BuildDestination(ulc.Link), null, ulc.Id, ulc.UserId, null, pinnedHost,
             DisclosureRequired: string.IsNullOrWhiteSpace(account?.PrivacyPolicyUrl),
             AccountId: ulc.Link.AccountId,
             OperatorName: account?.Name,

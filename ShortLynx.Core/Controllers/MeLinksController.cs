@@ -123,45 +123,10 @@ public class MeLinksController(
         var link = await db.LinkEntities.FirstOrDefaultAsync(l => l.Id == id && l.AccountId == AccountId, ct);
         if (link is null) return NotFound();
 
-        List<CodeClickStats> codeStats;
-        List<VisitRow> rows;
-
-        if (link.Mode == LinkMode.Anonymous)
-        {
-            var sc = await db.ShortCodeEntities.FirstOrDefaultAsync(x => x.LinkId == id, ct);
-            if (sc is null)
-            {
-                codeStats = [];
-                rows = [];
-            }
-            else
-            {
-                rows = (await db.VisitEntities
-                        .Where(v => v.ShortCodeId == sc.Id)
-                        .Select(v => new { v.HashedIp, v.Source, v.Device, v.ClickedAt })
-                        .ToListAsync(ct))
-                    .Select(v => new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt))
-                    .ToList();
-                codeStats = [new CodeClickStats(sc.Code, null, rows.Count)];
-            }
-        }
-        else
-        {
-            var codes = await db.UserLinkCodeEntities.Where(c => c.LinkId == id).ToListAsync(ct);
-            var codeIds = codes.Select(c => c.Id).ToList();
-            var visits = await db.UserVisitEntities
-                .Where(v => codeIds.Contains(v.UserLinkCodeId))
-                .Select(v => new { v.UserLinkCodeId, v.HashedIp, v.Source, v.Device, v.ClickedAt })
-                .ToListAsync(ct);
-
-            var countByCode = visits
-                .GroupBy(v => v.UserLinkCodeId)
-                .ToDictionary(g => g.Key, g => g.LongCount());
-            codeStats = codes
-                .Select(c => new CodeClickStats(c.Code, c.UserId, countByCode.GetValueOrDefault(c.Id, 0)))
-                .ToList();
-            rows = visits.Select(v => new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt)).ToList();
-        }
+        var rows = await LinkVisitQueries.LoadLinkRowsAsync(db, link, ct);
+        var codeStats = (await LinkVisitQueries.LoadCodeCountsAsync(db, link, ct))
+            .Select(c => new CodeClickStats(c.Code, c.UserId, c.Clicks))
+            .ToList();
 
         var b = ClickAggregator.Summarize(rows);
         return Ok(new LinkAnalyticsResponse(
@@ -214,17 +179,17 @@ public class MeLinksController(
         var link = await db.LinkEntities.FirstOrDefaultAsync(l => l.Id == id && l.AccountId == AccountId, ct);
         if (link is null) return NotFound();
 
-        // Public posting needs the shared anonymous code; user-attributed links only have per-recipient
-        // codes, and broadcasting one recipient's code would corrupt that recipient's attribution.
-        var code = await ResolveCodeAsync(link, code: null, ct);
-        if (code is null)
+        // Anonymous links only: user-attributed links exist to give each recipient their own code, and
+        // a public broadcast has no recipient to attribute to.
+        if (link.Mode != LinkMode.Anonymous)
             return BadRequest(new { error = "Only anonymous links can be published (user-attributed links have per-recipient codes)." });
-
-        var shortUrl = await ShortUrlBuilder.BuildAsync(db, link, code, linkOptions.Value.PublicBaseUrl, ct);
 
         try
         {
-            var results = await publisher.PublishLinkAsync(AccountId, id, request.ConnectionIds, request.Text, shortUrl, ct);
+            // The publisher mints a per-post code off this base URL, so it needs the base, not a
+            // pre-resolved short URL.
+            var results = await publisher.PublishLinkAsync(
+                AccountId, id, request.ConnectionIds, request.Text, linkOptions.Value.PublicBaseUrl, ct);
             return Ok(results.Select(r => new PublishTargetResponse(
                 r.ConnectionId, r.Handle, r.Success, r.Post?.PostUrl, r.Error)));
         }
@@ -263,9 +228,19 @@ public class MeLinksController(
             .OrderByDescending(p => p.Id)
             .ToListAsync(ct);
 
-        return posts.Select(p => new SocialPostResponse(
-            p.Id, p.Platform.ToString(), p.Handle, p.PostUrl, p.Text, p.PostedAt,
-            p.Impressions, p.Likes, p.Reposts, p.Replies, p.MetricsUpdatedAt));
+        // Exact per-post clicks (each post has its own code) alongside the platform's engagement — so a
+        // caller can compare "40 likes" against "1 click" without guessing from referrers.
+        var clicksByPost = (await LinkVisitQueries.LoadAttributionSplitAsync(db, linkId, ct))
+            .Posts.ToDictionary(p => p.SocialPostId, p => (p.Clicks, p.UniqueClicks));
+
+        return posts.Select(p =>
+        {
+            var c = clicksByPost.GetValueOrDefault(p.Id);
+            return new SocialPostResponse(
+                p.Id, p.Platform.ToString(), p.Handle, p.PostUrl, p.Text, p.PostedAt,
+                p.Impressions, p.Likes, p.Reposts, p.Replies, p.MetricsUpdatedAt,
+                c.Clicks, c.UniqueClicks);
+        });
     }
 
     // GET /me/links/{id}/qr?format=png|svg&size=<n>&code=<optional>

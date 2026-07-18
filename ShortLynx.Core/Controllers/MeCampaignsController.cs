@@ -137,63 +137,29 @@ public class MeCampaignsController(ICampaignService campaigns, ShortLynxDbContex
             .ToListAsync(ct);
         if (codes.Count == 0) return RecipientEngagement.Compute([]);
 
-        // Grouped client-side: SQLite (dev/tests) cannot translate Min over DateTimeOffset.
+        // Grouped client-side: SQLite (dev/tests) cannot translate Min over DateTimeOffset. The same
+        // rows give the per-recipient click count — repeat clicks here are exact and unbounded in time
+        // (a recipient code identifies the person, so no hash and no dedup window is involved).
         var codeIds = codes.Select(c => c.Id).ToList();
-        var firstClicks = (await db.UserVisitEntities
+        var byCode = (await db.UserVisitEntities
                 .Where(v => codeIds.Contains(v.UserLinkCodeId))
                 .Select(v => new { v.UserLinkCodeId, v.ClickedAt })
                 .ToListAsync(ct))
             .GroupBy(v => v.UserLinkCodeId)
-            .ToDictionary(g => g.Key, g => g.Min(v => v.ClickedAt));
+            .ToDictionary(g => g.Key, g => (First: g.Min(v => v.ClickedAt), Clicks: g.LongCount()));
 
         return RecipientEngagement.Compute(codes
-            .Select(c => (c.CreatedAt, firstClicks.TryGetValue(c.Id, out var f) ? f : (DateTimeOffset?)null))
+            .Select(c => byCode.TryGetValue(c.Id, out var s)
+                ? (c.CreatedAt, (DateTimeOffset?)s.First, s.Clicks)
+                : (c.CreatedAt, null, 0L))
             .ToList());
     }
 
-    // Resolves every visit for the given links, tagged with its link id. Anonymous links resolve via
-    // their short code → Visits; user-attributed links via their per-recipient codes → UserVisits.
+    // Every visit for the given links, tagged with its link id — see LinkVisitQueries for the rule.
     private async Task<List<(Guid LinkId, VisitRow Row)>> GatherVisitsAsync(List<Guid> linkIds, CancellationToken ct)
-    {
-        var tagged = new List<(Guid, VisitRow)>();
-        if (linkIds.Count == 0) return tagged;
-
-        // Mode 1: short code → link.
-        var shortCodeToLink = await db.ShortCodeEntities
-            .Where(sc => linkIds.Contains(sc.LinkId))
-            .Select(sc => new { sc.Id, sc.LinkId })
-            .ToDictionaryAsync(x => x.Id, x => x.LinkId, ct);
-
-        if (shortCodeToLink.Count > 0)
-        {
-            var scIds = shortCodeToLink.Keys.ToList();
-            var visits = await db.VisitEntities
-                .Where(v => scIds.Contains(v.ShortCodeId))
-                .Select(v => new { v.ShortCodeId, v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Browser, v.Os, v.Country, v.Language, v.NavigationType, v.TimeZone, v.UtmSource, v.UtmMedium, v.UtmCampaign })
-                .ToListAsync(ct);
-            tagged.AddRange(visits.Select(v =>
-                (shortCodeToLink[v.ShortCodeId], new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Browser, v.Os, v.Country, v.Language, v.NavigationType, v.TimeZone, v.UtmSource, v.UtmMedium, v.UtmCampaign))));
-        }
-
-        // Mode 2: user-link code → link.
-        var codeToLink = await db.UserLinkCodeEntities
-            .Where(c => linkIds.Contains(c.LinkId))
-            .Select(c => new { c.Id, c.LinkId })
-            .ToDictionaryAsync(x => x.Id, x => x.LinkId, ct);
-
-        if (codeToLink.Count > 0)
-        {
-            var codeIds = codeToLink.Keys.ToList();
-            var userVisits = await db.UserVisitEntities
-                .Where(v => codeIds.Contains(v.UserLinkCodeId))
-                .Select(v => new { v.UserLinkCodeId, v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Browser, v.Os, v.Country, v.Language, v.NavigationType, v.TimeZone, v.UtmSource, v.UtmMedium, v.UtmCampaign })
-                .ToListAsync(ct);
-            tagged.AddRange(userVisits.Select(v =>
-                (codeToLink[v.UserLinkCodeId], new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Browser, v.Os, v.Country, v.Language, v.NavigationType, v.TimeZone, v.UtmSource, v.UtmMedium, v.UtmCampaign))));
-        }
-
-        return tagged;
-    }
+        => (await LinkVisitQueries.LoadRowsByLinkAsync(db, linkIds, ct))
+            .Select(t => (t.LinkId, t.Row))
+            .ToList();
 
     private async Task<Dictionary<Guid, int>> LinkCountsAsync(CancellationToken ct)
         => await db.LinkEntities

@@ -5,6 +5,8 @@ public sealed record RedirectCacheEntry(
     Guid? ShortCodeId,
     Guid? UserLinkCodeId,
     Guid? UserId,
+    // Set when the code resolved to one social post's own code (see SocialPostCodeEntity).
+    Guid? SocialPostCodeId,
     // When set, the link is pinned to this host and only resolves when the request's Host matches.
     string? PinnedHost = null,
     // Mode 2 disclosure (TRACKING_DISCLOSURE_PLAN): when the operator has no privacy policy URL,

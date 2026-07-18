@@ -7,7 +7,14 @@ namespace ShortLynx.Data.Entities;
 public class VisitEntity
 {
     public Guid Id { get; set; }
-    public Guid ShortCodeId { get; set; }
+
+    // A visit belongs to exactly one of these: the link's shared code, or the code minted for one
+    // social post. Both nullable because a row carries whichever it came in on — a post's clicks are
+    // the same *fact* as a shared code's click, so they live in this table rather than a third
+    // near-identical twin of it (UserVisits is already one). Which FK is set tells you the source.
+    public Guid? ShortCodeId { get; set; }
+    public Guid? SocialPostCodeId { get; set; }
+
     public DateTimeOffset ClickedAt { get; set; }
     public string HashedIp { get; set; } = null!;
 
@@ -35,5 +42,6 @@ public class VisitEntity
     public string? UtmTerm { get; set; }
     public string? UtmContent { get; set; }
 
-    public virtual ShortCodeEntity ShortCode { get; set; } = null!;
+    public virtual ShortCodeEntity? ShortCode { get; set; }
+    public virtual SocialPostCodeEntity? SocialPostCode { get; set; }
 }

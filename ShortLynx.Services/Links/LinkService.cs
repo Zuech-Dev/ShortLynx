@@ -97,7 +97,7 @@ public sealed class LinkService(
     {
         for (var attempt = 0; attempt <= MaxCodeAttempts; attempt++)
         {
-            var code = codeGenerator.Generate(link.Id, userId: null, attempt);
+            var code = codeGenerator.Generate(link.Id, discriminator: null, attempt);
             var shortCode = new ShortCodeEntity
             {
                 Id = Guid.CreateVersion7(),

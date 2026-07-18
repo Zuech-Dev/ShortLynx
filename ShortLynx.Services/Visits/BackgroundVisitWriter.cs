@@ -62,8 +62,10 @@ public sealed class BackgroundVisitWriter(
 
     private async Task FlushAsync(List<VisitEvent> batch, IDbOperations dbOps, string pepper, CancellationToken ct)
     {
+        // Both a shared-code click and a post-code click are the same fact and share the Visits row
+        // shape — only which FK is set differs, so they batch together into one bulk insert.
         var mode1 = batch
-            .Where(e => e.ShortCodeId.HasValue)
+            .Where(e => e.ShortCodeId.HasValue || e.SocialPostCodeId.HasValue)
             .Select(e =>
             {
                 var d = Derive(e);
@@ -71,7 +73,8 @@ public sealed class BackgroundVisitWriter(
                 return new VisitEntity
                 {
                     Id = Guid.CreateVersion7(),
-                    ShortCodeId = e.ShortCodeId!.Value,
+                    ShortCodeId = e.ShortCodeId,
+                    SocialPostCodeId = e.SocialPostCodeId,
                     ClickedAt = e.ClickedAt,
                     HashedIp = HashIp(e.RawIp, pepper),
                     Source = d.Source,

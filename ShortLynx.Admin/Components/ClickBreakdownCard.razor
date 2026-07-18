@@ -22,6 +22,29 @@
                 <div><div class="text-sm font-medium">@(b.LastClickAt?.ToString("yyyy-MM-dd") ?? "—")</div><div class="text-gray-500 text-sm">Last click</div></div>
             </div>
 
+            @if (b.RepeatClicks > 0)
+            {
+                <div class="mb-4" data-testid="repeat-clicks">
+                    <h6 class="font-semibold text-sm mb-1">Repeat clicking</h6>
+                    <p class="text-gray-500 text-xs mb-2">
+                        @b.RepeatClicks of @b.HumanClicks clicks came from someone who had already clicked
+                        (@b.ClicksPerUnique per clicker).
+                        <span class="text-gray-400">
+                            Measured <strong>within a single hour</strong> — the IP hash rotates hourly for
+                            privacy, so someone returning the next day counts as a new clicker and can't be
+                            linked back. Anonymous links can't show longer-run repeat behaviour by design;
+                            user-attributed links can (see recipient engagement).
+                        </span>
+                    </p>
+                    <div class="flex items-center gap-2 text-sm">
+                        @foreach (var (label, count) in RepeatBuckets(b))
+                        {
+                            <span class="badge badge-gray" data-testid="repeat-bucket">@label: @count</span>
+                        }
+                    </div>
+                </div>
+            }
+
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <div data-testid="sources">
                     <h6 class="font-semibold text-sm mb-2">By platform</h6>
@@ -177,6 +200,18 @@
 
     // The optional string-dimension breakdowns, keeping only those with any data (so the card hides,
     // say, "By country" until GeoIP is configured). Built in @code to keep the tuple work out of markup.
+    // How the hour's distinct clickers split by how many times each clicked. Empty buckets are dropped
+    // so a link where nobody clicked 3+ times doesn't show a misleading "3+: 0".
+    private static List<(string Label, long Count)> RepeatBuckets(ClickBreakdown b)
+        => new List<(string, long)>
+            {
+                ("clicked once", b.UniquesClickedOnce),
+                ("twice", b.UniquesClickedTwice),
+                ("3+ times", b.UniquesClickedThreePlus),
+            }
+            .Where(x => x.Item2 > 0)
+            .ToList();
+
     private static List<(string Title, IReadOnlyList<LabelCount> Items, string Test)> ExtraSections(ClickBreakdown b)
         => new (string, IReadOnlyList<LabelCount>, string)[]
         {

@@ -228,9 +228,19 @@ public class MeLinksController(
             .OrderByDescending(p => p.Id)
             .ToListAsync(ct);
 
-        return posts.Select(p => new SocialPostResponse(
-            p.Id, p.Platform.ToString(), p.Handle, p.PostUrl, p.Text, p.PostedAt,
-            p.Impressions, p.Likes, p.Reposts, p.Replies, p.MetricsUpdatedAt));
+        // Exact per-post clicks (each post has its own code) alongside the platform's engagement — so a
+        // caller can compare "40 likes" against "1 click" without guessing from referrers.
+        var clicksByPost = (await LinkVisitQueries.LoadAttributionSplitAsync(db, linkId, ct))
+            .Posts.ToDictionary(p => p.SocialPostId, p => (p.Clicks, p.UniqueClicks));
+
+        return posts.Select(p =>
+        {
+            var c = clicksByPost.GetValueOrDefault(p.Id);
+            return new SocialPostResponse(
+                p.Id, p.Platform.ToString(), p.Handle, p.PostUrl, p.Text, p.PostedAt,
+                p.Impressions, p.Likes, p.Reposts, p.Replies, p.MetricsUpdatedAt,
+                c.Clicks, c.UniqueClicks);
+        });
     }
 
     // GET /me/links/{id}/qr?format=png|svg&size=<n>&code=<optional>

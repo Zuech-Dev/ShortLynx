@@ -208,23 +208,36 @@ else
                         </button>
                     </div>
                     <p class="text-gray-500 text-xs mb-2">
-                        Likes/reposts/replies come from the platform. Bluesky and Mastodon don't report
-                        impressions, so click-through rate needs the gated platforms (later phase).
-                        Metrics also refresh automatically in the background.
+                        <strong>Clicks</strong> are exact — each post carries its own short code, so two posts
+                        on the same platform are told apart (a referrer never could). Likes/reposts/replies
+                        come from the platform; Bluesky, Mastodon and Reddit don't report impressions, so
+                        true click-through rate needs the gated platforms. Metrics also refresh in the background.
                     </p>
+                    @if (_split is { } sp && (sp.AttributedClicks > 0 || sp.OrganicClicks > 0))
+                    {
+                        <p class="text-sm mb-2" data-testid="attribution-split">
+                            <span class="font-medium">@sp.AttributedClicks</span> click@(sp.AttributedClicks == 1 ? "" : "s")
+                            traced to a post ·
+                            <span class="font-medium">@sp.OrganicClicks</span> organic
+                            <span class="text-gray-500">(QR, copy button, reshares — the link's shared code)</span>
+                        </p>
+                    }
                     <table class="data-table" data-testid="social-posts">
                         <thead>
                         <tr><th>Platform</th><th>Account</th><th>Posted</th>
+                            <th class="text-right">Clicks</th>
                             <th class="text-right">Likes</th><th class="text-right">Reposts</th>
                             <th class="text-right">Replies</th><th class="text-right">Impressions</th><th></th></tr>
                         </thead>
                         <tbody>
                         @foreach (var p in _posts)
                         {
+                            var clicks = _clicksByPost.GetValueOrDefault(p.Id);
                             <tr>
                                 <td>@p.Platform</td>
                                 <td>@p.Handle</td>
                                 <td class="whitespace-nowrap">@p.PostedAt.ToString("yyyy-MM-dd HH:mm") UTC</td>
+                                <td class="text-right font-medium" data-testid="post-clicks">@clicks</td>
                                 <td class="text-right">@(p.Likes?.ToString() ?? "—")</td>
                                 <td class="text-right">@(p.Reposts?.ToString() ?? "—")</td>
                                 <td class="text-right">@(p.Replies?.ToString() ?? "—")</td>
@@ -302,13 +315,25 @@ else
         }
         else
         {
-            // Engagement segments: how many provisioned codes have been clicked at least once.
+            // Engagement segments: how many provisioned codes have been clicked at least once, and how
+            // many recipients came back. Unlike the anonymous-link repeat metric, these counts are exact
+            // and unbounded in time — a recipient code identifies the person, so no IP hash (and no
+            // hourly dedup window) is involved.
             var clicked = _userRows.Count(r => r.Clicks > 0);
+            var returned = _userRows.Count(r => r.Clicks > 1);
             var ratePct = (int)Math.Round(100.0 * clicked / _userRows.Count);
             <div class="flex items-center gap-3 mb-2 text-sm" data-testid="code-engagement">
                 <span class="font-medium">@clicked of @_userRows.Count clicked (@ratePct%)</span>
                 <span class="flex-1 max-w-[240px] bg-gray-100 rounded h-2"><span class="block bg-green-500 h-2 rounded" style="width:@ratePct%"></span></span>
             </div>
+            @if (returned > 0)
+            {
+                <p class="text-gray-500 text-xs mb-2" data-testid="recipient-repeat">
+                    <strong>@returned</strong> recipient@(returned == 1 ? "" : "s") came back for another look
+                    (@_userRows.Where(r => r.Clicks > 0).Average(r => r.Clicks).ToString("0.0") clicks per engaged recipient,
+                    highest @_userRows.Max(r => r.Clicks)). Repeat opens often signal real interest — worth a follow-up.
+                </p>
+            }
             <table class="data-table">
                 <thead>
                 <tr><th>Recipient</th><th>Code</th><th class="text-right">Clicks</th><th>QR</th></tr>
@@ -369,6 +394,8 @@ else
     List<SocialConnectionRow> _socialConnections = [];
     List<PublishResultRow> _publishResults = [];
     List<SocialPostRow> _posts = [];
+    LinkAttributionSplit? _split;
+    Dictionary<Guid, long> _clicksByPost = [];
 
     protected override async Task OnParametersSetAsync()
     {
@@ -469,8 +496,12 @@ else
                 _posts = await db.SocialPostEntities
                     .Where(p => p.LinkId == Id)
                     .OrderByDescending(p => p.Id)
-                    .Select(p => new SocialPostRow(p.Platform.ToString(), p.Handle, p.PostedAt, p.PostUrl, p.Likes, p.Reposts, p.Replies, p.Impressions))
+                    .Select(p => new SocialPostRow(p.Id, p.Platform.ToString(), p.Handle, p.PostedAt, p.PostUrl, p.Likes, p.Reposts, p.Replies, p.Impressions))
                     .ToListAsync();
+
+                // Exact per-post clicks + the attributed/organic split (LinkVisitQueries).
+                _split = await LinkVisitQueries.LoadAttributionSplitAsync(db, Id);
+                _clicksByPost = _split.Value.Posts.ToDictionary(p => p.SocialPostId, p => p.Clicks);
             }
         }
 
@@ -528,7 +559,7 @@ else
 
     sealed record SocialConnectionRow(Guid Id, string Platform, string Handle);
     sealed record PublishResultRow(string Handle, bool Success, string? PostUrl, string? Error);
-    sealed record SocialPostRow(string Platform, string Handle, DateTimeOffset PostedAt, string? PostUrl, long? Likes, long? Reposts, long? Replies, long? Impressions);
+    sealed record SocialPostRow(Guid Id, string Platform, string Handle, DateTimeOffset PostedAt, string? PostUrl, long? Likes, long? Reposts, long? Replies, long? Impressions);
 
     async Task SaveCampaign()
     {

@@ -4,9 +4,9 @@ name: CI (implementation branch)
 # build & test gating before its work is merged back into main.
 on:
   push:
-    branches: [claude/ci-workflow-implementation-copy-8zs1kv]
+    branches: [implementation]
   pull_request:
-    branches: [claude/ci-workflow-implementation-copy-8zs1kv]
+    branches: [implementation]
 
 jobs:
   test:

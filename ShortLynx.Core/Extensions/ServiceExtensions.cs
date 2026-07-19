@@ -154,6 +154,17 @@ public static class ServiceExtensions
                     QueueLimit = 0,
                 });
             });
+
+            rl.AddPolicy(RateLimitPolicies.Refresh, ctx =>
+            {
+                var o = ctx.RequestServices.GetRequiredService<IOptions<RateLimitOptions>>().Value;
+                return RateLimitPartition.GetFixedWindowLimiter(ClientIp(ctx), _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = o.RefreshPermitLimit,
+                    Window = TimeSpan.FromSeconds(o.RefreshWindowSeconds),
+                    QueueLimit = 0,
+                });
+            });
         });
 
         return services;

@@ -37,11 +37,16 @@ public sealed class UserSessionService(
 
         var now = DateTimeOffset.UtcNow;
 
-        // Reuse detection: presenting an already-revoked token means it may have been stolen — revoke
-        // every active token for the user and refuse.
+        // Reuse detection: presenting a *rotated* token (one that was already exchanged for a
+        // replacement) means the plaintext exists in two places — it may have been stolen. Revoke
+        // every active token for the user and refuse. Administratively revoked tokens (logout,
+        // member removal) have no replacement and just fail: a legitimate client will retry its
+        // now-dead token after an eviction, and that must not cascade into a global logout of the
+        // user's sessions in other accounts.
         if (stored.RevokedAt is not null)
         {
-            await RevokeAllForUserAsync(stored.UserAccountId, ct);
+            if (stored.ReplacedByTokenId is not null)
+                await RevokeAllForUserAsync(stored.UserAccountId, ct);
             return null;
         }
         if (stored.ExpiresAt < now) return null;

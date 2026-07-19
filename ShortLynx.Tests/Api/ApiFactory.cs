@@ -52,6 +52,7 @@ public sealed class ApiFactory : WebApplicationFactory<ShortLynx.Core.CoreApiEnt
                 // High limits so normal tests don't trip the limiter; rate-limit tests override these.
                 ["RateLimit:MagicLinkPermitLimit"] = "1000",
                 ["RateLimit:ApiKeyPermitLimit"] = "1000",
+                ["RateLimit:RefreshPermitLimit"] = "1000",
             });
         });
 

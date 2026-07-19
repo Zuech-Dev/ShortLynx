@@ -1,0 +1,3 @@
+# Require @zuechai to approve changes on protected branches.
+# Referenced by branch protection (require review from Code Owners).
+* @zuechai

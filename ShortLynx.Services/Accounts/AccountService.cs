@@ -103,6 +103,18 @@ public sealed class AccountService(ShortLynxDbContext db, IMagicLinkService magi
 
         db.MembershipEntities.Remove(target);
         await db.SaveChangesAsync(ct);
+
+        // Revoke the removed member's refresh tokens *for this account only* — their sessions in other
+        // accounts must survive. Writes already fail immediately (role is checked against the DB per
+        // request), but without this an ejected member's reads coast until access-token expiry and
+        // their refresh token keeps working indefinitely. Legacy tokens with no stored account are
+        // left alone: on refresh they re-resolve to the user's (now changed) primary account anyway.
+        // Done directly on the DbContext — AccountService can't take IUserSessionService without a
+        // dependency cycle (UserSessionService already depends on IAccountService).
+        await db.RefreshTokenEntities
+            .Where(t => t.UserAccountId == targetUserAccountId && t.AccountId == accountId && t.RevokedAt == null)
+            .ExecuteUpdateAsync(s => s.SetProperty(t => t.RevokedAt, DateTimeOffset.UtcNow), ct);
+
         return true;
     }
 

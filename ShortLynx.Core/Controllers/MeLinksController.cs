@@ -2,13 +2,15 @@ using System.Text;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
-using ShortLynx.Services.Analytics;
+using ShortLynx.Core.Auth;
 using ShortLynx.Core.Models.Requests;
 using ShortLynx.Core.Models.Responses;
 using ShortLynx.Core.Options;
 using ShortLynx.Data.Context;
 using ShortLynx.Data.Entities;
 using ShortLynx.Data.Enums;
+using ShortLynx.Services.Accounts;
+using ShortLynx.Services.Analytics;
 using ShortLynx.Services.Entitlements;
 using ShortLynx.Services.Links;
 using ShortLynx.Services.Qr;
@@ -49,6 +51,7 @@ public class MeLinksController(
 
     // POST /me/links — create an anonymous (default) or user-attributed link in the current account.
     [HttpPost]
+    [RequireAccountAction(AccountAction.ManageResources)]
     public async Task<IActionResult> Create([FromBody] CreateMyLinkRequest request, CancellationToken ct)
     {
         try
@@ -85,6 +88,7 @@ public class MeLinksController(
 
     // POST /me/links/{id}/codes — provision user-attributed codes.
     [HttpPost("{id:guid}/codes")]
+    [RequireAccountAction(AccountAction.ManageResources)]
     public async Task<IActionResult> CreateCodes(Guid id, [FromBody] CreateUserCodesRequest request, CancellationToken ct)
     {
         if (!await db.LinkEntities.AnyAsync(l => l.Id == id && l.AccountId == AccountId, ct))
@@ -96,6 +100,7 @@ public class MeLinksController(
 
     // PUT /me/links/{id}/domain — pin/unpin to a verified account domain.
     [HttpPut("{id:guid}/domain")]
+    [RequireAccountAction(AccountAction.ManageResources)]
     public async Task<IActionResult> SetDomain(Guid id, [FromBody] SetLinkDomainRequest request, CancellationToken ct)
     {
         if (!await db.LinkEntities.AnyAsync(l => l.Id == id && l.AccountId == AccountId, ct))
@@ -107,6 +112,7 @@ public class MeLinksController(
 
     // PUT /me/links/{id}/campaign — assign/unassign the link to one of the account's campaigns.
     [HttpPut("{id:guid}/campaign")]
+    [RequireAccountAction(AccountAction.ManageResources)]
     public async Task<IActionResult> SetCampaign(Guid id, [FromBody] SetLinkCampaignRequest request, CancellationToken ct)
     {
         if (!await db.LinkEntities.AnyAsync(l => l.Id == id && l.AccountId == AccountId, ct))
@@ -172,6 +178,7 @@ public class MeLinksController(
 
     // POST /me/links/{id}/publish — post the link's short URL to connected social accounts.
     [HttpPost("{id:guid}/publish")]
+    [RequireAccountAction(AccountAction.ManageResources)]
     public async Task<IActionResult> Publish(
         Guid id, [FromBody] PublishLinkRequest request,
         [FromServices] ShortLynx.Services.Social.ISocialPublishService publisher, CancellationToken ct)
@@ -211,6 +218,7 @@ public class MeLinksController(
 
     // POST /me/links/{id}/posts/refresh — pull current engagement metrics now, then return the posts.
     [HttpPost("{id:guid}/posts/refresh")]
+    [RequireAccountAction(AccountAction.ManageResources)]
     public async Task<IActionResult> RefreshPosts(
         Guid id, [FromServices] ShortLynx.Services.Social.ISocialMetricsService metrics, CancellationToken ct)
     {

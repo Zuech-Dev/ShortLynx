@@ -25,7 +25,7 @@ public sealed class UserSessionService(
         var accessExpires = now + _opts.AccessTokenLifetime;
         var accessToken = CreateAccessToken(user, accountId, role, now, accessExpires);
 
-        var (refreshPlaintext, refreshExpires) = await CreateRefreshTokenAsync(user.Id, now, ct);
+        var (refreshPlaintext, refreshExpires, _) = await CreateRefreshTokenReturningIdAsync(user.Id, accountId, now, ct);
         return new SessionTokens(accessToken, accessExpires, refreshPlaintext, refreshExpires);
     }
 
@@ -37,11 +37,16 @@ public sealed class UserSessionService(
 
         var now = DateTimeOffset.UtcNow;
 
-        // Reuse detection: presenting an already-revoked token means it may have been stolen — revoke
-        // every active token for the user and refuse.
+        // Reuse detection: presenting a *rotated* token (one that was already exchanged for a
+        // replacement) means the plaintext exists in two places — it may have been stolen. Revoke
+        // every active token for the user and refuse. Administratively revoked tokens (logout,
+        // member removal) have no replacement and just fail: a legitimate client will retry its
+        // now-dead token after an eviction, and that must not cascade into a global logout of the
+        // user's sessions in other accounts.
         if (stored.RevokedAt is not null)
         {
-            await RevokeAllForUserAsync(stored.UserAccountId, ct);
+            if (stored.ReplacedByTokenId is not null)
+                await RevokeAllForUserAsync(stored.UserAccountId, ct);
             return null;
         }
         if (stored.ExpiresAt < now) return null;
@@ -49,11 +54,18 @@ public sealed class UserSessionService(
         var user = await db.UserAccountEntities.FirstOrDefaultAsync(u => u.Id == stored.UserAccountId, ct);
         if (user is null) return null;
 
+        // Preserve the acting account across the refresh: the session stays in the account it was
+        // issued for as long as the membership still holds; only a revoked membership (or a legacy
+        // token without an account) falls back to the user's primary account. Without this, every
+        // refresh snapped multi-account users back to their highest-role account mid-session.
+        var userAccounts = await accounts.ListAccountsForUserAsync(user.Id, ct);
+        var acting = (stored.AccountId is { } saved ? userAccounts.FirstOrDefault(a => a.AccountId == saved) : null)
+                     ?? userAccounts.FirstOrDefault();
+
         // Rotate: mint a new pair, revoke the presented token and link it to its replacement.
-        var primary = (await accounts.ListAccountsForUserAsync(user.Id, ct)).FirstOrDefault();
         var accessExpires = now + _opts.AccessTokenLifetime;
-        var accessToken = CreateAccessToken(user, primary?.AccountId, primary?.Role, now, accessExpires);
-        var (refreshPlaintext, refreshExpires, newId) = await CreateRefreshTokenReturningIdAsync(user.Id, now, ct);
+        var accessToken = CreateAccessToken(user, acting?.AccountId, acting?.Role, now, accessExpires);
+        var (refreshPlaintext, refreshExpires, newId) = await CreateRefreshTokenReturningIdAsync(user.Id, acting?.AccountId, now, ct);
 
         stored.RevokedAt = now;
         stored.ReplacedByTokenId = newId;
@@ -105,15 +117,8 @@ public sealed class UserSessionService(
         return new JsonWebTokenHandler().CreateToken(descriptor);
     }
 
-    private async Task<(string Plaintext, DateTimeOffset Expires)> CreateRefreshTokenAsync(
-        Guid userId, DateTimeOffset now, CancellationToken ct)
-    {
-        var (plaintext, expires, _) = await CreateRefreshTokenReturningIdAsync(userId, now, ct);
-        return (plaintext, expires);
-    }
-
     private async Task<(string Plaintext, DateTimeOffset Expires, Guid Id)> CreateRefreshTokenReturningIdAsync(
-        Guid userId, DateTimeOffset now, CancellationToken ct)
+        Guid userId, Guid? accountId, DateTimeOffset now, CancellationToken ct)
     {
         var plaintext = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
             .Replace('+', '-').Replace('/', '_').TrimEnd('='); // base64url
@@ -122,6 +127,7 @@ public sealed class UserSessionService(
         {
             Id = Guid.CreateVersion7(),
             UserAccountId = userId,
+            AccountId = accountId,
             TokenHash = Hash(plaintext),
             CreatedAt = now,
             ExpiresAt = expires,

@@ -13,6 +13,14 @@ public static class SessionClaims
     public static Guid AccountId(this ClaimsPrincipal user)
         => Guid.Parse(user.FindFirstValue(JwtClaims.AccountId)!);
 
+    /// <summary>Non-throwing variant for callers that must handle a token minted without the claim.</summary>
+    public static bool TryUserId(this ClaimsPrincipal user, out Guid userId)
+        => Guid.TryParse(user.FindFirstValue(JwtClaims.Subject), out userId);
+
+    /// <summary>Non-throwing variant for callers that must handle a token minted without the claim.</summary>
+    public static bool TryAccountId(this ClaimsPrincipal user, out Guid accountId)
+        => Guid.TryParse(user.FindFirstValue(JwtClaims.AccountId), out accountId);
+
     public static string Email(this ClaimsPrincipal user)
         => user.FindFirstValue(JwtClaims.Email) ?? "";
 

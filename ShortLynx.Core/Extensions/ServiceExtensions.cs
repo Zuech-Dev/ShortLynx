@@ -154,12 +154,24 @@ public static class ServiceExtensions
                     QueueLimit = 0,
                 });
             });
+
+            rl.AddPolicy(RateLimitPolicies.Refresh, ctx =>
+            {
+                var o = ctx.RequestServices.GetRequiredService<IOptions<RateLimitOptions>>().Value;
+                return RateLimitPartition.GetFixedWindowLimiter(ClientIp(ctx), _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = o.RefreshPermitLimit,
+                    Window = TimeSpan.FromSeconds(o.RefreshWindowSeconds),
+                    QueueLimit = 0,
+                });
+            });
         });
 
         return services;
 
-        // NOTE: keys on the socket IP. Behind a reverse proxy this collapses to the proxy IP until
-        // ForwardedHeaders is configured (tracked as follow-up M3).
+        // Keys on RemoteIpAddress, which the ForwardedHeaders middleware (configured in Program.cs to
+        // trust Railway's edge hop) rewrites to the real client IP before this runs — so partitioning
+        // is per-client, not per-proxy-connection.
         static string ClientIp(HttpContext ctx) => ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown";
     }
 }

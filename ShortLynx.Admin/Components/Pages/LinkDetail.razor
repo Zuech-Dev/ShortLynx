@@ -99,7 +99,7 @@ else
                             <option value="@d.Id">@d.Domain</option>
                         }
                     </select>
-                    <button class="btn btn-primary" data-testid="pin-save" @onclick="SavePin">Save</button>
+                    <button class="btn btn-primary" data-testid="pin-save" disabled="@(!_canWrite)" @onclick="SavePin">Save</button>
                 </div>
                 @if (_verifiedDomains.Count == 0)
                 {
@@ -127,7 +127,7 @@ else
                             <option value="@c.Id">@c.Name</option>
                         }
                     </select>
-                    <button class="btn btn-primary" data-testid="campaign-save" @onclick="SaveCampaign">Save</button>
+                    <button class="btn btn-primary" data-testid="campaign-save" disabled="@(!_canWrite)" @onclick="SaveCampaign">Save</button>
                 </div>
                 @if (_campaignOptions.Count == 0)
                 {
@@ -169,7 +169,7 @@ else
                             </label>
                         }
                     </div>
-                    <button class="btn btn-primary" disabled="@(_busyPublishing || _publishTargets.Count == 0)"
+                    <button class="btn btn-primary" disabled="@(!_canWrite || _busyPublishing || _publishTargets.Count == 0)"
                             @onclick="PublishAsync" data-testid="publish-submit">
                         @(_busyPublishing ? "Posting…" : "Post")
                     </button>
@@ -202,7 +202,7 @@ else
                 {
                     <div class="flex items-center mt-4 mb-2">
                         <h6 class="font-semibold text-sm">Published posts</h6>
-                        <button class="btn btn-outline ml-auto" disabled="@_busyMetrics"
+                        <button class="btn btn-outline ml-auto" disabled="@(!_canWrite || _busyMetrics)"
                                 @onclick="RefreshMetricsAsync" data-testid="refresh-metrics">
                             @(_busyMetrics ? "Refreshing…" : "Refresh metrics")
                         </button>
@@ -286,7 +286,7 @@ else
                         <div class="text-red-600 text-sm mb-2" data-testid="provision-error">@_provisionError</div>
                     }
                     <div>
-                        <button type="submit" class="btn btn-primary" data-testid="provision-submit">Provision codes</button>
+                        <button type="submit" class="btn btn-primary" data-testid="provision-submit" disabled="@(!_canWrite)">Provision codes</button>
                     </div>
                 </EditForm>
 
@@ -365,7 +365,7 @@ else
     [Parameter] public Guid Id { get; set; }
 
     bool _loaded, _notFound;
-    bool _authResolved, _isSuperAdmin;
+    bool _authResolved, _isSuperAdmin, _canWrite;
     Guid _uid;
     LinkEntity? _link;
     string _shortCode = string.Empty;
@@ -403,11 +403,12 @@ else
         {
             var principal = (await AuthState).User;
             _isSuperAdmin = principal.IsSuperAdmin();
-            var userId = principal.GetUserId();
-            if (userId is null) { _notFound = true; _loaded = true; return; }
-            _uid = userId.Value;
             await using (var db = await DbFactory.CreateDbContextAsync())
-                _accountId = await AccountResolver.ResolveAccountIdAsync(db, _uid, principal.GetAccountId(), principal.Identity?.Name ?? "Personal");
+            {
+                var ctx = await AccountRoleContext.ResolveAsync(db, principal);
+                if (ctx is null) { _notFound = true; _loaded = true; return; }
+                (_uid, _accountId, _canWrite) = (ctx.UserId, ctx.AccountId, ctx.CanManageResources);
+            }
             _authResolved = true;
         }
         await LoadAsync();
@@ -510,6 +511,8 @@ else
 
     async Task RefreshMetricsAsync()
     {
+        // Handler-level guard, not just hidden UI — Blazor Server executes handlers regardless of markup.
+        if (!_canWrite) return;
         _busyMetrics = true;
         try
         {
@@ -529,7 +532,7 @@ else
 
     async Task PublishAsync()
     {
-        if (_publishTargets.Count == 0 || string.IsNullOrEmpty(_shortUrl)) return;
+        if (!_canWrite || _publishTargets.Count == 0 || string.IsNullOrEmpty(_shortUrl)) return;
         _busyPublishing = true;
         _publishResults = [];
         try
@@ -563,7 +566,7 @@ else
 
     async Task SaveCampaign()
     {
-        if (!_canPin) return;
+        if (!_canWrite || !_canPin) return;
         _campaignSaved = false;
         Guid? campaignId = Guid.TryParse(_selectedCampaignKey, out var id) ? id : null;
 
@@ -580,7 +583,7 @@ else
 
     async Task SavePin()
     {
-        if (!_canPin) return;
+        if (!_canWrite || !_canPin) return;
         _pinSaved = false;
         Guid? domainId = Guid.TryParse(_selectedDomainKey, out var id) ? id : null;
 
@@ -603,6 +606,7 @@ else
 
     async Task ProvisionCodes()
     {
+        if (!_canWrite) return;
         _provisionError = null;
 
         var recipients = (_provision.Recipients ?? string.Empty)

@@ -12,9 +12,12 @@
 
 <div class="flex justify-between items-center mb-3">
     <h1 class="text-2xl font-bold">Custom Domains</h1>
-    <button class="btn btn-primary" @onclick="() => _showAdd = !_showAdd">
-        @(_showAdd ? "Cancel" : "+ Add domain")
-    </button>
+    @if (_canWrite)
+    {
+        <button class="btn btn-primary" @onclick="() => _showAdd = !_showAdd">
+            @(_showAdd ? "Cancel" : "+ Add domain")
+        </button>
+    }
 </div>
 
 @if (_showAdd)
@@ -69,13 +72,16 @@ else
                                 break;
                         }
                         <div class="ml-auto flex gap-2">
-                            @if (d.VerificationStatus != DomainVerificationStatus.Verified)
+                            @if (_canWrite && d.VerificationStatus != DomainVerificationStatus.Verified)
                             {
                                 <button class="btn btn-outline-primary" data-testid="verify-btn"
                                         disabled="@_busy" @onclick="() => Verify(d.Id)">Verify</button>
                             }
-                            <button class="btn btn-outline-danger" data-testid="remove-btn"
-                                    disabled="@_busy" @onclick="() => Remove(d.Id)">Remove</button>
+                            @if (_canWrite)
+                            {
+                                <button class="btn btn-outline-danger" data-testid="remove-btn"
+                                        disabled="@_busy" @onclick="() => Remove(d.Id)">Remove</button>
+                            }
                         </div>
                     </div>
 
@@ -99,7 +105,7 @@ else
 @code {
     [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
 
-    bool _loaded, _resolved, _showAdd, _busy;
+    bool _loaded, _resolved, _showAdd, _busy, _canWrite;
     Guid _uid;
     Guid _accountId;
     List<DomainRow> _domains = [];
@@ -109,13 +115,12 @@ else
     protected override async Task OnInitializedAsync()
     {
         var principal = (await AuthState).User;
-        var userId = principal.GetUserId();
-        if (userId is null) { _loaded = true; return; }
-        _uid = userId.Value;
         await using (var scope = ScopeFactory.CreateAsyncScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<ShortLynxDbContext>();
-            _accountId = await AccountResolver.ResolveAccountIdAsync(db, _uid, principal.GetAccountId(), principal.Identity?.Name ?? "Personal");
+            var ctx = await AccountRoleContext.ResolveAsync(db, principal);
+            if (ctx is null) { _loaded = true; return; }
+            (_uid, _accountId, _canWrite) = (ctx.UserId, ctx.AccountId, ctx.CanManageResources);
         }
         _resolved = true;
         await LoadAsync();
@@ -134,7 +139,8 @@ else
 
     async Task AddDomain()
     {
-        if (!_resolved) return;
+        // Handler-level guard, not just hidden UI — Blazor Server executes handlers regardless of markup.
+        if (!_resolved || !_canWrite) return;
         _addError = null;
         try
         {
@@ -153,6 +159,7 @@ else
 
     async Task Verify(Guid id)
     {
+        if (!_canWrite) return;
         _busy = true;
         try
         {
@@ -166,6 +173,7 @@ else
 
     async Task Remove(Guid id)
     {
+        if (!_canWrite) return;
         _busy = true;
         try
         {

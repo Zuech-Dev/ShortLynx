@@ -11,6 +11,10 @@ internal static class AccountTestSeed
     /// known account id for <paramref name="userId"/>. Returns that account id.
     /// </summary>
     public static Guid SeedOwner(ShortLynxDbContext db, Guid userId, string email = "user@example.com")
+        => Seed(db, userId, AccountRole.Owner, email);
+
+    /// <summary>Like <see cref="SeedOwner"/> but at an arbitrary role (e.g. Viewer for role-gate tests).</summary>
+    public static Guid Seed(ShortLynxDbContext db, Guid userId, AccountRole role, string email = "user@example.com")
     {
         var account = new AccountEntity
         {
@@ -24,7 +28,7 @@ internal static class AccountTestSeed
         db.Add(new MembershipEntity
         {
             Id = Guid.CreateVersion7(), AccountId = account.Id, UserAccountId = userId,
-            Role = AccountRole.Owner, CreatedAt = DateTimeOffset.UtcNow,
+            Role = role, CreatedAt = DateTimeOffset.UtcNow,
         });
         db.SaveChanges();
         return account.Id;

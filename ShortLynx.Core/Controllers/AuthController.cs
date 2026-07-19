@@ -77,6 +77,7 @@ public class AuthController(
 
     // POST /auth/refresh — rotate the refresh token (from body or cookie) into a fresh pair.
     [HttpPost("refresh")]
+    [EnableRateLimiting(RateLimitPolicies.Refresh)]
     public async Task<IActionResult> Refresh([FromBody] RefreshRequest? request, CancellationToken ct)
     {
         var refreshToken = request?.RefreshToken ?? Request.Cookies[Jwt.RefreshCookieName];
@@ -96,6 +97,7 @@ public class AuthController(
 
     // POST /auth/logout — revoke the refresh token and clear cookies.
     [HttpPost("logout")]
+    [EnableRateLimiting(RateLimitPolicies.Refresh)]
     public async Task<IActionResult> Logout([FromBody] RefreshRequest? request, CancellationToken ct)
     {
         var refreshToken = request?.RefreshToken ?? Request.Cookies[Jwt.RefreshCookieName];

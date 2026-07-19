@@ -1,10 +1,12 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using ShortLynx.Services.Analytics;
+using ShortLynx.Core.Auth;
 using ShortLynx.Core.Models.Requests;
 using ShortLynx.Core.Models.Responses;
 using ShortLynx.Data.Context;
 using ShortLynx.Data.Entities;
+using ShortLynx.Services.Accounts;
+using ShortLynx.Services.Analytics;
 using ShortLynx.Services.Campaigns;
 
 namespace ShortLynx.Core.Controllers;
@@ -23,6 +25,7 @@ public class MeCampaignsController(ICampaignService campaigns, ShortLynxDbContex
 
     // POST /me/campaigns
     [HttpPost]
+    [RequireAccountAction(AccountAction.ManageResources)]
     public async Task<IActionResult> Create([FromBody] CreateCampaignRequest request, CancellationToken ct)
     {
         try
@@ -48,6 +51,7 @@ public class MeCampaignsController(ICampaignService campaigns, ShortLynxDbContex
 
     // PUT /me/campaigns/{id}
     [HttpPut("{id:guid}")]
+    [RequireAccountAction(AccountAction.ManageResources)]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateCampaignRequest request, CancellationToken ct)
     {
         try
@@ -65,6 +69,7 @@ public class MeCampaignsController(ICampaignService campaigns, ShortLynxDbContex
 
     // DELETE /me/campaigns/{id} — unassigns the campaign's links, then deletes it.
     [HttpDelete("{id:guid}")]
+    [RequireAccountAction(AccountAction.ManageResources)]
     public async Task<IActionResult> Remove(Guid id, CancellationToken ct)
         => await campaigns.DeleteAsync(id, AccountId, ct) ? NoContent() : NotFound();
 

@@ -44,7 +44,7 @@ else
                 }
 
                 <div class="flex items-center gap-3">
-                    <button class="btn btn-primary" @onclick="SaveAsync" data-testid="privacy-save">Save</button>
+                    <button class="btn btn-primary" @onclick="SaveAsync" data-testid="privacy-save" disabled="@(!_canManageAccount)">Save</button>
                     @if (_saved)
                     {
                         <span class="text-green-600 text-sm" data-testid="privacy-saved">Saved.</span>
@@ -76,19 +76,20 @@ else
 @code {
     [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
 
-    bool _loaded, _saved, _confirmed, _hasPolicy;
+    bool _loaded, _saved, _confirmed, _hasPolicy, _canManageAccount;
     string? _privacyUrl, _termsUrl, _error;
     Guid _accountId;
 
     protected override async Task OnInitializedAsync()
     {
         var principal = (await AuthState).User;
-        var userId = principal.GetUserId();
-        if (userId is null) return;
-
         await using var db = await DbFactory.CreateDbContextAsync();
-        _accountId = await AccountResolver.ResolveAccountIdAsync(
-            db, userId.Value, principal.GetAccountId(), principal.Identity?.Name ?? "Personal");
+        var ctx = await AccountRoleContext.ResolveAsync(db, principal);
+        if (ctx is null) return;
+        _accountId = ctx.AccountId;
+        // Policy/terms URLs are the operator's disclosure assertion (P3/P4) — account-level
+        // configuration, so Owner-gated (ManageAccount), not ManageResources.
+        _canManageAccount = ctx.CanManageAccount;
 
         var account = await db.AccountEntities.FirstAsync(a => a.Id == _accountId);
         _privacyUrl = account.PrivacyPolicyUrl;
@@ -100,6 +101,8 @@ else
 
     async Task SaveAsync()
     {
+        // Handler-level guard, not just disabled UI — Blazor Server executes handlers regardless of markup.
+        if (!_canManageAccount) return;
         _saved = false;
         _error = null;
 

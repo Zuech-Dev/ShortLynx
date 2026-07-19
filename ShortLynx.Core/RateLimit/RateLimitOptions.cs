@@ -8,4 +8,9 @@ public sealed class RateLimitOptions
 
     public int ApiKeyPermitLimit { get; set; } = 10;
     public int ApiKeyWindowSeconds { get; set; } = 300;
+
+    // Generous: a well-behaved client refreshes ~once per access-token lifetime (15 min), so even a
+    // large NAT'd office fits — but token stuffing at scale does not.
+    public int RefreshPermitLimit { get; set; } = 60;
+    public int RefreshWindowSeconds { get; set; } = 300;
 }

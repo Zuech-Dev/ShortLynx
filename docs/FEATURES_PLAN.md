@@ -1,5 +1,13 @@
 # Plan: Product Features — Mode-2 UI (Track A) + Custom Domains (Track B)
 
+> **Status: BOTH TRACKS SHIPPED** (verified 2026-07-19). The "Context" below describes the
+> half-built starting point and is retained as a historical record — it no longer reflects the
+> code. Now in place: `LinkService.CreateUserAttributedLinkAsync` (Mode-2 creation), the
+> `Recipient` label column on `UserLinkCodeEntity`, the dashboard provision-codes flow, the
+> `LinkMode.UserAttributed` spelling fix, `CustomDomainService` with the verification flow, and
+> the host-aware redirect in `ShortLynx.Web`. See [MASTER_PLAN.md](MASTER_PLAN.md) §7 for what
+> remains (launch, legal, billing).
+
 ## Context
 The roadmap's security phase is complete. This phase delivers the two product features that are
 currently only half-built in the codebase:

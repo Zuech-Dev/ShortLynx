@@ -11,9 +11,12 @@
 
 <div class="flex justify-between items-center mb-4">
     <h1 class="text-2xl font-bold">API Keys</h1>
-    <button class="btn btn-primary" @onclick="() => _showCreate = !_showCreate">
-        @(_showCreate ? "Cancel" : "+ New key")
-    </button>
+    @if (_canWrite)
+    {
+        <button class="btn btn-primary" @onclick="() => _showCreate = !_showCreate">
+            @(_showCreate ? "Cancel" : "+ New key")
+        </button>
+    }
 </div>
 
 @if (_newPlaintextKey is not null)
@@ -105,7 +108,7 @@ else
                     </td>
                     <td class="text-gray-500 text-sm whitespace-nowrap">@r.CreatedAt.ToString("yyyy-MM-dd")</td>
                     <td class="text-right">
-                        @if (r.IsActive)
+                        @if (_canWrite && r.IsActive)
                         {
                             <button class="btn btn-outline-danger" @onclick="() => RevokeKey(r.Id, r.Name)">Revoke</button>
                         }
@@ -123,6 +126,7 @@ else
     bool _loaded;
     bool _showCreate;
     bool _resolved;
+    bool _canWrite;
     Guid _uid;
     List<ApiKeyRow> _rows = [];
     CreateKeyForm _form = new();
@@ -134,11 +138,12 @@ else
     protected override async Task OnInitializedAsync()
     {
         var principal = (await AuthState).User;
-        var userId = principal.GetUserId();
-        if (userId is null) { _loaded = true; return; }
-        _uid = userId.Value;
         await using (var db = await DbFactory.CreateDbContextAsync())
-            _accountId = await AccountResolver.ResolveAccountIdAsync(db, _uid, principal.GetAccountId(), principal.Identity?.Name ?? "Personal");
+        {
+            var ctx = await AccountRoleContext.ResolveAsync(db, principal);
+            if (ctx is null) { _loaded = true; return; }
+            (_uid, _accountId, _canWrite) = (ctx.UserId, ctx.AccountId, ctx.CanManageResources);
+        }
         _resolved = true;
         await LoadAsync();
     }
@@ -171,7 +176,9 @@ else
 
     async Task CreateKey()
     {
-        if (!_resolved) return;
+        // Handler-level guard, not just hidden UI — Blazor Server executes handlers regardless of markup.
+        // A Viewer minting a key would bypass their read-only role entirely (keys act role-blind).
+        if (!_resolved || !_canWrite) return;
         if (_form.SelectedScopes.Count == 0)
         {
             _scopeError = "Select at least one scope.";
@@ -191,7 +198,7 @@ else
 
     async Task RevokeKey(Guid keyId, string name)
     {
-        if (!_resolved) return;
+        if (!_resolved || !_canWrite) return;
         if (!await JS.InvokeAsync<bool>("confirm", $"Revoke '{name}'? Apps using this key will stop working."))
             return;
 

@@ -10,9 +10,12 @@
 
 <div class="flex justify-between items-center mb-3">
     <h1 class="text-2xl font-bold">Campaigns</h1>
-    <button class="btn btn-primary" data-testid="new-campaign" @onclick="() => _showAdd = !_showAdd">
-        @(_showAdd ? "Cancel" : "+ New campaign")
-    </button>
+    @if (_canWrite)
+    {
+        <button class="btn btn-primary" data-testid="new-campaign" @onclick="() => _showAdd = !_showAdd">
+            @(_showAdd ? "Cancel" : "+ New campaign")
+        </button>
+    }
 </div>
 
 <p class="text-gray-500 text-sm mb-3 max-w-[640px]">
@@ -72,8 +75,11 @@ else
                             <span class="badge badge-gray" data-testid="link-count">@c.LinkCount link@(c.LinkCount == 1 ? "" : "s")</span>
                             <div class="ml-auto flex gap-2">
                                 <a class="btn btn-outline-primary" href="/campaigns/@c.Id" data-testid="view-analytics">Analytics</a>
-                                <button class="btn btn-outline" data-testid="edit-btn" @onclick="() => BeginEdit(c)">Edit</button>
-                                <button class="btn btn-outline-danger" data-testid="remove-btn" disabled="@_busy" @onclick="() => Remove(c.Id)">Delete</button>
+                                @if (_canWrite)
+                                {
+                                    <button class="btn btn-outline" data-testid="edit-btn" @onclick="() => BeginEdit(c)">Edit</button>
+                                    <button class="btn btn-outline-danger" data-testid="remove-btn" disabled="@_busy" @onclick="() => Remove(c.Id)">Delete</button>
+                                }
                             </div>
                         </div>
                         @if (!string.IsNullOrEmpty(c.Description))
@@ -96,7 +102,7 @@ else
 @code {
     [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
 
-    bool _loaded, _resolved, _showAdd, _busy;
+    bool _loaded, _resolved, _showAdd, _busy, _canWrite;
     Guid _uid, _accountId;
     Guid? _editingId;
     List<CampaignRow> _campaigns = [];
@@ -125,11 +131,12 @@ else
     protected override async Task OnInitializedAsync()
     {
         var principal = (await AuthState).User;
-        var userId = principal.GetUserId();
-        if (userId is null) { _loaded = true; return; }
-        _uid = userId.Value;
         await using (var db = await DbFactory.CreateDbContextAsync())
-            _accountId = await AccountResolver.ResolveAccountIdAsync(db, _uid, principal.GetAccountId(), principal.Identity?.Name ?? "Personal");
+        {
+            var ctx = await AccountRoleContext.ResolveAsync(db, principal);
+            if (ctx is null) { _loaded = true; return; }
+            (_uid, _accountId, _canWrite) = (ctx.UserId, ctx.AccountId, ctx.CanManageResources);
+        }
         _resolved = true;
         await LoadAsync();
     }
@@ -155,7 +162,8 @@ else
 
     async Task Create()
     {
-        if (!_resolved) return;
+        // Handler-level guard, not just hidden UI — Blazor Server executes handlers regardless of markup.
+        if (!_resolved || !_canWrite) return;
         _addError = null;
         try
         {
@@ -171,6 +179,7 @@ else
 
     void BeginEdit(CampaignRow c)
     {
+        if (!_canWrite) return;
         _editingId = c.Id;
         _edit.Name = c.Name;
         _edit.Description = c.Description;
@@ -181,7 +190,7 @@ else
 
     async Task SaveEdit()
     {
-        if (_editingId is not { } id) return;
+        if (!_canWrite || _editingId is not { } id) return;
         await using var scope = ScopeFactory.CreateAsyncScope();
         var svc = scope.ServiceProvider.GetRequiredService<ICampaignService>();
         await svc.UpdateAsync(id, _accountId, _edit.ToInput());
@@ -191,6 +200,7 @@ else
 
     async Task Remove(Guid id)
     {
+        if (!_canWrite) return;
         _busy = true;
         try
         {

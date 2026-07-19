@@ -33,6 +33,13 @@ public static class AccountResolver
         return await GetOrCreatePersonalAccountIdAsync(db, userAccountId, accountName, ct);
     }
 
+    // Known, accepted race: two concurrent requests for a brand-new user (no membership yet) can each
+    // fall through the existence check and create a separate personal account. The
+    // Membership(AccountId, UserAccountId) unique index prevents *duplicate* rows for one account, but
+    // not two distinct auto-created accounts. Left unguarded deliberately — both accounts are owned by
+    // the same user (no data leak; cosmetic duplicate in their account switcher), the window is only a
+    // user's first concurrent requests, and the only clean DB fix is a personal-account marker column,
+    // which isn't worth the schema churn for this edge case. Revisit if it shows up in practice.
     public static async Task<Guid> GetOrCreatePersonalAccountIdAsync(
         ShortLynxDbContext db, Guid userAccountId, string accountName, CancellationToken ct = default)
     {

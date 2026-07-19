@@ -12,6 +12,16 @@ public class RefreshTokenEntity
 {
     public Guid Id { get; set; }
     public Guid UserAccountId { get; set; }
+
+    /// <summary>
+    /// The account the session was acting in when this token was issued, so a refresh re-issues for
+    /// the same account instead of snapping back to the user's primary one. Nullable: tokens minted
+    /// before this column (or without an account) fall back to the primary account. Deliberately not
+    /// a foreign key — membership is re-validated at refresh time, and a deleted account must not
+    /// cascade into token rows.
+    /// </summary>
+    public Guid? AccountId { get; set; }
+
     public required string TokenHash { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset ExpiresAt { get; set; }

@@ -12,22 +12,21 @@ namespace ShortLynx.Data.PostgreSql.Migrations
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropForeignKey(
-                name: "FK_SocialPosts_ShortCodes_ShortCodeId",
-                table: "SocialPosts");
-
-            migrationBuilder.DropForeignKey(
                 name: "FK_Visits_ShortCodes_ShortCodeId",
                 table: "Visits");
 
-            migrationBuilder.RenameColumn(
-                name: "ShortCodeId",
+            // SocialPosts never carried a ShortCodeId column/index/FK in the PostgreSQL chain
+            // (see 20260702211953_AddSocialPosts) — the attribution column is new here.
+            migrationBuilder.AddColumn<Guid>(
+                name: "SocialPostCodeId",
                 table: "SocialPosts",
-                newName: "SocialPostCodeId");
+                type: "uuid",
+                nullable: true);
 
-            migrationBuilder.RenameIndex(
-                name: "IX_SocialPosts_ShortCodeId",
+            migrationBuilder.CreateIndex(
+                name: "IX_SocialPosts_SocialPostCodeId",
                 table: "SocialPosts",
-                newName: "IX_SocialPosts_SocialPostCodeId");
+                column: "SocialPostCodeId");
 
             migrationBuilder.AlterColumn<Guid>(
                 name: "ShortCodeId",
@@ -141,15 +140,13 @@ namespace ShortLynx.Data.PostgreSql.Migrations
                 name: "SocialPostCodeId",
                 table: "Visits");
 
-            migrationBuilder.RenameColumn(
-                name: "SocialPostCodeId",
-                table: "SocialPosts",
-                newName: "ShortCodeId");
-
-            migrationBuilder.RenameIndex(
+            migrationBuilder.DropIndex(
                 name: "IX_SocialPosts_SocialPostCodeId",
-                table: "SocialPosts",
-                newName: "IX_SocialPosts_ShortCodeId");
+                table: "SocialPosts");
+
+            migrationBuilder.DropColumn(
+                name: "SocialPostCodeId",
+                table: "SocialPosts");
 
             migrationBuilder.AlterColumn<Guid>(
                 name: "ShortCodeId",
@@ -160,14 +157,6 @@ namespace ShortLynx.Data.PostgreSql.Migrations
                 oldClrType: typeof(Guid),
                 oldType: "uuid",
                 oldNullable: true);
-
-            migrationBuilder.AddForeignKey(
-                name: "FK_SocialPosts_ShortCodes_ShortCodeId",
-                table: "SocialPosts",
-                column: "ShortCodeId",
-                principalTable: "ShortCodes",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.SetNull);
 
             migrationBuilder.AddForeignKey(
                 name: "FK_Visits_ShortCodes_ShortCodeId",

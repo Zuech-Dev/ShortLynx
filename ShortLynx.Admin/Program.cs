@@ -233,12 +233,13 @@ void MapSocialOAuth(string slug, SocialPlatform platform,
             if (string.IsNullOrEmpty(code))
                 return Results.Redirect($"/social?{errorParam}=missing_code");
 
-            var userId = user.GetUserId();
-            if (userId is null) return Results.Unauthorized();
-
             await using var db = await dbFactory.CreateDbContextAsync(ct);
-            var accountId = await AccountResolver.ResolveAccountIdAsync(
-                db, userId.Value, user.GetAccountId(), user.Identity?.Name ?? "Personal", ct);
+            var roleCtx = await ShortLynx.Admin.Components.AccountRoleContext.ResolveAsync(db, user, ct);
+            if (roleCtx is null) return Results.Unauthorized();
+            // This endpoint *creates* a connection — same ManageResources gate as the Social page's
+            // Connect handler, or a Viewer could complete the OAuth flow directly and bypass the UI gate.
+            if (!roleCtx.CanManageResources)
+                return Results.Redirect($"/social?{errorParam}=forbidden");
 
             try
             {
@@ -246,7 +247,7 @@ void MapSocialOAuth(string slug, SocialPlatform platform,
                 var identity = await connector.ExchangeAuthorizationCodeAsync(
                     code, credentials(http.RequestServices).RedirectUri, ct);
                 await socialConnections.ConnectFromIdentityAsync(
-                    accountId, userId.Value, platform, identity, instanceUrl: null, ct);
+                    roleCtx.AccountId, roleCtx.UserId, platform, identity, instanceUrl: null, ct);
             }
             catch (ArgumentException ex)
             {

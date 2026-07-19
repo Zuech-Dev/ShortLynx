@@ -12,13 +12,16 @@
 
 <div class="flex justify-between items-center mb-3">
     <h1 class="text-2xl font-bold">Social Accounts</h1>
-    <div class="flex gap-2">
-        <a class="btn btn-outline" href="/social/threads/authorize" data-testid="connect-threads">Connect Threads</a>
-        <a class="btn btn-outline" href="/social/reddit/authorize" data-testid="connect-reddit">Connect Reddit</a>
-        <button class="btn btn-primary" data-testid="connect-toggle" @onclick="() => _showConnect = !_showConnect">
-            @(_showConnect ? "Cancel" : "+ Connect account")
-        </button>
-    </div>
+    @if (_canWrite)
+    {
+        <div class="flex gap-2">
+            <a class="btn btn-outline" href="/social/threads/authorize" data-testid="connect-threads">Connect Threads</a>
+            <a class="btn btn-outline" href="/social/reddit/authorize" data-testid="connect-reddit">Connect Reddit</a>
+            <button class="btn btn-primary" data-testid="connect-toggle" @onclick="() => _showConnect = !_showConnect">
+                @(_showConnect ? "Cancel" : "+ Connect account")
+            </button>
+        </div>
+    }
 </div>
 
 <p class="text-gray-500 text-sm mb-3 max-w-[640px]">
@@ -121,8 +124,11 @@ else
                             <span class="text-gray-500 text-sm">@c.InstanceUrl</span>
                         }
                         <span class="text-gray-500 text-sm ml-auto">connected @c.CreatedAt.ToString("yyyy-MM-dd")</span>
-                        <button class="btn btn-outline-danger" disabled="@_busy" data-testid="disconnect-btn"
-                                @onclick="() => Disconnect(c.Id)">Disconnect</button>
+                        @if (_canWrite)
+                        {
+                            <button class="btn btn-outline-danger" disabled="@_busy" data-testid="disconnect-btn"
+                                    @onclick="() => Disconnect(c.Id)">Disconnect</button>
+                        }
                     </div>
                 </div>
             </div>
@@ -133,7 +139,7 @@ else
 @code {
     [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
 
-    bool _loaded, _resolved, _showConnect, _busy;
+    bool _loaded, _resolved, _showConnect, _busy, _canWrite;
     string? _oauthConnected, _oauthError, _oauthErrorPlatform;
     Guid _uid, _accountId;
     List<ConnectionRow> _connections = [];
@@ -143,11 +149,12 @@ else
     protected override async Task OnInitializedAsync()
     {
         var principal = (await AuthState).User;
-        var userId = principal.GetUserId();
-        if (userId is null) { _loaded = true; return; }
-        _uid = userId.Value;
         await using (var db = await DbFactory.CreateDbContextAsync())
-            _accountId = await AccountResolver.ResolveAccountIdAsync(db, _uid, principal.GetAccountId(), principal.Identity?.Name ?? "Personal");
+        {
+            var ctx = await AccountRoleContext.ResolveAsync(db, principal);
+            if (ctx is null) { _loaded = true; return; }
+            (_uid, _accountId, _canWrite) = (ctx.UserId, ctx.AccountId, ctx.CanManageResources);
+        }
         _resolved = true;
 
         // Surfaces the result of a redirect back from an OAuth callback (/social/{slug}/callback).
@@ -209,7 +216,8 @@ else
 
     async Task Connect()
     {
-        if (!_resolved) return;
+        // Handler-level guard, not just hidden UI — Blazor Server executes handlers regardless of markup.
+        if (!_resolved || !_canWrite) return;
         _connectError = null;
 
         if (!Enum.TryParse<SocialPlatform>(_form.Platform, ignoreCase: true, out var platform))
@@ -237,6 +245,7 @@ else
 
     async Task Disconnect(Guid id)
     {
+        if (!_canWrite) return;
         _busy = true;
         try
         {

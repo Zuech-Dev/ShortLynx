@@ -74,6 +74,33 @@ whole chain (reuse detection) — re-login.
 
 All require a session and act on the JWT's **current account**.
 
+### Roles
+
+Every membership carries a role; what each role may do is defined centrally in
+`AccountPermissions` (Services):
+
+| Role | May |
+|---|---|
+| **Viewer** | Read everything in the account: links, domains, campaigns, API keys, analytics |
+| **Member** | Viewer + create/edit/delete those resources, including minting API keys |
+| **Admin** | Member + invite/remove members and change roles **below their own** |
+| **Owner** | Admin + rename/deactivate/transfer the account |
+
+Enforcement details that matter to API clients:
+
+- **Write endpoints return `403` for Viewers** — every `POST`/`PUT`/`DELETE` under `/me/*`
+  is gated on `ManageResources` (member management additionally on `ManageMembers`).
+- **The role is checked against the database on every write**, not the JWT's `role` claim.
+  A demotion or removal takes effect on the member's next request — there is no
+  wait-for-token-expiry window, and a forged claim can never widen access.
+- **The gate runs before validation and lookups**: an under-privileged caller gets `403`
+  even for a malformed body or a nonexistent resource id, so 400/404 responses can't be
+  used to probe schemas or enumerate ids.
+- **API keys are role-blind once minted** (they carry scopes, not a role) — which is
+  exactly why minting one requires `ManageResources`. Scopes are validated against the
+  known set: unknown scopes → `400` naming the offenders; at least one scope is required;
+  duplicates are deduplicated.
+
 | Method & path | Purpose |
 |---|---|
 | `GET /me` | Current user + account + role |

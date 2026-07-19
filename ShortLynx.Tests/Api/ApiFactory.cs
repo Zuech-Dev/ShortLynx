@@ -89,9 +89,14 @@ public sealed class ApiFactory : WebApplicationFactory<ShortLynx.Core.CoreApiEnt
     /// Seeds a user who is an Owner of a fresh account, logs them in via /auth/session, and returns an
     /// HttpClient pre-authenticated with the access token plus the user/account ids.
     /// </summary>
-    public async Task<(HttpClient Client, Guid UserId, Guid AccountId)> CreateSessionClientAsync()
+    public Task<(HttpClient Client, Guid UserId, Guid AccountId)> CreateSessionClientAsync()
+        => CreateSessionClientAsync(ShortLynx.Data.Enums.AccountRole.Owner);
+
+    /// <summary>Session client whose user holds <paramref name="role"/> in a fresh account.</summary>
+    public async Task<(HttpClient Client, Guid UserId, Guid AccountId)> CreateSessionClientAsync(
+        ShortLynx.Data.Enums.AccountRole role)
     {
-        var (token, userId, accountId) = await SeedMemberTokenAsync();
+        var (token, userId, accountId) = await SeedMemberTokenAsync(role);
         var session = await (await CreateClient().PostAsJsonAsync(
                 "/auth/session", new ShortLynx.Core.Models.Requests.CreateSessionRequest(token)))
             .Content.ReadFromJsonAsync<ShortLynx.Core.Models.Responses.SessionResponse>();
@@ -101,8 +106,9 @@ public sealed class ApiFactory : WebApplicationFactory<ShortLynx.Core.CoreApiEnt
         return (client, userId, accountId);
     }
 
-    /// <summary>Seeds a user who owns a fresh account and returns a valid magic-link token + ids.</summary>
-    public async Task<(string Token, Guid UserId, Guid AccountId)> SeedMemberTokenAsync()
+    /// <summary>Seeds a user in a fresh account at the given role and returns a valid magic-link token + ids.</summary>
+    public async Task<(string Token, Guid UserId, Guid AccountId)> SeedMemberTokenAsync(
+        ShortLynx.Data.Enums.AccountRole role = ShortLynx.Data.Enums.AccountRole.Owner)
     {
         var email = $"{Guid.NewGuid():N}@example.com";
         using var scope = Services.CreateScope();
@@ -120,7 +126,7 @@ public sealed class ApiFactory : WebApplicationFactory<ShortLynx.Core.CoreApiEnt
         db.Add(new ShortLynx.Data.Entities.MembershipEntity
         {
             Id = Guid.CreateVersion7(), AccountId = account.Id, UserAccountId = user.Id,
-            Role = ShortLynx.Data.Enums.AccountRole.Owner, CreatedAt = DateTimeOffset.UtcNow,
+            Role = role, CreatedAt = DateTimeOffset.UtcNow,
         });
         await db.SaveChangesAsync();
         return (token, user.Id, account.Id);

@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using ShortLynx.Core.Auth;
 using ShortLynx.Core.Models.Requests;
 using ShortLynx.Core.Models.Responses;
 using ShortLynx.Data.Entities;
+using ShortLynx.Services.Accounts;
 using ShortLynx.Services.Domains;
 
 namespace ShortLynx.Core.Controllers;
@@ -22,6 +24,7 @@ public class MeDomainsController(
 
     // POST /me/domains
     [HttpPost]
+    [RequireAccountAction(AccountAction.ManageResources)]
     public async Task<IActionResult> Add([FromBody] AddDomainRequest request, CancellationToken ct)
     {
         try
@@ -43,6 +46,7 @@ public class MeDomainsController(
 
     // POST /me/domains/{id}/verify
     [HttpPost("{id:guid}/verify")]
+    [RequireAccountAction(AccountAction.ManageResources)]
     public async Task<IActionResult> Verify(Guid id, CancellationToken ct)
     {
         var domain = await domains.VerifyAsync(id, AccountId, ct);
@@ -51,6 +55,7 @@ public class MeDomainsController(
 
     // DELETE /me/domains/{id}
     [HttpDelete("{id:guid}")]
+    [RequireAccountAction(AccountAction.ManageResources)]
     public async Task<IActionResult> Remove(Guid id, CancellationToken ct)
         => await domains.RemoveAsync(id, AccountId, ct) ? NoContent() : NotFound();
 

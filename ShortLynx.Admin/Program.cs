@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using System.Security.Cryptography;
 using Microsoft.AspNetCore.DataProtection;
+using System.Net;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -18,13 +19,21 @@ using ShortLynx.Services.Social;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Honour X-Forwarded-* from the hosting proxy (Railway) so the app sees the original HTTPS scheme
-// (required for the Secure cookie + HTTPS redirect to work behind TLS termination).
+// Honour X-Forwarded-* from Railway's edge proxy so the client IP (rate limiting, analytics IP hashing)
+// and original scheme (HTTPS redirect) are correct. Railway's edge IP is dynamic, so we can't pin a
+// KnownProxy; instead we trust one upstream hop unconditionally — sound because the container is only
+// reachable through that edge (no direct ingress), and Railway's Envoy writes the rightmost
+// X-Forwarded-For entry. WITHOUT a trusted network the middleware silently drops X-Forwarded-*, leaving
+// RemoteIpAddress as an internal Railway address that varies per connection — which is why per-IP rate
+// limiting didn't partition real clients together in production.
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.ForwardLimit = 1; // trust exactly one hop (the edge); the rightmost XFF entry is Railway's
     options.KnownIPNetworks.Clear();
     options.KnownProxies.Clear();
+    options.KnownIPNetworks.Add(new System.Net.IPNetwork(IPAddress.IPv6Any, 0)); // ::/0 — Railway's internal mesh is IPv6
+    options.KnownIPNetworks.Add(new System.Net.IPNetwork(IPAddress.Any, 0));     // 0.0.0.0/0 — belt and suspenders
 });
 
 builder.Services.AddRazorComponents()

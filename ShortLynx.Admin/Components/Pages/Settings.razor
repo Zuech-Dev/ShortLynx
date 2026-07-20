@@ -27,6 +27,22 @@ else
                     <label class="field-label">Privacy Policy URL</label>
                     <input class="field-input" type="url" placeholder="https://example.com/privacy"
                            @bind="_privacyUrl" data-testid="privacy-url"/>
+                    <div class="text-xs text-gray-500 mt-1 space-y-1" data-testid="privacy-url-help">
+                        <p>
+                            <span class="font-medium">No policy of your own yet?</span>
+                            You may point this at ShortLynx's own policy —
+                            <a class="text-blue-700 hover:underline" href="https://shrtlynx.com/privacy" target="_blank" rel="noopener">shrtlynx.com/privacy</a>
+                            — if you agree it accurately describes your use. It discloses exactly the
+                            click-attribution these links record. You remain responsible for your own compliance.
+                        </p>
+                        <p>
+                            To serve that policy under <span class="font-medium">your own domain</span>,
+                            add it on the <a class="text-blue-700 hover:underline" href="/domains">Domains</a>
+                            page and point its DNS at ShortLynx (the same setup you'd use to serve links) —
+                            then <code>https://yourdomain/privacy</code> serves the policy automatically.
+                        </p>
+                        <p>However you configure it, we recommend also linking your privacy policy from your own website.</p>
+                    </div>
                 </div>
                 <div>
                     <label class="field-label">Terms of Service URL <span class="text-gray-400">(optional)</span></label>

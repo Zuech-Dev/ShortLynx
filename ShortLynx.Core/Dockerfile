@@ -33,9 +33,15 @@ FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
 COPY --from=migrations /app/efbundle ./efbundle
-COPY ShortLynx.Core/docker-entrypoint.sh ./docker-entrypoint.sh
-# chmod needs root; the base image runs as the non-root $APP_UID, so flip back afterwards.
+# chmod + apt need root; the base image runs as the non-root $APP_UID, so flip back afterwards.
+# apt layer comes before the script COPYs so script edits don't re-download packages.
 USER root
-RUN chmod +x ./efbundle ./docker-entrypoint.sh
+# curl is used only by the optional GeoLite2 fetch at startup (aspnet base image ships without it).
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends curl ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+COPY ShortLynx.Core/docker-entrypoint.sh ./docker-entrypoint.sh
+COPY docker/fetch-geoip.sh ./fetch-geoip.sh
+RUN chmod +x ./efbundle ./docker-entrypoint.sh ./fetch-geoip.sh
 USER $APP_UID
 ENTRYPOINT ["./docker-entrypoint.sh"]

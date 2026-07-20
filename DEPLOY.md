@@ -76,6 +76,21 @@ ApiKey__HmacSecret = <32+ random chars>      # apps fail-fast on empty/default/<
 VisitSink__IpHashPepper = <random secret>    # empty = unkeyed hashing (dev only)
 ```
 
+**Core + Web — GeoIP country/timezone analytics (optional; both write visits, so set on both):**
+```
+# Where the app expects the GeoLite2-City database. Unset = geo resolution off (columns stay null).
+VisitSink__GeoIpDatabasePath = /tmp/GeoLite2-City.mmdb   # or a mounted volume path to persist it
+
+# When set, the container downloads/refreshes the database at startup (free key from a MaxMind
+# account — https://www.maxmind.com/en/geolite2/signup; GeoLite2 EULA applies). Without it, you
+# must place the .mmdb at the path yourself. Fetch failures are non-fatal (geo just stays off) —
+# each app logs "GeoIP resolution enabled/disabled" at startup, so verify there after deploying.
+MAXMIND_LICENSE_KEY   = <maxmind license key>
+GEOIP_MAX_AGE_DAYS    = 30    # optional; refresh cadence when the file already exists
+```
+> Privacy note: only **country + IANA timezone** are ever read from the database (MASTER_PLAN P1);
+> the resolver never touches city, region, or coordinates.
+
 **Core only:**
 ```
 ApiKey__AdminSecret            = <16+ random chars>   # gates POST /api-keys

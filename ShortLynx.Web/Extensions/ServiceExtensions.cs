@@ -58,9 +58,21 @@ public static class ServiceExtensions
         services.AddSingleton<ShortLynx.Services.Analytics.IGeoIpResolver>(sp =>
         {
             var path = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<VisitSinkOptions>>().Value.GeoIpDatabasePath;
-            return !string.IsNullOrWhiteSpace(path) && File.Exists(path)
-                ? new ShortLynx.Services.Analytics.MaxMindGeoIpResolver(path)
-                : new ShortLynx.Services.Analytics.NullGeoIpResolver();
+            var log = sp.GetRequiredService<ILoggerFactory>().CreateLogger("GeoIp");
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                log.LogInformation("GeoIP resolution disabled (VisitSink:GeoIpDatabasePath not set).");
+                return new ShortLynx.Services.Analytics.NullGeoIpResolver();
+            }
+            if (!File.Exists(path))
+            {
+                // Loud, not silent: a set-but-missing path is a misconfiguration (or the startup
+                // fetch failed), and the only symptom would otherwise be null country columns.
+                log.LogWarning("GeoIP resolution disabled: VisitSink:GeoIpDatabasePath is set but no file exists at {Path}.", path);
+                return new ShortLynx.Services.Analytics.NullGeoIpResolver();
+            }
+            log.LogInformation("GeoIP resolution enabled (GeoLite2 database at {Path}).", path);
+            return new ShortLynx.Services.Analytics.MaxMindGeoIpResolver(path);
         });
         services.AddSingleton<InMemoryVisitEventSink>();
         services.AddSingleton<IVisitEventSink>(sp => sp.GetRequiredService<InMemoryVisitEventSink>());

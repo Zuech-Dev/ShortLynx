@@ -175,8 +175,8 @@ public class ViewerRoleComponentTests : BunitContext
         Assert.True(save.HasAttribute("disabled"));
 
         // bUnit dispatches clicks even on disabled elements — this exercises the handler guard,
-        // proving enforcement doesn't rely on the disabled attribute alone.
-        cut.Find("[data-testid=privacy-url]").Change("https://evil.example.com/policy");
+        // proving enforcement doesn't rely on the disabled attribute alone. (URL binds on oninput.)
+        cut.Find("[data-testid=privacy-url]").Input("https://evil.example.com/policy");
         cut.Find("[data-testid=privacy-confirm]").Change(true);
         save.Click();
 

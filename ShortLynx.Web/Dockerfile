@@ -20,4 +20,15 @@ RUN dotnet publish "./ShortLynx.Web.csproj" -c $BUILD_CONFIGURATION -o /app/publ
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
-ENTRYPOINT ["dotnet", "ShortLynx.Web.dll"]
+# chmod + apt need root; the base image runs as the non-root $APP_UID, so flip back afterwards.
+# apt layer comes before the script COPYs so script edits don't re-download packages.
+USER root
+# curl is used only by the optional GeoLite2 fetch at startup (aspnet base image ships without it).
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends curl ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+COPY ShortLynx.Web/docker-entrypoint.sh ./docker-entrypoint.sh
+COPY docker/fetch-geoip.sh ./fetch-geoip.sh
+RUN chmod +x ./docker-entrypoint.sh ./fetch-geoip.sh
+USER $APP_UID
+ENTRYPOINT ["./docker-entrypoint.sh"]

@@ -25,8 +25,27 @@ else
             <div class="max-w-[520px] flex flex-col gap-3">
                 <div>
                     <label class="field-label">Privacy Policy URL</label>
+                    @* Commit per keystroke via oninput. The confirmation checkbox renders only once the
+                       URL is non-empty, so the default change event (which waits for the field to lose
+                       focus) surfaced the checkbox — and thus the reason Save refused — too late. *@
                     <input class="field-input" type="url" placeholder="https://example.com/privacy"
-                           @bind="_privacyUrl" data-testid="privacy-url"/>
+                           @bind="_privacyUrl" @bind:event="oninput" data-testid="privacy-url"/>
+                    <div class="text-xs text-gray-500 mt-1 space-y-1" data-testid="privacy-url-help">
+                        <p>
+                            <span class="font-medium">No policy of your own yet?</span>
+                            You may point this at ShortLynx's own policy —
+                            <a class="text-blue-700 hover:underline" href="https://shrtlynx.com/privacy" target="_blank" rel="noopener">shrtlynx.com/privacy</a>
+                            — if you agree it accurately describes your use. It discloses exactly the
+                            click-attribution these links record. You remain responsible for your own compliance.
+                        </p>
+                        <p>
+                            To serve that policy under <span class="font-medium">your own domain</span>,
+                            add it on the <a class="text-blue-700 hover:underline" href="/domains">Domains</a>
+                            page and point its DNS at ShortLynx (the same setup you'd use to serve links) —
+                            then <code>https://yourdomain/privacy</code> serves the policy automatically.
+                        </p>
+                        <p>However you configure it, we recommend also linking your privacy policy from your own website.</p>
+                    </div>
                 </div>
                 <div>
                     <label class="field-label">Terms of Service URL <span class="text-gray-400">(optional)</span></label>
@@ -41,6 +60,15 @@ else
                         <span>I confirm my privacy policy discloses that links I share may record click
                         attribution data, including device type and general location.</span>
                     </label>
+                }
+
+                @if (!_canManageAccount)
+                {
+                    @* Make the permission boundary visible rather than shipping a silently-disabled
+                       button (which reads as "Save is broken"). Owner-only per the roles model. *@
+                    <p class="text-amber-700 text-sm" data-testid="privacy-noperm">
+                        Only account owners can change these settings.
+                    </p>
                 }
 
                 <div class="flex items-center gap-3">

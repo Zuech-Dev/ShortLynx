@@ -9,6 +9,8 @@ public sealed class UnlimitedEntitlements : IEntitlements
 {
     public Task<bool> CanCreateLinkAsync(Guid accountId, CancellationToken ct = default) => Task.FromResult(true);
 
+    public Task<bool> CanCreateCustomCodeAsync(Guid accountId, CancellationToken ct = default) => Task.FromResult(true);
+
     public Task<bool> IsFeatureEnabledAsync(Guid accountId, PlanFeature feature, CancellationToken ct = default)
         => Task.FromResult(true);
 }

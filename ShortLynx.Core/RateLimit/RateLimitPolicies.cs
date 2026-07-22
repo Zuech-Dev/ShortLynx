@@ -13,4 +13,7 @@ public static class RateLimitPolicies
     /// stolen-then-rotated tokens triggers reuse-detection revocation — worth making expensive.
     /// </summary>
     public const string Refresh = "refresh";
+
+    /// <summary>Per-IP limit on the custom-code availability endpoint — enumeration guard.</summary>
+    public const string CustomCodeCheck = "custom-code-check";
 }

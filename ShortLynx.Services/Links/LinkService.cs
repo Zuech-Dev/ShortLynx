@@ -12,19 +12,20 @@ public sealed class LinkService(
     ShortLynxDbContext db,
     IShortCodeGenerator codeGenerator,
     IUrlValidationService urlValidator,
-    IEntitlements entitlements) : ILinkService
+    IEntitlements entitlements,
+    CustomCodeValidator customCodeValidator) : ILinkService
 {
     private const int MaxCodeAttempts = 5;
 
     /// <summary>Creates an API-key-owned link (REST API path) for the key's account.</summary>
     public Task<AnonymousLinkResult> CreateAnonymousLinkAsync(
-        string url, ApiKeyEntity owner, CancellationToken ct = default)
-        => CreateLinkAsync(url, owner.AccountId, link => link.ApiKeyId = owner.Id, campaignId: null, ct);
+        string url, ApiKeyEntity owner, string? customCode = null, CancellationToken ct = default)
+        => CreateLinkAsync(url, owner.AccountId, link => link.ApiKeyId = owner.Id, campaignId: null, customCode, ct);
 
     /// <summary>Creates a link owned by an account (admin dashboard path).</summary>
     public Task<AnonymousLinkResult> CreateAnonymousLinkAsync(
-        string url, Guid accountId, Guid? createdByUserAccountId = null, Guid? campaignId = null, CancellationToken ct = default)
-        => CreateLinkAsync(url, accountId, link => link.UserAccountId = createdByUserAccountId, campaignId, ct);
+        string url, Guid accountId, Guid? createdByUserAccountId = null, Guid? campaignId = null, string? customCode = null, CancellationToken ct = default)
+        => CreateLinkAsync(url, accountId, link => link.UserAccountId = createdByUserAccountId, campaignId, customCode, ct);
 
     /// <summary>Creates an account-owned, user-attributed (Mode 2) link with no anonymous short code.</summary>
     public async Task<LinkEntity> CreateUserAttributedLinkAsync(
@@ -57,7 +58,7 @@ public sealed class LinkService(
     }
 
     private async Task<AnonymousLinkResult> CreateLinkAsync(
-        string url, Guid accountId, Action<LinkEntity> assignProvenance, Guid? campaignId, CancellationToken ct)
+        string url, Guid accountId, Action<LinkEntity> assignProvenance, Guid? campaignId, string? customCode, CancellationToken ct)
     {
         if (!await entitlements.CanCreateLinkAsync(accountId, ct))
             throw new EntitlementException("Your plan's link limit has been reached.");
@@ -66,6 +67,11 @@ public sealed class LinkService(
         if (!validation.IsValid)
             throw new ArgumentException(validation.Reason, nameof(url));
         await ValidateCampaignAsync(campaignId, accountId, ct);
+
+        // A custom code is entitlement- and format-checked up front so a failure never leaves an
+        // orphan link, and the code is minted in the SAME SaveChanges as the link so a collision
+        // rolls both back atomically.
+        var normalizedCustom = await PrepareCustomCodeAsync(customCode, accountId, ct);
 
         var link = new LinkEntity
         {
@@ -78,10 +84,57 @@ public sealed class LinkService(
             CampaignId = campaignId,
         };
         assignProvenance(link);
+
+        if (normalizedCustom is not null)
+            return await CreateWithCustomCodeAsync(link, normalizedCustom, ct);
+
         db.LinkEntities.Add(link);
         await db.SaveChangesAsync(ct);
-
         return await MintShortCodeAsync(link, ct);
+    }
+
+    // Validates the custom code (entitlement + format) before any link is created. Returns the
+    // normalized code, or null when no custom code was requested.
+    private async Task<string?> PrepareCustomCodeAsync(string? customCode, Guid accountId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(customCode))
+            return null;
+
+        if (!await entitlements.CanCreateCustomCodeAsync(accountId, ct))
+            throw new EntitlementException("Custom codes aren't available on your current plan.");
+
+        var v = customCodeValidator.Validate(customCode);
+        if (!v.IsValid)
+            throw new ArgumentException(v.Reason, nameof(customCode));
+
+        return CustomCodeValidator.Normalize(customCode);
+    }
+
+    // Inserts the link and its operator-chosen code in one transaction; a unique-index collision
+    // (the authoritative availability check) throws CustomCodeTakenException — no random-code retry.
+    private async Task<AnonymousLinkResult> CreateWithCustomCodeAsync(LinkEntity link, string code, CancellationToken ct)
+    {
+        var shortCode = new ShortCodeEntity
+        {
+            Id = Guid.CreateVersion7(),
+            LinkId = link.Id,
+            Code = code,
+            IsCustom = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+            IsActive = true,
+        };
+        db.LinkEntities.Add(link);
+        db.ShortCodeEntities.Add(shortCode);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+            return new AnonymousLinkResult(link, shortCode);
+        }
+        catch (DbUpdateException)
+        {
+            db.ChangeTracker.Clear();
+            throw new CustomCodeTakenException(code);
+        }
     }
 
     // Ensures a chosen campaign belongs to the same account before a link is stamped with it.

@@ -188,13 +188,16 @@ internal sealed class FakeLinkService : ILinkService
     public bool ThrowOnCreate;
     public string CodeToReturn = "abc12345";
 
-    public Task<AnonymousLinkResult> CreateAnonymousLinkAsync(string url, ApiKeyEntity owner, CancellationToken ct = default)
+    public readonly List<string?> CreatedCustomCodes = [];
+
+    public Task<AnonymousLinkResult> CreateAnonymousLinkAsync(string url, ApiKeyEntity owner, string? customCode = null, CancellationToken ct = default)
         => throw new NotSupportedException();
 
-    public Task<AnonymousLinkResult> CreateAnonymousLinkAsync(string url, Guid accountId, Guid? createdByUserAccountId = null, Guid? campaignId = null, CancellationToken ct = default)
+    public Task<AnonymousLinkResult> CreateAnonymousLinkAsync(string url, Guid accountId, Guid? createdByUserAccountId = null, Guid? campaignId = null, string? customCode = null, CancellationToken ct = default)
     {
         if (ThrowOnCreate) throw new ArgumentException("blocked URL", nameof(url));
         Created.Add((url, accountId, campaignId));
+        CreatedCustomCodes.Add(customCode);
         var link = new LinkEntity
         {
             Id = Guid.CreateVersion7(), OriginalUrl = url, AccountId = accountId, UserAccountId = createdByUserAccountId,

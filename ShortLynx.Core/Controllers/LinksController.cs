@@ -11,6 +11,7 @@ using ShortLynx.Data.Enums;
 using ShortLynx.Services.ApiKeys;
 using ShortLynx.Services.Entitlements;
 using ShortLynx.Services.Links;
+using ShortLynx.Services.ShortCodes;
 
 namespace ShortLynx.Core.Controllers;
 
@@ -30,9 +31,13 @@ public class LinksController(ILinkService linkService, ShortLynxDbContext db) : 
     {
         try
         {
-            var result = await linkService.CreateAnonymousLinkAsync(request.Url, CurrentKey, ct);
+            var result = await linkService.CreateAnonymousLinkAsync(request.Url, CurrentKey, request.CustomCode, ct);
             var response = ToLinkResponse(result.Link, result.ShortCode.Code);
             return CreatedAtAction(nameof(GetLink), new { id = result.Link.Id }, response);
+        }
+        catch (CustomCodeTakenException ex)
+        {
+            return Conflict(new { error = ex.Message });
         }
         catch (ArgumentException ex)
         {

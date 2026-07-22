@@ -102,6 +102,8 @@ public static class ServiceExtensions
         services.AddScoped<ISocialMetricsService, SocialMetricsService>();
 
         services.AddScoped<IShortCodeGenerator, HashBase62Generator>();
+        services.AddSingleton<CustomCodeValidator>();
+        services.AddScoped<ICustomCodeService, CustomCodeService>();
         services.AddSingleton<IUrlValidationService, UrlValidationService>();
         // Custom domains: management + DNS-TXT verification.
         services.AddScoped<ICustomDomainService, CustomDomainService>();

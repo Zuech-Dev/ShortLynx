@@ -130,10 +130,12 @@ public class AdminUsersControllerTests : IClassFixture<ApiFactory>
         var email = $"{Guid.NewGuid():N}@example.com";
         var added = await (await client.PostAsJsonAsync("/admin/users", new AdminAddUserRequest(email)))
             .Content.ReadFromJsonAsync<AdminUserResponse>();
+
+        // Mint a token while the user is still active (magic links are only issued to active users),
+        // then deactivate them and try to exchange the already-minted token.
+        var token = await MintTokenAsync(email);
         await client.DeleteAsync($"/admin/users/{added!.Id}");
 
-        // Mint a fresh magic-link token for the now-inactive user and try to exchange it.
-        var token = await MintTokenAsync(email);
         var resp = await _factory.CreateClient()
             .PostAsJsonAsync("/auth/session", new CreateSessionRequest(token));
         Assert.Equal(HttpStatusCode.Unauthorized, resp.StatusCode);

@@ -16,7 +16,8 @@ public class LinkServiceTests
         => new(ctx,
             new RandomBase62Generator(Options.Create(new ShortCodeOptions { Length = 8 })),
             new StubUrlValidationService(urlValid, invalidReason),
-            entitlements ?? new UnlimitedEntitlements());
+            entitlements ?? new UnlimitedEntitlements(),
+            new CustomCodeValidator(Options.Create(new ShortCodeOptions())));
 
     private static async Task<Guid> SeedAccountAsync(TestDatabase db)
     {

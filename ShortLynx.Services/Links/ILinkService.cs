@@ -9,14 +9,20 @@ public sealed record CodeRecipient(Guid UserId, string? Recipient = null);
 
 public interface ILinkService
 {
-    Task<AnonymousLinkResult> CreateAnonymousLinkAsync(string url, ApiKeyEntity owner, CancellationToken ct = default);
+    /// <summary>
+    /// API-key path. Optional <paramref name="customCode"/> mints an operator-chosen (vanity) code
+    /// instead of a random one — entitlement- and format-gated; throws <see cref="Entitlements.EntitlementException"/>,
+    /// <see cref="ArgumentException"/> (invalid), or <see cref="ShortCodes.CustomCodeTakenException"/> (409).
+    /// </summary>
+    Task<AnonymousLinkResult> CreateAnonymousLinkAsync(string url, ApiKeyEntity owner, string? customCode = null, CancellationToken ct = default);
 
     /// <summary>
     /// Creates a link owned by an account (admin dashboard); no owning API key. Optionally assigns it to
     /// one of the account's campaigns at creation — throws <see cref="ArgumentException"/> if the campaign
-    /// isn't the account's.
+    /// isn't the account's. Optional <paramref name="customCode"/> mints a vanity code (see the API-key
+    /// overload for the failure modes).
     /// </summary>
-    Task<AnonymousLinkResult> CreateAnonymousLinkAsync(string url, Guid accountId, Guid? createdByUserAccountId = null, Guid? campaignId = null, CancellationToken ct = default);
+    Task<AnonymousLinkResult> CreateAnonymousLinkAsync(string url, Guid accountId, Guid? createdByUserAccountId = null, Guid? campaignId = null, string? customCode = null, CancellationToken ct = default);
 
     /// <summary>
     /// Creates an account-owned, user-attributed (Mode 2) link. The link gets no anonymous short code —

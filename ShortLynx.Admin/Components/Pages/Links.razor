@@ -4,7 +4,9 @@
 @using Microsoft.Extensions.DependencyInjection
 @using Microsoft.Extensions.Options
 @using ShortLynx.Services.Analytics
+@using ShortLynx.Services.Entitlements
 @using ShortLynx.Services.Links
+@using ShortLynx.Services.ShortCodes
 @inject IDbContextFactory<ShortLynxDbContext> DbFactory
 @inject IServiceScopeFactory ScopeFactory
 @inject IOptions<DashboardOptions> DashboardOpts
@@ -77,6 +79,29 @@
                                 <option value="@c.Id">@c.Name</option>
                             }
                         </select>
+                    </div>
+                }
+                @* Custom (vanity) code — Anonymous mode only. Paid on the hosted service; free self-host. *@
+                @if (_form.Mode == LinkMode.Anonymous && _customCodesAvailable)
+                {
+                    <div class="mb-3">
+                        <label class="field-label">Custom code <span class="text-gray-500 text-sm">(optional, 8–12 chars)</span></label>
+                        <input class="field-input" @bind="_customCode" @bind:event="oninput" @bind:after="OnCustomCodeChanged"
+                               placeholder="my-link-2025" data-testid="custom-code"/>
+                        @if (!string.IsNullOrEmpty(_customCode))
+                        {
+                            <div class="text-sm mt-1" data-testid="custom-code-status">
+                                @if (_customCodeChecking) { <span class="text-gray-500">Checking…</span> }
+                                else if (_customCodeAvailable == true) { <span class="text-green-600">✓ Available</span> }
+                                else if (_customCodeReason is not null) { <span class="text-red-600">@_customCodeReason</span> }
+                            </div>
+                        }
+                    </div>
+                }
+                else if (_form.Mode == LinkMode.Anonymous && _customCodesGateKnown)
+                {
+                    <div class="mb-3 text-sm text-gray-500" data-testid="custom-code-upsell">
+                        Choosing your own code is a paid feature — upgrade your plan to enable custom codes.
                     </div>
                 }
                 <button type="submit" class="btn btn-primary" data-testid="create-submit">
@@ -162,6 +187,17 @@ else
                 .Select(c => new CampaignOption(c.Id, c.Name))
                 .ToListAsync();
         }
+
+        // Custom codes: only relevant to users who can create links. Self-host is always allowed
+        // (UnlimitedEntitlements); hosted depends on plan.
+        if (_canWrite)
+        {
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var ent = scope.ServiceProvider.GetRequiredService<IEntitlements>();
+            _customCodesAvailable = await ent.CanCreateCustomCodeAsync(_accountId);
+            _customCodesGateKnown = true;
+        }
+
         _resolved = true;
         await LoadAsync();
     }
@@ -208,6 +244,50 @@ else
     string? _createError;
     CreateLinkForm _form = new();
 
+    // Custom (vanity) code state.
+    bool _customCodesAvailable;      // account may mint custom codes (self-host: always; hosted: per plan)
+    bool _customCodesGateKnown;      // entitlement resolved (avoids flashing the upsell before load)
+    string? _customCode;
+    bool _customCodeChecking;
+    bool? _customCodeAvailable;
+    string? _customCodeReason;
+    CancellationTokenSource? _customCodeDebounce;
+
+    // Debounced availability check: reset the timer each keystroke, then check ~350ms after typing stops.
+    async Task OnCustomCodeChanged()
+    {
+        _customCodeAvailable = null;
+        _customCodeReason = null;
+        _customCodeDebounce?.Cancel();
+
+        if (string.IsNullOrWhiteSpace(_customCode))
+        {
+            _customCodeChecking = false;
+            return;
+        }
+
+        _customCodeChecking = true;
+        var cts = new CancellationTokenSource();
+        _customCodeDebounce = cts;
+        try
+        {
+            await Task.Delay(350, cts.Token);
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var svc = scope.ServiceProvider.GetRequiredService<ICustomCodeService>();
+            var result = await svc.CheckAsync(_customCode, cts.Token);
+            if (cts.IsCancellationRequested) return;
+
+            _customCodeChecking = false;
+            _customCodeAvailable = result.IsAvailable;
+            _customCodeReason = result.IsAvailable ? null : result.Reason;
+            StateHasChanged();
+        }
+        catch (TaskCanceledException)
+        {
+            // Superseded by a newer keystroke — the newer call owns the state.
+        }
+    }
+
     async Task CreateLink()
     {
         // Handler-level guard, not just hidden UI — Blazor Server executes handlers regardless of markup.
@@ -228,16 +308,23 @@ else
                 return;
             }
 
-            var result = await svc.CreateAnonymousLinkAsync(_form.Url!, _accountId, _uid, _form.CampaignId);
+            var custom = _customCodesAvailable && !string.IsNullOrWhiteSpace(_customCode) ? _customCode : null;
+            var result = await svc.CreateAnonymousLinkAsync(_form.Url!, _accountId, _uid, _form.CampaignId, custom);
             _newShortCode = result.ShortCode.Code;
             _newShortUrl = DashboardOpts.Value.BuildShortUrl(result.ShortCode.Code);
             _form = new();
+            ResetCustomCode();
             _showCreate = false;
             await LoadAsync();
         }
+        catch (CustomCodeTakenException)
+        {
+            _createError = "That custom code was just taken — try another.";
+            _customCodeAvailable = false;
+        }
         catch (ArgumentException ex)
         {
-            // URL validation / SSRF rejection.
+            // URL validation / SSRF rejection, or an invalid custom code.
             _createError = ex.Message;
         }
         catch (ShortLynx.Services.Entitlements.EntitlementException ex)
@@ -245,6 +332,14 @@ else
             // Plan limit / feature not in tier (never thrown under the OSS UnlimitedEntitlements default).
             _createError = ex.Message;
         }
+    }
+
+    void ResetCustomCode()
+    {
+        _customCode = null;
+        _customCodeAvailable = null;
+        _customCodeReason = null;
+        _customCodeChecking = false;
     }
 
     async Task CopyNewCode()

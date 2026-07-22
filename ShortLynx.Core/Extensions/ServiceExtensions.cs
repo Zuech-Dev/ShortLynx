@@ -45,6 +45,8 @@ public static class ServiceExtensions
         services.AddShortLynxEmail(configuration);
         services.AddScoped<IApiKeyService, ApiKeyService>();
         services.AddScoped<IShortCodeGenerator, HashBase62Generator>();
+        services.AddSingleton<CustomCodeValidator>();
+        services.AddScoped<ICustomCodeService, CustomCodeService>();
         services.AddSingleton<IUrlValidationService, UrlValidationService>();
         // Open-source default: unlimited at every tier, so self-hosting is fully featured and free.
         // A hosted deployment replaces this with a billing-backed policy (outside this repo).
@@ -174,6 +176,17 @@ public static class ServiceExtensions
                 {
                     PermitLimit = o.RefreshPermitLimit,
                     Window = TimeSpan.FromSeconds(o.RefreshWindowSeconds),
+                    QueueLimit = 0,
+                });
+            });
+
+            rl.AddPolicy(RateLimitPolicies.CustomCodeCheck, ctx =>
+            {
+                var o = ctx.RequestServices.GetRequiredService<IOptions<RateLimitOptions>>().Value;
+                return RateLimitPartition.GetFixedWindowLimiter(ClientIp(ctx), _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = o.CustomCodeCheckPermitLimit,
+                    Window = TimeSpan.FromSeconds(o.CustomCodeCheckWindowSeconds),
                     QueueLimit = 0,
                 });
             });

@@ -13,6 +13,7 @@ using ShortLynx.Services.Accounts;
 using ShortLynx.Services.Analytics;
 using ShortLynx.Services.Entitlements;
 using ShortLynx.Services.Links;
+using ShortLynx.Services.ShortCodes;
 using ShortLynx.Services.Qr;
 
 namespace ShortLynx.Core.Controllers;
@@ -54,16 +55,24 @@ public class MeLinksController(
     [RequireAccountAction(AccountAction.ManageResources)]
     public async Task<IActionResult> Create([FromBody] CreateMyLinkRequest request, CancellationToken ct)
     {
+        var isUserAttributed = string.Equals(request.Mode, nameof(LinkMode.UserAttributed), StringComparison.OrdinalIgnoreCase);
+        if (isUserAttributed && !string.IsNullOrWhiteSpace(request.CustomCode))
+            return BadRequest(new { error = "Custom codes are only available for anonymous links." });
+
         try
         {
-            if (string.Equals(request.Mode, nameof(LinkMode.UserAttributed), StringComparison.OrdinalIgnoreCase))
+            if (isUserAttributed)
             {
                 var link = await linkService.CreateUserAttributedLinkAsync(request.Url, AccountId, CurrentUserId, request.CampaignId, ct);
                 return CreatedAtAction(nameof(Get), new { id = link.Id }, ToLinkResponse(link, string.Empty));
             }
 
-            var result = await linkService.CreateAnonymousLinkAsync(request.Url, AccountId, CurrentUserId, request.CampaignId, ct);
+            var result = await linkService.CreateAnonymousLinkAsync(request.Url, AccountId, CurrentUserId, request.CampaignId, request.CustomCode, ct);
             return CreatedAtAction(nameof(Get), new { id = result.Link.Id }, ToLinkResponse(result.Link, result.ShortCode.Code));
+        }
+        catch (CustomCodeTakenException ex)
+        {
+            return Conflict(new { error = ex.Message });
         }
         catch (ArgumentException ex)
         {

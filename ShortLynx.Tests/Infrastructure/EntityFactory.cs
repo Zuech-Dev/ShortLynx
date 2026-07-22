@@ -30,11 +30,12 @@ internal static class EntityFactory
     // A dashboard-created link in an account (alias of AnonymousLink — both are account-owned now).
     internal static LinkEntity UserOwnedLink(Guid accountId) => AnonymousLink(accountId);
 
-    internal static ShortCodeEntity ShortCode(Guid linkId, string code) => new()
+    internal static ShortCodeEntity ShortCode(Guid linkId, string code, bool isCustom = false) => new()
     {
         Id = Guid.CreateVersion7(),
         LinkId = linkId,
         Code = code,
+        IsCustom = isCustom,
         CreatedAt = DateTimeOffset.UtcNow,
         IsActive = true,
     };

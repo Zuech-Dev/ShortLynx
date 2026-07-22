@@ -32,11 +32,12 @@ public sealed class RedirectService(
         if (cache.TryGetValue(key, out RedirectCacheEntry? hit))
             return ReferenceEquals(hit, NegativeSentinel) ? null : EnforceHost(hit!, host);
 
-        // Mode 1 — anonymous short code
+        // Mode 1 — anonymous short code. Custom (vanity) codes are excluded here: they resolve only
+        // under the dedicated custom route via LookupCustomAsync, never the root /{code}.
         var sc = await db.ShortCodeEntities
             .Include(x => x.Link).ThenInclude(l => l.CustomDomain)
             .Include(x => x.Link).ThenInclude(l => l.Campaign)
-            .Where(x => x.Code == code && x.IsActive && x.Link.IsActive)
+            .Where(x => x.Code == code && !x.IsCustom && x.IsActive && x.Link.IsActive)
             .FirstOrDefaultAsync(ct);
 
         if (sc is not null)
@@ -105,6 +106,35 @@ public sealed class RedirectService(
             cache.Set(key, mode2Entry, _cacheOpts);
 
         return mode2Entry;
+    }
+
+    public async Task<RedirectCacheEntry?> LookupCustomAsync(string code, string? host = null, CancellationToken ct = default)
+    {
+        // Custom codes are stored lowercased and are case-insensitive; the root path is not, so this
+        // normalization lives here rather than in the shared lookup.
+        code = code.Trim().ToLowerInvariant();
+
+        var key = $"redirect:custom:{code}";
+        if (cache.TryGetValue(key, out RedirectCacheEntry? hit))
+            return ReferenceEquals(hit, NegativeSentinel) ? null : EnforceHost(hit!, host);
+
+        var sc = await db.ShortCodeEntities
+            .Include(x => x.Link).ThenInclude(l => l.CustomDomain)
+            .Include(x => x.Link).ThenInclude(l => l.Campaign)
+            .Where(x => x.Code == code && x.IsCustom && x.IsActive && x.Link.IsActive)
+            .FirstOrDefaultAsync(ct);
+
+        if (sc is not null)
+        {
+            // Custom codes are anonymous-mode only — no recipient identity, so no disclosure gate.
+            var entry = new RedirectCacheEntry(
+                BuildDestination(sc.Link), sc.Id, null, null, null, sc.Link.CustomDomain?.Domain);
+            cache.Set(key, entry, _cacheOpts);
+            return EnforceHost(entry, host);
+        }
+
+        cache.Set(key, NegativeSentinel, _negativeCacheOpts);
+        return null;
     }
 
     public async Task<bool> TryClaimOneTimeAsync(Guid userLinkCodeId, CancellationToken ct = default)

@@ -17,6 +17,7 @@ public class MeLinksEntitlementsTests : IClassFixture<ApiFactory>
     private sealed class DenyEntitlements : IEntitlements
     {
         public Task<bool> CanCreateLinkAsync(Guid accountId, CancellationToken ct = default) => Task.FromResult(false);
+        public Task<bool> CanCreateCustomCodeAsync(Guid accountId, CancellationToken ct = default) => Task.FromResult(false);
         public Task<bool> IsFeatureEnabledAsync(Guid accountId, PlanFeature feature, CancellationToken ct = default) => Task.FromResult(false);
     }
 

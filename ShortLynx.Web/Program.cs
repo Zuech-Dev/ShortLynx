@@ -52,6 +52,20 @@ app.MapStaticAssets();
 app.MapRazorPages().WithStaticAssets();
 app.MapHealthChecks("/health");
 
+// Custom (vanity) codes under the configured prefix (default /c/), isolated from the root namespace.
+// Two segments, so it never collides with the single-segment literal routes or /{code}. Anonymous
+// only: no disclosure gate, no one-time handling.
+var customPrefix = (builder.Configuration.GetSection("ShortCode")["CustomRoutePrefix"] ?? "c").Trim('/');
+app.MapGet($"/{customPrefix}/{{code}}", async (
+    string code,
+    HttpContext ctx,
+    IRedirectService redirectSvc,
+    IVisitEventSink sink) =>
+{
+    var entry = await redirectSvc.LookupCustomAsync(code, ctx.Request.Host.Host, ctx.RequestAborted);
+    return entry is null ? Results.NotFound() : await RecordVisitAndRedirect(ctx, entry, sink, anonByChoice: false);
+}).RequireRateLimiting("redirect");
+
 // Short-link redirect endpoint — must come after Razor Pages so literal routes (/Privacy, /Error)
 // take precedence over the /{code} parameter route.
 app.MapGet("/{code}", async (
@@ -81,6 +95,14 @@ app.MapGet("/{code}", async (
         !await redirectSvc.TryClaimOneTimeAsync(entry.UserLinkCodeId.Value, ctx.RequestAborted))
         return Results.NotFound();
 
+    return await RecordVisitAndRedirect(ctx, entry, sink, anonByChoice);
+}).RequireRateLimiting("redirect");
+
+app.Run();
+
+// Shared tail of both redirect paths: derive the request signals, enqueue the async visit event, 302.
+static async Task<IResult> RecordVisitAndRedirect(HttpContext ctx, RedirectCacheEntry entry, IVisitEventSink sink, bool anonByChoice)
+{
     var ip = ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown";
     var referrer = ctx.Request.Headers.Referer.ToString();
     var ua = ctx.Request.Headers.UserAgent.ToString();
@@ -104,6 +126,4 @@ app.MapGet("/{code}", async (
         RawQuery: ctx.Request.QueryString.HasValue ? ctx.Request.QueryString.Value : null));
 
     return Results.Redirect(entry.OriginalUrl, permanent: false);
-}).RequireRateLimiting("redirect");
-
-app.Run();
+}

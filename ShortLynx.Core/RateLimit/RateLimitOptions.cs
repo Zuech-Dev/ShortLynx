@@ -13,4 +13,9 @@ public sealed class RateLimitOptions
     // large NAT'd office fits — but token stuffing at scale does not.
     public int RefreshPermitLimit { get; set; } = 60;
     public int RefreshWindowSeconds { get; set; } = 300;
+
+    // Debounced availability checks are a handful per code chosen; this permits fast interactive typing
+    // while making enumeration of taken codes expensive.
+    public int CustomCodeCheckPermitLimit { get; set; } = 40;
+    public int CustomCodeCheckWindowSeconds { get; set; } = 60;
 }

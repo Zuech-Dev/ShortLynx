@@ -525,4 +525,65 @@ public class RedirectServiceTests
         Assert.NotNull(entry);
         Assert.False(entry!.DisclosureRequired);
     }
+    // ── Custom (vanity) codes — /c/ route isolation ──────────────────────────
+
+    [Fact]
+    public async Task LookupCustomAsync_ResolvesCustomCode()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+        var (_, link) = await SeedLinkAsync(db);
+        await using (var ctx = db.CreateContext())
+        {
+            ctx.ShortCodeEntities.Add(EntityFactory.ShortCode(link.Id, "my-code-12", isCustom: true));
+            await ctx.SaveChangesAsync();
+        }
+
+        var result = await MakeSvc(db.CreateContext()).LookupCustomAsync("my-code-12");
+
+        Assert.NotNull(result);
+        Assert.Equal(link.OriginalUrl, result.OriginalUrl);
+    }
+
+    [Fact]
+    public async Task LookupCustomAsync_IsCaseInsensitive()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+        var (_, link) = await SeedLinkAsync(db);
+        await using (var ctx = db.CreateContext())
+        {
+            ctx.ShortCodeEntities.Add(EntityFactory.ShortCode(link.Id, "my-code-12", isCustom: true));
+            await ctx.SaveChangesAsync();
+        }
+
+        Assert.NotNull(await MakeSvc(db.CreateContext()).LookupCustomAsync("MY-CODE-12"));
+    }
+
+    [Fact]
+    public async Task LookupAsync_Root_DoesNotResolveCustomCode()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+        var (_, link) = await SeedLinkAsync(db);
+        await using (var ctx = db.CreateContext())
+        {
+            ctx.ShortCodeEntities.Add(EntityFactory.ShortCode(link.Id, "my-code-12", isCustom: true));
+            await ctx.SaveChangesAsync();
+        }
+
+        // A custom code must never resolve at the root /{code} — only under /c/.
+        Assert.Null(await MakeSvc(db.CreateContext()).LookupAsync("my-code-12"));
+    }
+
+    [Fact]
+    public async Task LookupCustomAsync_DoesNotResolveGeneratedCode()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+        var (_, link) = await SeedLinkAsync(db);
+        await using (var ctx = db.CreateContext())
+        {
+            ctx.ShortCodeEntities.Add(EntityFactory.ShortCode(link.Id, "abc12345", isCustom: false));
+            await ctx.SaveChangesAsync();
+        }
+
+        Assert.Null(await MakeSvc(db.CreateContext()).LookupCustomAsync("abc12345"));
+    }
 }

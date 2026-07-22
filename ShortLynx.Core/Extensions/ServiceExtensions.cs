@@ -45,6 +45,7 @@ public static class ServiceExtensions
         services.AddShortLynxEmail(configuration);
         services.AddScoped<IApiKeyService, ApiKeyService>();
         services.AddScoped<IShortCodeGenerator, HashBase62Generator>();
+        services.AddSingleton<CustomCodeValidator>();
         services.AddSingleton<IUrlValidationService, UrlValidationService>();
         // Open-source default: unlimited at every tier, so self-hosting is fully featured and free.
         // A hosted deployment replaces this with a billing-backed policy (outside this repo).

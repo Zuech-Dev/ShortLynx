@@ -22,11 +22,19 @@ public class AuthControllerTests : IClassFixture<ApiFactory>
     {
         var email = $"{Guid.NewGuid():N}@example.com";
         using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ShortLynxDbContext>();
+
+        // Magic links are only issued to existing active users, so provision the account first.
+        var user = new UserAccountEntity
+        {
+            Id = Guid.CreateVersion7(), Email = email, CreatedAt = DateTimeOffset.UtcNow, IsActive = true,
+        };
+        db.UserAccountEntities.Add(user);
+        await db.SaveChangesAsync();
+
         var magic = scope.ServiceProvider.GetRequiredService<IMagicLinkService>();
         var token = await magic.CreateTokenAsync(email);
 
-        var db = scope.ServiceProvider.GetRequiredService<ShortLynxDbContext>();
-        var user = await db.UserAccountEntities.SingleAsync(u => u.Email == email);
         var account = new AccountEntity { Id = Guid.CreateVersion7(), Name = "Acme", CreatedAt = DateTimeOffset.UtcNow, IsActive = true };
         db.AccountEntities.Add(account);
         db.MembershipEntities.Add(new MembershipEntity
@@ -71,7 +79,16 @@ public class AuthControllerTests : IClassFixture<ApiFactory>
         var email = $"{Guid.NewGuid():N}@example.com";
         string token;
         using (var scope = _factory.Services.CreateScope())
+        {
+            // Active user, but with no membership and not on the allowlist.
+            var db = scope.ServiceProvider.GetRequiredService<ShortLynxDbContext>();
+            db.UserAccountEntities.Add(new UserAccountEntity
+            {
+                Id = Guid.CreateVersion7(), Email = email, CreatedAt = DateTimeOffset.UtcNow, IsActive = true,
+            });
+            await db.SaveChangesAsync();
             token = await scope.ServiceProvider.GetRequiredService<IMagicLinkService>().CreateTokenAsync(email);
+        }
 
         var client = _factory.CreateClient();
         var response = await client.PostAsJsonAsync("/auth/session", new CreateSessionRequest(token));

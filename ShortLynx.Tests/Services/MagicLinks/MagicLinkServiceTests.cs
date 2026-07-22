@@ -17,31 +17,74 @@ public class MagicLinkServiceTests
             ConfirmationUrlBase = "https://example.com/auth/confirm",
         }));
 
+    private static async Task SeedUserAsync(
+        ShortLynx.Data.Context.ShortLynxDbContext ctx, string email, bool isActive = true)
+    {
+        ctx.UserAccountEntities.Add(new ShortLynx.Data.Entities.UserAccountEntity
+        {
+            Id = Guid.CreateVersion7(),
+            Email = email.Trim().ToLowerInvariant(),
+            CreatedAt = DateTimeOffset.UtcNow,
+            IsActive = isActive,
+        });
+        await ctx.SaveChangesAsync();
+    }
+
     // ── CreateTokenAsync ──────────────────────────────────────────────────────
 
     [Fact]
-    public async Task CreateToken_ReturnsNonEmptyToken()
+    public async Task CreateToken_ReturnsNonEmptyToken_ForActiveUser()
     {
         await using var db = await TestDatabase.CreateAsync();
+        await using (var seed = db.CreateContext())
+            await SeedUserAsync(seed, "user@example.com");
+
         var token = await MakeSvc(db.CreateContext()).CreateTokenAsync("user@example.com");
         Assert.NotEmpty(token);
     }
 
     [Fact]
-    public async Task CreateToken_CreatesUserAccount_WhenEmailIsNew()
+    public async Task CreateToken_DoesNotCreateUserAccount_WhenEmailIsUnknown()
     {
         await using var db = await TestDatabase.CreateAsync();
-        await MakeSvc(db.CreateContext()).CreateTokenAsync("newuser@example.com");
+        var email = new InMemoryEmailSender();
+        var token = await MakeSvc(db.CreateContext(), emailSender: email)
+            .CreateTokenAsync("newuser@example.com");
+
+        Assert.Empty(token);
+        Assert.Empty(email.Sent);
 
         await using var ctx = db.CreateContext();
         var user = ctx.UserAccountEntities.SingleOrDefault(u => u.Email == "newuser@example.com");
-        Assert.NotNull(user);
+        Assert.Null(user);
+        Assert.Empty(ctx.MagicLinkTokenEntities);
+    }
+
+    [Fact]
+    public async Task CreateToken_DoesNotSendOrCreate_WhenUserIsInactive()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+        await using (var seed = db.CreateContext())
+            await SeedUserAsync(seed, "inactive@example.com", isActive: false);
+
+        var email = new InMemoryEmailSender();
+        var token = await MakeSvc(db.CreateContext(), emailSender: email)
+            .CreateTokenAsync("inactive@example.com");
+
+        Assert.Empty(token);
+        Assert.Empty(email.Sent);
+
+        await using var ctx = db.CreateContext();
+        Assert.Empty(ctx.MagicLinkTokenEntities);
     }
 
     [Fact]
     public async Task CreateToken_ReusesExistingUser_WhenEmailAlreadyRegistered()
     {
         await using var db = await TestDatabase.CreateAsync();
+        await using (var seed = db.CreateContext())
+            await SeedUserAsync(seed, "repeat@example.com");
+
         await MakeSvc(db.CreateContext()).CreateTokenAsync("repeat@example.com");
         await MakeSvc(db.CreateContext()).CreateTokenAsync("repeat@example.com");
 
@@ -51,20 +94,27 @@ public class MagicLinkServiceTests
     }
 
     [Fact]
-    public async Task CreateToken_NormalisesEmailToLowercase()
+    public async Task CreateToken_NormalisesEmailToLowercase_ForLookup()
     {
         await using var db = await TestDatabase.CreateAsync();
-        await MakeSvc(db.CreateContext()).CreateTokenAsync("  UPPER@EXAMPLE.COM  ");
+        await using (var seed = db.CreateContext())
+            await SeedUserAsync(seed, "upper@example.com");
 
-        await using var ctx = db.CreateContext();
-        var user = ctx.UserAccountEntities.SingleOrDefault(u => u.Email == "upper@example.com");
-        Assert.NotNull(user);
+        var email = new InMemoryEmailSender();
+        var token = await MakeSvc(db.CreateContext(), emailSender: email)
+            .CreateTokenAsync("  UPPER@EXAMPLE.COM  ");
+
+        Assert.NotEmpty(token);
+        Assert.Contains(email.Sent, e => e.To == "upper@example.com");
     }
 
     [Fact]
     public async Task CreateToken_StoresHashedToken_NotPlaintext()
     {
         await using var db = await TestDatabase.CreateAsync();
+        await using (var seed = db.CreateContext())
+            await SeedUserAsync(seed, "hash@example.com");
+
         var token = await MakeSvc(db.CreateContext()).CreateTokenAsync("hash@example.com");
 
         await using var ctx = db.CreateContext();
@@ -76,6 +126,9 @@ public class MagicLinkServiceTests
     public async Task CreateToken_SetsExpiryFromOptions()
     {
         await using var db = await TestDatabase.CreateAsync();
+        await using (var seed = db.CreateContext())
+            await SeedUserAsync(seed, "expiry@example.com");
+
         var before = DateTimeOffset.UtcNow;
         await MakeSvc(db.CreateContext(), expiryMinutes: 30).CreateTokenAsync("expiry@example.com");
         var after = DateTimeOffset.UtcNow;
@@ -94,6 +147,9 @@ public class MagicLinkServiceTests
     public async Task ValidateToken_ValidToken_ReturnsUserAccount()
     {
         await using var db = await TestDatabase.CreateAsync();
+        await using (var seed = db.CreateContext())
+            await SeedUserAsync(seed, "valid@example.com");
+
         var token = await MakeSvc(db.CreateContext()).CreateTokenAsync("valid@example.com");
 
         var user = await MakeSvc(db.CreateContext()).ValidateTokenAsync(token);
@@ -106,6 +162,9 @@ public class MagicLinkServiceTests
     public async Task ValidateToken_InactiveUser_ReturnsNull()
     {
         await using var db = await TestDatabase.CreateAsync();
+        await using (var seed = db.CreateContext())
+            await SeedUserAsync(seed, "inactive@example.com");
+
         var token = await MakeSvc(db.CreateContext()).CreateTokenAsync("inactive@example.com");
 
         // Deactivate the user (soft delete) after the token was issued.
@@ -132,6 +191,9 @@ public class MagicLinkServiceTests
     public async Task ValidateToken_AlreadyUsedToken_ReturnsNull()
     {
         await using var db = await TestDatabase.CreateAsync();
+        await using (var seed = db.CreateContext())
+            await SeedUserAsync(seed, "used@example.com");
+
         var token = await MakeSvc(db.CreateContext()).CreateTokenAsync("used@example.com");
 
         // First validation succeeds.
@@ -147,6 +209,9 @@ public class MagicLinkServiceTests
     public async Task ValidateToken_MarksTokenAsUsed()
     {
         await using var db = await TestDatabase.CreateAsync();
+        await using (var seed = db.CreateContext())
+            await SeedUserAsync(seed, "mark@example.com");
+
         var token = await MakeSvc(db.CreateContext()).CreateTokenAsync("mark@example.com");
         await MakeSvc(db.CreateContext()).ValidateTokenAsync(token);
 
@@ -160,6 +225,9 @@ public class MagicLinkServiceTests
     public async Task ValidateToken_ExpiredToken_ReturnsNull()
     {
         await using var db = await TestDatabase.CreateAsync();
+        await using (var seed = db.CreateContext())
+            await SeedUserAsync(seed, "expired@example.com");
+
         var token = await MakeSvc(db.CreateContext()).CreateTokenAsync("expired@example.com");
 
         await using (var ctx = db.CreateContext())
@@ -178,6 +246,9 @@ public class MagicLinkServiceTests
     public async Task ValidateToken_MultipleTokensForSameUser_ValidatesEachCorrectly()
     {
         await using var db = await TestDatabase.CreateAsync();
+        await using (var seed = db.CreateContext())
+            await SeedUserAsync(seed, "multi@example.com");
+
         var token1 = await MakeSvc(db.CreateContext()).CreateTokenAsync("multi@example.com");
         var token2 = await MakeSvc(db.CreateContext()).CreateTokenAsync("multi@example.com");
 

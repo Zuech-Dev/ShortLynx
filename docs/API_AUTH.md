@@ -110,7 +110,8 @@ Enforcement details that matter to API clients:
 | `PUT /me/members/{userId}` `{ role }` | Change a member's role (you must outrank them) |
 | `DELETE /me/members/{userId}` | Remove a member (you must outrank them) |
 | `GET /me/links` `?page=&pageSize=` | List links |
-| `POST /me/links` `{ url, mode? }` | Create (`mode`: `Anonymous` default, or `UserAttributed`) |
+| `POST /me/links` `{ url, mode?, customCode? }` | Create (`mode`: `Anonymous` default, or `UserAttributed`). `customCode` mints a vanity code that resolves at `/c/<code>` — **Anonymous only** (400 on Mode 2), lowercase `a–z0–9` with internal hyphens, 8–12 chars, paid on the hosted service. Errors: `409` taken, `400` invalid, `402` plan. |
+| `GET /me/custom-code/check?code=` | Debounced availability check for a custom code → `{ available, status, reason? }`. Entitlement-gated (`402`), rate-limited. |
 | `GET /me/links/{id}` | One link |
 | `POST /me/links/{id}/codes` `{ userIds:[] }` | Provision user-attributed codes |
 | `PUT /me/links/{id}/domain` `{ customDomainId }` | Pin/unpin to a verified domain (null = unpin) |

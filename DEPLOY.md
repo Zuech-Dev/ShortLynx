@@ -100,6 +100,14 @@ Resend__FromAddress            = noreply@<verified-domain>   Resend__FromName = 
 # Custom-domain re-verification cadence (optional; default 1440 = 24h)
 CustomDomain__ReverifyIntervalMinutes = 1440
 
+# Custom (vanity) codes (all optional). The prefix must match on Core and Web (Web serves the
+# /<prefix>/<code> route; Core validates against it). Self-hosters get custom codes free/unlimited;
+# on the hosted service they're gated by the billing IEntitlements (outside this repo).
+ShortCode__CustomRoutePrefix   = c      # /c/<code>; must be identical on Core AND Web
+ShortCode__CustomCodeMaxLength = 12     # min is a fixed 8
+# ShortCode__ImpersonationTerms__0 = admin      # extend the reserved-word list (has defaults)
+# ShortCode__ProfanityListPath   = /path/to/list.txt   # override the bundled default
+
 # Public base URL of the redirect site, used to build the full short URL a QR code encodes
 # (GET /me/links/{id}/qr). Empty = bare code; a pinned verified custom domain overrides it.
 Links__PublicBaseUrl = https://<short-domain>

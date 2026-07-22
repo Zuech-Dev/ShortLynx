@@ -10,6 +10,10 @@ public class UnlimitedEntitlementsTests
     public async Task CanCreateLink_IsAlwaysTrue()
         => Assert.True(await _sut.CanCreateLinkAsync(Guid.CreateVersion7()));
 
+    [Fact]
+    public async Task CanCreateCustomCode_IsAlwaysTrue()
+        => Assert.True(await _sut.CanCreateCustomCodeAsync(Guid.CreateVersion7()));
+
     [Theory]
     [InlineData(PlanFeature.CustomDomains)]
     [InlineData(PlanFeature.UserAttributedLinks)]

@@ -20,18 +20,11 @@ public sealed class MagicLinkService(
         var user = await db.UserAccountEntities
             .FirstOrDefaultAsync(u => u.Email == normalised, ct);
 
-        if (user is null)
-        {
-            user = new UserAccountEntity
-            {
-                Id = Guid.CreateVersion7(),
-                Email = normalised,
-                CreatedAt = DateTimeOffset.UtcNow,
-                IsActive = true,
-            };
-            db.UserAccountEntities.Add(user);
-            await db.SaveChangesAsync(ct);
-        }
+        // Only active, existing users get a magic link. Never create an account here: requesting a
+        // link must not provision users, and unknown/deactivated addresses are dropped silently so
+        // the endpoint can't be used to enumerate which emails are registered.
+        if (user is null || !user.IsActive)
+            return string.Empty;
 
         // Per-email throttle: cap concurrently-valid tokens so the endpoint can't be used to bomb a
         // single address or grow the table unboundedly. Silently drop once the cap is reached.

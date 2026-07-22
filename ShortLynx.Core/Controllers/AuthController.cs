@@ -42,8 +42,12 @@ public class AuthController(
     public async Task<IActionResult> CreateSession([FromBody] CreateSessionRequest request, CancellationToken ct)
     {
         var user = await magicLinks.ValidateTokenAsync(request.Token, ct);
-        if (user is null || !user.IsActive)
+        if (user is null)
             return Unauthorized(new { error = "This link is invalid, already used, or expired." });
+        if (!user.IsActive)
+        {
+            return Unauthorized(new { error = "This link is invalid, already used, or expired." });
+        }
 
         // Gate: allowlisted email OR a member of at least one account.
         var userAccounts = await accounts.ListAccountsForUserAsync(user.Id, ct);

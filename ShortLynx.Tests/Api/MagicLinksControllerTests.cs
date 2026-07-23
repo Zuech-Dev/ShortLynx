@@ -3,6 +3,9 @@ using System.Net.Http.Json;
 using Microsoft.Extensions.DependencyInjection;
 using ShortLynx.Core.Models.Requests;
 using ShortLynx.Data.Context;
+using ShortLynx.Services.MagicLinks;
+using Microsoft.Extensions.Configuration;
+using Microsoft.AspNetCore.Hosting;
 
 namespace ShortLynx.Tests.Api;
 
@@ -141,5 +144,25 @@ public class MagicLinksControllerTests : IClassFixture<ApiFactory>
         }
 
         Assert.Equal(3, _factory.EmailSender.Sent.Count(e => e.To == email));
+    }
+    [Fact]
+    public async Task AllowlistedEmail_OnFreshInstall_CanBootstrapSignIn()
+    {
+        // Fresh-install first-admin: an allowlisted email with NO user row must still get a link and
+        // a session — the regression that "only issue links to existing users" introduced.
+        var email = $"boot-{Guid.NewGuid():N}@example.com";
+        var host = _factory.WithWebHostBuilder(b =>
+            b.ConfigureAppConfiguration((_, cfg) => cfg.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Admin:AllowedEmails:0"] = email,
+            })));
+
+        string token;
+        using (var scope = host.Services.CreateScope())
+            token = await scope.ServiceProvider.GetRequiredService<IMagicLinkService>().CreateTokenAsync(email);
+        Assert.False(string.IsNullOrEmpty(token)); // provisioned + issued despite no prior account
+
+        var resp = await host.CreateClient().PostAsJsonAsync("/auth/session", new CreateSessionRequest(token));
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode); // allowlisted → personal account → signed in
     }
 }

@@ -5,11 +5,12 @@ namespace ShortLynx.Services.MagicLinks;
 public interface IMagicLinkService
 {
     /// <summary>
-    /// Looks up the UserAccount for the given email, mints a single-use token, and returns the plaintext
-    /// token to embed in the magic link URL. A magic link is only issued to an existing, active user;
-    /// this method never provisions a user. Returns an empty string — with no token created and no email
-    /// sent — if the email doesn't belong to an active user, or if the request was throttled (the email
-    /// already has the maximum number of concurrently-valid tokens).
+    /// Mints a single-use token and returns the plaintext to embed in the magic link URL. A link is
+    /// issued to an existing active user, or to an **allowlisted / super-admin email** (which is
+    /// provisioned here — the first-admin bootstrap on a fresh install). Returns an empty string — no
+    /// token, no email — for any other unknown email, a deactivated account, or when the request is
+    /// throttled (the email already has the maximum number of concurrently-valid tokens). Arbitrary
+    /// emails are never provisioned and get no email, so the endpoint can't enumerate or be abused.
     /// </summary>
     Task<string> CreateTokenAsync(string email, CancellationToken ct = default);
 

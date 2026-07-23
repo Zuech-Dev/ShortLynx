@@ -209,7 +209,7 @@ curl https://api.shrtlynx.com/links/{id}/analytics \
 ```jsonc
 {
   "totalClicks": 1240,
-  "uniqueClicks": 847,          // distinct hashed IPs (hourly-rotating — see §6)
+  "uniqueClicks": 847,          // distinct hashed IPs (hash rotates hourly — see §6)
   "firstClickAt": "…", "lastClickAt": "…",
   "sources":  [ { "source": "Twitter",  "count": 612 }, … ],
   "devices":  [ { "device": "Mobile",   "count": 901 }, … ],

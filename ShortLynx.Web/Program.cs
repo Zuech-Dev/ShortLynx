@@ -40,6 +40,23 @@ if (app.Environment.IsDevelopment())
 
 app.UseForwardedHeaders();
 
+// Security headers on every response. The landing/marketing pages have no forms and no user input,
+// so the main hardening is defence-in-depth: block framing/sniffing, tight referrer, and a CSP that
+// only permits first-party assets (the redirect endpoint returns a bodyless 302, so CSP is a no-op
+// there). Volumetric DDoS is handled at the edge (see DEPLOY.md) — the landing page is static and
+// touches no database, so it's cheap to serve under load.
+app.Use(async (ctx, next) =>
+{
+    var h = ctx.Response.Headers;
+    h["X-Content-Type-Options"] = "nosniff";
+    h["X-Frame-Options"] = "DENY";
+    h["Referrer-Policy"] = "strict-origin-when-cross-origin";
+    h["Content-Security-Policy"] =
+        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
+        "img-src 'self' data:; font-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
+    await next();
+});
+
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error");

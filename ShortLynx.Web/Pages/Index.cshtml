@@ -1,10 +1,193 @@
-﻿@page
+@page
 @model IndexModel
 @{
-    ViewData["Title"] = "Shortcode Redirects";
+    ViewData["Title"] = "ShortLynx — Privacy-first link shortener with per-recipient click tracking";
+    var canonical = Model.Canonical;
+    var desc = "ShortLynx is a self-hosted, privacy-first link shortener with something no other offers: " +
+               "per-recipient click attribution — know who clicked, not just how many — without a CRM. " +
+               "A privacy-respecting alternative to Bitly and TinyURL.";
 }
 
-<div class="text-center py-16">
-    <h1 class="text-4xl font-bold mb-2">More information coming soon</h1>
-    <p class="text-gray-600">This site is currently under construction.</p>
-</div>
+@section Head {
+    <meta name="description" content="@desc"/>
+    <meta name="keywords" content="link shortener, URL shortener, custom short links, custom URL, link tracking, click analytics, branded links, vanity URL, Bitly alternative, TinyURL alternative, self-hosted URL shortener, privacy-first link shortener, QR code generator"/>
+    <link rel="canonical" href="@canonical"/>
+    <meta name="robots" content="index, follow"/>
+
+    <meta property="og:type" content="website"/>
+    <meta property="og:site_name" content="ShortLynx"/>
+    <meta property="og:title" content="@ViewData["Title"]"/>
+    <meta property="og:description" content="@desc"/>
+    <meta property="og:url" content="@canonical"/>
+    <meta name="twitter:card" content="summary_large_image"/>
+    <meta name="twitter:title" content="@ViewData["Title"]"/>
+    <meta name="twitter:description" content="@desc"/>
+
+    <script type="application/ld+json">
+    {
+      "@@context": "https://schema.org",
+      "@@type": "SoftwareApplication",
+      "name": "ShortLynx",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "Web, Self-hosted (.NET)",
+      "description": "@desc",
+      "offers": [
+        { "@@type": "Offer", "name": "Free",    "price": "0",  "priceCurrency": "USD" },
+        { "@@type": "Offer", "name": "Starter", "price": "9",  "priceCurrency": "USD" },
+        { "@@type": "Offer", "name": "Pro",     "price": "24", "priceCurrency": "USD" },
+        { "@@type": "Offer", "name": "Teams",   "price": "79", "priceCurrency": "USD" }
+      ]
+    }
+    </script>
+}
+
+<!-- Hero -->
+<section class="text-center pt-14 pb-12">
+    <p class="text-blue-700 font-semibold tracking-wide uppercase text-sm mb-3">The link shortener that respects the people clicking your links</p>
+    <h1 class="text-4xl sm:text-5xl font-extrabold tracking-tight max-w-3xl mx-auto">
+        Know <span class="text-blue-700">who</span> clicked — not just how many.
+    </h1>
+    <p class="text-lg text-gray-600 max-w-2xl mx-auto mt-5">
+        ShortLynx is a privacy-first URL shortener with per-recipient click attribution — the only one
+        that tells you which contact clicked, without a CRM. Self-host it free, or let us run it.
+    </p>
+    <div class="flex flex-wrap gap-3 justify-center mt-8">
+        <span class="btn btn-primary opacity-90 cursor-default" aria-disabled="true">Hosted signup — coming soon</span>
+        <a class="btn btn-outline" href="https://github.com/Zuech-Dev/ShortLynx" rel="noopener">Self-host it free →</a>
+    </div>
+    <p class="text-gray-400 text-sm mt-3">Open-source · Privacy-first · No credit card</p>
+</section>
+
+<!-- Differentiator -->
+<section class="max-w-3xl mx-auto py-10 border-t">
+    <h2 class="text-2xl font-bold text-center">Per-recipient attribution, without a CRM</h2>
+    <p class="text-gray-600 text-center mt-3">
+        Most shorteners tell you a link got 400 clicks. ShortLynx can tell you <em>which recipient</em>
+        clicked — mint a unique code per person, so email and sales tracking work without a login at
+        click time. The closest tools that do this are CRM-locked enterprise suites (Outreach, Salesloft,
+        HubSpot). ShortLynx does it self-hosted, for free.
+    </p>
+</section>
+
+<!-- Privacy -->
+<section class="py-10 border-t">
+    <h2 class="text-2xl font-bold text-center">Built to respect the clicker</h2>
+    <p class="text-gray-600 text-center max-w-2xl mx-auto mt-3">Privacy isn't a bolt-on here — it's the design.</p>
+    <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-8 max-w-5xl mx-auto">
+        @foreach (var (title, body) in Model.Privacy)
+        {
+            <div class="rounded-lg border p-4">
+                <h3 class="font-semibold">@title</h3>
+                <p class="text-gray-600 text-sm mt-1">@body</p>
+            </div>
+        }
+    </div>
+</section>
+
+<!-- Features -->
+<section class="py-10 border-t">
+    <h2 class="text-2xl font-bold text-center">Everything you'd expect — and the things you wouldn't</h2>
+    <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-8 max-w-5xl mx-auto">
+        @foreach (var (title, body) in Model.Features)
+        {
+            <div class="rounded-lg border p-4">
+                <h3 class="font-semibold">@title</h3>
+                <p class="text-gray-600 text-sm mt-1">@body</p>
+            </div>
+        }
+    </div>
+</section>
+
+<!-- Pricing -->
+<section class="py-10 border-t" id="pricing">
+    <h2 class="text-2xl font-bold text-center">Simple, usage-based pricing</h2>
+    <p class="text-gray-600 text-center mt-3">Self-host any tier for free, forever. Hosted plans coming soon.</p>
+    <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-8 max-w-6xl mx-auto">
+        @foreach (var t in Model.Tiers)
+        {
+            <div class="rounded-lg border p-5 flex flex-col @(t.Featured ? "border-blue-600 border-2 shadow-sm" : "")">
+                @if (t.Featured)
+                {
+                    <span class="text-xs font-semibold text-blue-700 uppercase tracking-wide">Most popular</span>
+                }
+                <h3 class="text-lg font-bold mt-1">@t.Name</h3>
+                <p class="mt-1"><span class="text-3xl font-extrabold">@t.Price</span> <span class="text-gray-500 text-sm">@t.Period</span></p>
+                <ul class="text-sm text-gray-600 mt-4 space-y-1.5 grow">
+                    @foreach (var f in t.Points)
+                    {
+                        <li>· @f</li>
+                    }
+                </ul>
+                <span class="btn @(t.Featured ? "btn-primary" : "btn-outline") mt-5 opacity-90 cursor-default text-center" aria-disabled="true">Coming soon</span>
+            </div>
+        }
+    </div>
+    <p class="text-gray-500 text-sm text-center mt-4">
+        Mode-2 per-recipient attribution is a Pro+ capability. Overages billed per-use. Prices in USD.
+    </p>
+</section>
+
+<!-- Comparison -->
+<section class="py-10 border-t">
+    <h2 class="text-2xl font-bold text-center">ShortLynx vs. Bitly &amp; TinyURL</h2>
+    <div class="overflow-x-auto mt-8 max-w-4xl mx-auto">
+        <table class="w-full text-sm border">
+            <thead>
+                <tr class="bg-gray-50 text-left">
+                    <th class="p-3">&nbsp;</th>
+                    <th class="p-3 font-semibold text-blue-700">ShortLynx</th>
+                    <th class="p-3 font-semibold">Bitly</th>
+                    <th class="p-3 font-semibold">TinyURL</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var row in Model.Comparison)
+                {
+                    <tr class="border-t">
+                        <td class="p-3 font-medium">@row.Feature</td>
+                        <td class="p-3 text-blue-700">@row.Us</td>
+                        <td class="p-3 text-gray-600">@row.Bitly</td>
+                        <td class="p-3 text-gray-600">@row.TinyUrl</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<!-- Self-host -->
+<section class="py-10 border-t text-center">
+    <h2 class="text-2xl font-bold">Prefer to run it yourself?</h2>
+    <p class="text-gray-600 max-w-2xl mx-auto mt-3">
+        ShortLynx is source-available under the Elastic License 2.0. Self-hosting is free and unrestricted —
+        every feature, every tier, on your own infrastructure and your own database. No lock-in, ever.
+    </p>
+    <a class="btn btn-outline mt-6" href="https://github.com/Zuech-Dev/ShortLynx" rel="noopener">View the source on GitHub →</a>
+</section>
+
+<!-- FAQ (long-tail SEO) -->
+<section class="py-10 border-t max-w-3xl mx-auto">
+    <h2 class="text-2xl font-bold text-center">Frequently asked questions</h2>
+    <div class="mt-8 space-y-5">
+        @foreach (var (q, a) in Model.Faq)
+        {
+            <div>
+                <h3 class="font-semibold">@q</h3>
+                <p class="text-gray-600 text-sm mt-1">@a</p>
+            </div>
+        }
+    </div>
+</section>
+
+<!-- Coming soon -->
+<section class="py-12 border-t text-center">
+    <h2 class="text-2xl font-bold">Hosted ShortLynx is coming soon</h2>
+    <p class="text-gray-600 max-w-xl mx-auto mt-3">
+        We're putting the finishing touches on the hosted service. In the meantime, you can self-host
+        the full product today.
+    </p>
+    <div class="flex flex-wrap gap-3 justify-center mt-6">
+        <span class="btn btn-primary opacity-90 cursor-default" aria-disabled="true">Signup coming soon</span>
+        <a class="btn btn-outline" href="https://github.com/Zuech-Dev/ShortLynx" rel="noopener">Self-host now</a>
+    </div>
+</section>

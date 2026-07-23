@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using ShortLynx.Data.Context;
 using ShortLynx.Data.Entities;
+using ShortLynx.Services.Auth;
 using ShortLynx.Services.Email;
 
 namespace ShortLynx.Services.MagicLinks;
@@ -11,7 +12,8 @@ namespace ShortLynx.Services.MagicLinks;
 public sealed class MagicLinkService(
     ShortLynxDbContext db,
     IEmailSender emailSender,
-    IOptions<MagicLinkOptions> options) : IMagicLinkService
+    IOptions<MagicLinkOptions> options,
+    IOptions<AccessControlOptions> accessControl) : IMagicLinkService
 {
     public async Task<string> CreateTokenAsync(string email, CancellationToken ct = default)
     {
@@ -20,11 +22,32 @@ public sealed class MagicLinkService(
         var user = await db.UserAccountEntities
             .FirstOrDefaultAsync(u => u.Email == normalised, ct);
 
-        // Only active, existing users get a magic link. Never create an account here: requesting a
-        // link must not provision users, and unknown/deactivated addresses are dropped silently so
-        // the endpoint can't be used to enumerate which emails are registered.
-        if (user is null || !user.IsActive)
+        if (user is null)
+        {
+            // No account yet. Provision one ONLY for an allowlisted / super-admin email — those are
+            // authorized by operator config, and this is the first-admin bootstrap path on a fresh
+            // install (no existing admin can invite the very first one). Every other unknown email is
+            // dropped silently: no account, no email — so the endpoint can't be used for anonymous
+            // provisioning, email-bombing, or existence enumeration.
+            if (!accessControl.Value.IsAllowed(normalised))
+                return string.Empty;
+
+            user = new UserAccountEntity
+            {
+                Id = Guid.CreateVersion7(),
+                Email = normalised,
+                CreatedAt = DateTimeOffset.UtcNow,
+                IsActive = true,
+            };
+            db.UserAccountEntities.Add(user);
+            await db.SaveChangesAsync(ct);
+        }
+        else if (!user.IsActive)
+        {
+            // A deactivated account never gets a link, even if it's still in the allowlist —
+            // deactivation is an explicit admin action and wins.
             return string.Empty;
+        }
 
         // Per-email throttle: cap concurrently-valid tokens so the endpoint can't be used to bomb a
         // single address or grow the table unboundedly. Silently drop once the cap is reached.

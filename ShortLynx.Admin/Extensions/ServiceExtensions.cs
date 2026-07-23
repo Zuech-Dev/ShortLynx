@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using ShortLynx.Admin.Options;
 using ShortLynx.Data.Context;
 using ShortLynx.Data.Operations;
@@ -72,8 +73,9 @@ public static class ServiceExtensions
         services.AddScoped<IMagicLinkService, MagicLinkService>();
         // Link creation from the dashboard (user-owned links).
         // Open-source default: unlimited at every tier, so self-hosting is fully featured and free.
-        // A hosted deployment replaces this with a billing-backed policy (outside this repo).
-        services.AddSingleton<IEntitlements, UnlimitedEntitlements>();
+        // TryAdd (not Add) so a hosted composition root can register a billing-backed IEntitlements
+        // BEFORE calling this and have it win — the enforcement impl lives outside this repo.
+        services.TryAddSingleton<IEntitlements, UnlimitedEntitlements>();
         services.AddScoped<ILinkService, LinkService>();
         services.AddScoped<ICampaignService, CampaignService>();
 

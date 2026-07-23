@@ -121,6 +121,9 @@ public class LinksComponentTests : BunitContext
         public Task<bool> CanCreateLinkAsync(Guid a, CancellationToken ct = default) => Task.FromResult(true);
         public Task<bool> CanCreateCustomCodeAsync(Guid a, CancellationToken ct = default) => Task.FromResult(false);
         public Task<bool> IsFeatureEnabledAsync(Guid a, ShortLynx.Services.Entitlements.PlanFeature f, CancellationToken ct = default) => Task.FromResult(true);
+        public Task<bool> CanAddCustomDomainAsync(Guid a, CancellationToken ct = default) => Task.FromResult(true);
+        public Task<int?> GetRetentionDaysAsync(Guid a, CancellationToken ct = default) => Task.FromResult<int?>(null);
+        public Task<bool> CanAddMemberAsync(Guid a, CancellationToken ct = default) => Task.FromResult(true);
     }
 
     [Fact]

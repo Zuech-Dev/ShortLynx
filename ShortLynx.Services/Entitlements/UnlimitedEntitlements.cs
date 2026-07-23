@@ -13,4 +13,10 @@ public sealed class UnlimitedEntitlements : IEntitlements
 
     public Task<bool> IsFeatureEnabledAsync(Guid accountId, PlanFeature feature, CancellationToken ct = default)
         => Task.FromResult(true);
+
+    public Task<bool> CanAddCustomDomainAsync(Guid accountId, CancellationToken ct = default) => Task.FromResult(true);
+
+    public Task<int?> GetRetentionDaysAsync(Guid accountId, CancellationToken ct = default) => Task.FromResult<int?>(null);
+
+    public Task<bool> CanAddMemberAsync(Guid accountId, CancellationToken ct = default) => Task.FromResult(true);
 }

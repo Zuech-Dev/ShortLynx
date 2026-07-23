@@ -36,8 +36,9 @@ public class MagicLinksControllerTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task RequestMagicLink_ValidEmail_SendsEmail()
+    public async Task RequestMagicLink_ActiveUser_SendsEmail()
     {
+        await _factory.SeedUserAsync("email-send-check@example.com");
         var client = _factory.CreateClient();
         await client.PostAsJsonAsync("/magic-links",
             new RequestMagicLinkRequest("email-send-check@example.com"));
@@ -47,8 +48,9 @@ public class MagicLinksControllerTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task RequestMagicLink_ValidEmail_EmailContainsToken()
+    public async Task RequestMagicLink_ActiveUser_EmailContainsToken()
     {
+        await _factory.SeedUserAsync("token-email@example.com");
         var client = _factory.CreateClient();
         await client.PostAsJsonAsync("/magic-links",
             new RequestMagicLinkRequest("token-email@example.com"));
@@ -58,18 +60,34 @@ public class MagicLinksControllerTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task RequestMagicLink_ValidEmail_CreatesUserAccount()
+    public async Task RequestMagicLink_UnknownEmail_DoesNotCreateUserOrSendEmail()
     {
         var client = _factory.CreateClient();
-        await client.PostAsJsonAsync("/magic-links",
+        var response = await client.PostAsJsonAsync("/magic-links",
             new RequestMagicLinkRequest("new-magic-user@example.com"));
+
+        // Still 204 to prevent enumeration, but no user is provisioned and no email is sent.
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.DoesNotContain(_factory.EmailSender.Sent, e => e.To == "new-magic-user@example.com");
 
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ShortLynxDbContext>();
         var user = db.UserAccountEntities
             .SingleOrDefault(u => u.Email == "new-magic-user@example.com");
 
-        Assert.NotNull(user);
+        Assert.Null(user);
+    }
+
+    [Fact]
+    public async Task RequestMagicLink_InactiveUser_DoesNotSendEmail()
+    {
+        await _factory.SeedUserAsync("deactivated@example.com", isActive: false);
+        var client = _factory.CreateClient();
+        var response = await client.PostAsJsonAsync("/magic-links",
+            new RequestMagicLinkRequest("deactivated@example.com"));
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.DoesNotContain(_factory.EmailSender.Sent, e => e.To == "deactivated@example.com");
     }
 
     [Fact]
@@ -110,6 +128,7 @@ public class MagicLinksControllerTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task RequestMagicLink_SameEmailBeyondCap_StopsSendingButStill204()
     {
+        await _factory.SeedUserAsync("throttle-target@example.com");
         var client = _factory.CreateClient();
         const string email = "throttle-target@example.com";
 

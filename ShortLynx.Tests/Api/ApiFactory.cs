@@ -113,12 +113,20 @@ public sealed class ApiFactory : WebApplicationFactory<ShortLynx.Core.CoreApiEnt
     {
         var email = $"{Guid.NewGuid():N}@example.com";
         using var scope = Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ShortLynxDbContext>();
+
+        // Magic links are only issued to existing active users, so provision the account first.
+        var user = new ShortLynx.Data.Entities.UserAccountEntity
+        {
+            Id = Guid.CreateVersion7(), Email = email, CreatedAt = DateTimeOffset.UtcNow, IsActive = true,
+        };
+        db.Add(user);
+        await db.SaveChangesAsync();
+
         var token = await scope.ServiceProvider
             .GetRequiredService<ShortLynx.Services.MagicLinks.IMagicLinkService>()
             .CreateTokenAsync(email);
 
-        var db = scope.ServiceProvider.GetRequiredService<ShortLynxDbContext>();
-        var user = await db.UserAccountEntities.SingleAsync(u => u.Email == email);
         var account = new ShortLynx.Data.Entities.AccountEntity
         {
             Id = Guid.CreateVersion7(), Name = "Acme", CreatedAt = DateTimeOffset.UtcNow, IsActive = true,
@@ -154,6 +162,23 @@ public sealed class ApiFactory : WebApplicationFactory<ShortLynx.Core.CoreApiEnt
         var client = CreateClient();
         client.DefaultRequestHeaders.Add("Authorization", $"Bearer {session!.AccessToken}");
         return (client, userId);
+    }
+
+    /// <summary>Seeds a bare user account (no membership) so magic links can be issued to it.</summary>
+    public async Task<Guid> SeedUserAsync(string email, bool isActive = true)
+    {
+        using var scope = Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ShortLynxDbContext>();
+        var user = new ShortLynx.Data.Entities.UserAccountEntity
+        {
+            Id = Guid.CreateVersion7(),
+            Email = email.Trim().ToLowerInvariant(),
+            CreatedAt = DateTimeOffset.UtcNow,
+            IsActive = isActive,
+        };
+        db.Add(user);
+        await db.SaveChangesAsync();
+        return user.Id;
     }
 
     /// <summary>Seeds an account and returns its id (resources/keys are account-owned).</summary>

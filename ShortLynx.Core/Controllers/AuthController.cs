@@ -44,6 +44,10 @@ public class AuthController(
         var user = await magicLinks.ValidateTokenAsync(request.Token, ct);
         if (user is null)
             return Unauthorized(new { error = "This link is invalid, already used, or expired." });
+        if (!user.IsActive)
+        {
+            return Unauthorized(new { error = "This link is invalid, already used, or expired." });
+        }
 
         // Gate: allowlisted email OR a member of at least one account.
         var userAccounts = await accounts.ListAccountsForUserAsync(user.Id, ct);

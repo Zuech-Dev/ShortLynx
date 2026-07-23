@@ -253,4 +253,28 @@ public class LinkVisitQueriesTests
         await using var verify = db.CreateContext();
         Assert.Equal(3, await LinkVisitQueries.CountForAccountAsync(verify, account.Id));
     }
+
+    [Fact]
+    public async Task CountForAccountInRange_ExcludesClicksOutsideTheWindow()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+        var account = EntityFactory.Account();
+        var link = EntityFactory.AnonymousLink(account.Id);
+        var code = EntityFactory.ShortCode(link.Id, "abc12345");
+        var windowStart = new DateTimeOffset(2026, 2, 1, 0, 0, 0, TimeSpan.Zero);
+        var windowEnd = new DateTimeOffset(2026, 3, 1, 0, 0, 0, TimeSpan.Zero);
+        await using (var ctx = db.CreateContext())
+        {
+            ctx.AddRange(account, link, code);
+            ctx.AddRange(
+                new VisitEntity { Id = Guid.CreateVersion7(), ShortCodeId = code.Id, ClickedAt = windowStart.AddDays(-1), HashedIp = "h", Source = ClickSource.Direct, Device = DeviceType.Mobile }, // before
+                new VisitEntity { Id = Guid.CreateVersion7(), ShortCodeId = code.Id, ClickedAt = windowStart, HashedIp = "h", Source = ClickSource.Direct, Device = DeviceType.Mobile }, // in (inclusive start)
+                new VisitEntity { Id = Guid.CreateVersion7(), ShortCodeId = code.Id, ClickedAt = windowEnd.AddDays(-1), HashedIp = "h", Source = ClickSource.Direct, Device = DeviceType.Mobile }, // in
+                new VisitEntity { Id = Guid.CreateVersion7(), ShortCodeId = code.Id, ClickedAt = windowEnd, HashedIp = "h", Source = ClickSource.Direct, Device = DeviceType.Mobile }); // after (exclusive end)
+            await ctx.SaveChangesAsync();
+        }
+
+        await using var verify = db.CreateContext();
+        Assert.Equal(2, await LinkVisitQueries.CountForAccountInRangeAsync(verify, account.Id, windowStart, windowEnd));
+    }
 }

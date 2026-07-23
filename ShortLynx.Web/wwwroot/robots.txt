@@ -1,0 +1,13 @@
+# ShortLynx — https://shrtlynx.com
+# The marketing pages are indexable. Short-code redirect paths are not worth
+# crawling (they 302 straight to third-party destinations), so keep bots on the
+# public content and out of the redirect namespaces.
+User-agent: *
+Allow: /$
+Allow: /Privacy
+Allow: /DataDeletion
+Disallow: /c/
+Disallow: /disclosure/
+Disallow: /health
+
+Sitemap: https://shrtlynx.com/sitemap.xml

@@ -32,6 +32,23 @@
 
 ---
 
+## Edge protection & DDoS
+
+The app does what belongs in the app; volumetric/L7 defence belongs at the edge. Layer it like this:
+
+**In the app (already shipped):**
+- **Per-IP rate limiting** on the redirect and custom-code routes (`RequireRateLimiting("redirect")`), keyed off the real client IP via `UseForwardedHeaders`. This is *fair-use* throttling, not DDoS protection — it caps a single abusive IP, but won't survive a distributed flood on its own.
+- **Security headers** on every `ShortLynx.Web` response (`nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, and a first-party-only CSP with `frame-ancestors 'none'`). Defence-in-depth for the marketing/redirect surface.
+- **Cheap landing page** — the marketing site (`/`) is fully static: no forms, no database, no user input. It stays cheap to serve under load and has nothing to inject into.
+
+**At the edge (do before or right after go-live):**
+- **Put Cloudflare (or the platform WAF) in front of `shrtlynx.com`.** Proxy the DNS record (orange-cloud) so origin IPs aren't exposed. Enable "Under Attack" mode as a break-glass, and a WAF rate-limiting rule on the redirect namespace (e.g. > N req/10s per IP → challenge/block) to absorb distributed floods the in-app limiter can't.
+- **Cache the static marketing assets** (`/`, `/robots.txt`, `/sitemap.xml`, CSS) at the edge so bot/scanner traffic never reaches the origin. Never cache the `/{code}` redirect or `/health`.
+- **Keep the origin private.** On Railway/Fly, only expose the service through the edge proxy; don't hand out the raw origin hostname.
+- **Bot management** — turn on the platform's managed bot rules; the redirect endpoint is a common target for scanners probing for open redirects (ours only ever 302s to a stored, operator-created destination, so it isn't an open redirect — but the noise still costs CPU).
+
+---
+
 ## ✅ Already addressed in code (no longer blocking)
 
 - **Forwarded headers** — all three apps call `UseForwardedHeaders` (X-Forwarded-For/Proto) so client IPs and HTTPS scheme survive the proxy. *(D1 / M3.)*

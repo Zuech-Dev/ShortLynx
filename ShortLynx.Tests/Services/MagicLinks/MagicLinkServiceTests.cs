@@ -10,12 +10,15 @@ public class MagicLinkServiceTests
     private static MagicLinkService MakeSvc(
         ShortLynx.Data.Context.ShortLynxDbContext ctx,
         int expiryMinutes = 15,
-        InMemoryEmailSender? emailSender = null)
-        => new(ctx, emailSender ?? new InMemoryEmailSender(), Options.Create(new MagicLinkOptions
-        {
-            TokenExpiryMinutes = expiryMinutes,
-            ConfirmationUrlBase = "https://example.com/auth/confirm",
-        }));
+        InMemoryEmailSender? emailSender = null,
+        string[]? allowlist = null)
+        => new(ctx, emailSender ?? new InMemoryEmailSender(),
+            Options.Create(new MagicLinkOptions
+            {
+                TokenExpiryMinutes = expiryMinutes,
+                ConfirmationUrlBase = "https://example.com/auth/confirm",
+            }),
+            Options.Create(new ShortLynx.Services.Auth.AccessControlOptions { AllowedEmails = allowlist ?? [] }));
 
     private static async Task SeedUserAsync(
         ShortLynx.Data.Context.ShortLynxDbContext ctx, string email, bool isActive = true)
@@ -31,6 +34,47 @@ public class MagicLinkServiceTests
     }
 
     // ── CreateTokenAsync ──────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task CreateToken_AllowlistedEmail_NoExistingUser_ProvisionsAndReturnsToken()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+
+        var token = await MakeSvc(db.CreateContext(), allowlist: ["boot@example.com"])
+            .CreateTokenAsync("boot@example.com");
+
+        Assert.False(string.IsNullOrEmpty(token)); // first-admin bootstrap must work on a fresh install
+
+        await using var check = db.CreateContext();
+        var user = await check.UserAccountEntities.SingleAsync(u => u.Email == "boot@example.com");
+        Assert.True(user.IsActive);
+    }
+
+    [Fact]
+    public async Task CreateToken_UnknownNonAllowlistedEmail_ReturnsEmpty_AndCreatesNoUser()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+
+        var token = await MakeSvc(db.CreateContext(), allowlist: [])
+            .CreateTokenAsync("stranger@example.com");
+
+        Assert.Equal(string.Empty, token); // no anonymous provisioning / email-bombing
+        await using var check = db.CreateContext();
+        Assert.False(await check.UserAccountEntities.AnyAsync(u => u.Email == "stranger@example.com"));
+    }
+
+    [Fact]
+    public async Task CreateToken_DeactivatedUser_ReturnsEmpty_EvenIfAllowlisted()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+        await using (var seed = db.CreateContext())
+            await SeedUserAsync(seed, "gone@example.com", isActive: false);
+
+        var token = await MakeSvc(db.CreateContext(), allowlist: ["gone@example.com"])
+            .CreateTokenAsync("gone@example.com");
+
+        Assert.Equal(string.Empty, token); // deactivation wins over the allowlist
+    }
 
     [Fact]
     public async Task CreateToken_ReturnsNonEmptyToken_ForActiveUser()

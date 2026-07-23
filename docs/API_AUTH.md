@@ -23,6 +23,12 @@ POST /auth/magic-link        { "email": "user@example.com" }      → 204 (alway
 POST /auth/session           { "token": "<magic-link-token>" }    → 200 SessionResponse
 ```
 
+A link is only *sent* to an email that is already an **active user** or is **allowlisted** (the latter
+is provisioned on the spot — the first-admin bootstrap on a fresh install). Any other unknown email
+gets no link and no account is created; the response is still `204` in every case, so the endpoint
+never reveals whether an email is registered and can't be used to provision or email-bomb arbitrary
+addresses. There is **no self-signup** — new users arrive via an invite, an admin add, or the allowlist.
+
 `POST /auth/session` is gated: the email must be **allowlisted** or already a **member of an account**
 (otherwise `403`). On success:
 

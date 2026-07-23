@@ -32,6 +32,27 @@
 
 ---
 
+## Domain DNS (Namecheap)
+
+`shrtlynx.com` is registered and DNS-managed at Namecheap. Root (`@`) and `www` are plain
+**CNAME** records pointed at the target Railway's custom-domain UI provides — exactly what Railway
+instructs you to create, and it works: Namecheap allows a literal CNAME on `@` as long as nothing
+else needs to live at the bare apex. No SSL cert to buy anywhere — Railway auto-issues and renews
+the Let's Encrypt cert once the CNAME resolves.
+
+Confirmed 2026-07-23: no conflict today because all mail (`Resend__FromAddress`) sends from
+`notifications.zuech.dev` — a completely separate domain and DNS zone, untouched by anything on
+`shrtlynx.com`.
+
+> **Before adding email on `shrtlynx.com` itself** (MX / SPF / DKIM on the bare domain): a literal
+> CNAME can't coexist with other records on the same host, so the `@` record must first be switched
+> from CNAME to an **ALIAS** record (same target value). Namecheap supports ALIAS on all of its DNS
+> tiers (Basic, Free, Premium) and explicitly recommends it over CNAME-at-`@` for exactly this
+> reason — ALIAS can coexist with MX/TXT/SPF/DKIM on the same host, CNAME can't. `www` can stay a
+> plain CNAME regardless; this only applies to the bare apex.
+
+---
+
 ## Edge protection & DDoS
 
 The app does what belongs in the app; volumetric/L7 defence belongs at the edge. Layer it like this:

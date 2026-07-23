@@ -57,7 +57,10 @@ The app does what belongs in the app; volumetric/L7 defence belongs at the edge.
 - **Prod hardening + health checks** — Core has HSTS, RFC-7807 ProblemDetails, and `/health`; Admin and Web expose `/health` too. *(D4.)*
 - **Email** — uses the Resend HTTP API (`ResendEmailSender`), not SMTP. Set `Resend__ApiKey` (and a verified `Resend__FromAddress`).
 
-## 🚧 Still to do before first prod deploy
+## 🔧 Required configuration for each production deploy
+
+Per-environment checklist — run through it for every new instance (self-host or a fresh
+hosted environment). The primary hosted instance is live; these remain the steps any deploy needs.
 
 - [ ] **Migrations** — the Core image can auto-apply them on boot (set `RUN_MIGRATIONS=true` on Core
   only) or apply the SQL script manually (see Migrations below). The `RehomeOwnershipToAccounts`

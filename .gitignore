@@ -15,6 +15,12 @@ NOTES.local.md
 # IDE per-user settings (Rider/ReSharper, Visual Studio) — never shared
 *.DotSettings.user
 *.user
+# Rider data-source config is per-machine and can carry DB connection details
+.idea/**/dataSources.xml
+.idea/**/dataSources.local.xml
+
+# Claude Code local workspace config (dev-server launch profiles, etc.) — per-machine
+.claude/
 
 # Secrets / environment-specific config — keep DB credentials, SMTP passwords, and the
 # ApiKey:HmacSecret out of source control. Use `dotnet user-secrets` or environment variables.

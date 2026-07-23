@@ -27,8 +27,8 @@ suites (Outreach, Salesloft, HubSpot). ShortLynx does it self-hosted, for free.
 
 And it does it **without selling out the clicker.** Privacy isn't a bolt-on here:
 
-- **IPs are never stored raw** — only an HMAC-SHA256 hash with an **hourly-rotating key**, so
-  clicks can't be linked across time.
+- **IPs are never stored raw** — only an HMAC-SHA256 hash keyed with a secret pepper, with the
+  current hour folded into the input, so the stored value rotates every hour (raw IP never touches disk).
 - **Do Not Track / Global Privacy Control are honored** — the click still counts, but every
   dimension is nulled.
 - **k-anonymity (k=10)** — any breakdown value seen fewer than 10 times is folded into

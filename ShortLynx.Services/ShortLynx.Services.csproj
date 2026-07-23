@@ -4,6 +4,8 @@
         <TargetFramework>net10.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
+        <IsPackable>true</IsPackable>
+        <Description>ShortLynx business logic and the IEntitlements policy seam. Consumed by the out-of-repo hosted build.</Description>
     </PropertyGroup>
 
     <ItemGroup>

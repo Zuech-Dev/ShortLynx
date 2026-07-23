@@ -1,0 +1,26 @@
+<Project>
+
+  <!--
+    Shared NuGet metadata for the class libraries the out-of-repo hosted build consumes as packages.
+
+    Only ShortLynx.Models / .Data / .Repository / .Services opt in with <IsPackable>true</IsPackable>;
+    everything else (the three apps, tests, migration projects) inherits IsPackable=false and is never
+    published. Package versions are supplied by the publish workflow (dotnet pack -p:Version=… from the
+    pkg-v* tag); local `dotnet pack` without a version falls back to the SDK default (1.0.0).
+    Rationale: docs/HOSTED_BILLING_PLAN.md (gitignored).
+  -->
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+
+    <!-- Applied only to projects that set IsPackable=true (ignored on non-packable projects). -->
+    <Authors>Zuech-Dev</Authors>
+    <Company>ShortLynx</Company>
+    <Product>ShortLynx</Product>
+    <Copyright>Copyright © Zuech-Dev</Copyright>
+    <PackageLicenseExpression>Elastic-2.0</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/Zuech-Dev/ShortLynx</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/Zuech-Dev/ShortLynx</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+  </PropertyGroup>
+
+</Project>

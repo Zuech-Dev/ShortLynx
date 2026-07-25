@@ -288,4 +288,37 @@ public class MeCampaignsTests : IClassFixture<ApiFactory>
             Device = device,
             ClickedAt = at,
         };
+
+    [Fact]
+    public async Task LinkResponse_CarriesCampaignId_SoAClientCanShowTheCurrentAssignment()
+    {
+        var (client, _, _) = await _factory.CreateSessionClientAsync();
+
+        var campaign = await (await client.PostAsJsonAsync("/me/campaigns", new CreateCampaignRequest("Grouped")))
+            .Content.ReadFromJsonAsync<CampaignResponse>();
+        var link = await (await client.PostAsJsonAsync("/me/links",
+                new CreateMyLinkRequest("https://example.com/grouped", nameof(LinkMode.Anonymous))))
+            .Content.ReadFromJsonAsync<LinkResponse>();
+
+        // Ungrouped until assigned — the null case matters as much as the set one, since a client
+        // renders "no campaign" from it.
+        Assert.Null(link!.CampaignId);
+
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await client.PutAsJsonAsync($"/me/links/{link.Id}/campaign", new SetLinkCampaignRequest(campaign!.Id))).StatusCode);
+
+        // The assignment has to be READABLE, not just writable. Without this the campaign picker on a
+        // link can set a value but never show which one is already chosen, so it silently reports
+        // every grouped link as ungrouped.
+        var fetched = await (await client.GetAsync($"/me/links/{link.Id}")).Content.ReadFromJsonAsync<LinkResponse>();
+        Assert.Equal(campaign.Id, fetched!.CampaignId);
+
+        var listed = await (await client.GetAsync("/me/links")).Content.ReadFromJsonAsync<List<LinkResponse>>();
+        Assert.Equal(campaign.Id, Assert.Single(listed!, l => l.Id == link.Id).CampaignId);
+
+        // And clearing it must come back as null, not as the stale previous id.
+        await client.PutAsJsonAsync($"/me/links/{link.Id}/campaign", new SetLinkCampaignRequest(null));
+        var cleared = await (await client.GetAsync($"/me/links/{link.Id}")).Content.ReadFromJsonAsync<LinkResponse>();
+        Assert.Null(cleared!.CampaignId);
+    }
 }

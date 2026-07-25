@@ -304,5 +304,6 @@ public class MeLinksController(
     }
 
     private static LinkResponse ToLinkResponse(LinkEntity link, string shortCode)
-        => new(link.Id, link.OriginalUrl, link.Mode.ToString(), shortCode, link.CreatedAt, link.ExpiresAt);
+        => new(link.Id, link.OriginalUrl, link.Mode.ToString(), shortCode, link.CreatedAt, link.ExpiresAt,
+               link.CampaignId);
 }

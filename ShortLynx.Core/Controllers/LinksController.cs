@@ -223,5 +223,6 @@ public class LinksController(ILinkService linkService, ShortLynxDbContext db) : 
     }
 
     private static LinkResponse ToLinkResponse(LinkEntity link, string shortCode) =>
-        new(link.Id, link.OriginalUrl, link.Mode.ToString(), shortCode, link.CreatedAt, link.ExpiresAt);
+        new(link.Id, link.OriginalUrl, link.Mode.ToString(), shortCode, link.CreatedAt, link.ExpiresAt,
+            link.CampaignId);
 }

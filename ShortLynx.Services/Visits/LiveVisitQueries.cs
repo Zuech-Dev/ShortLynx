@@ -77,6 +77,7 @@ public static class LiveVisitQueries
             var visits = await FilterByClickedAtAsync(
                 db,
                 db.VisitEntities.Where(v => v.ShortCodeId != null && ids.Contains(v.ShortCodeId.Value)),
+                v => v.ClickedAt,
                 v => new Projection(
                     v.Id, v.ShortCodeId!.Value, null, v.ClickedAt, v.Source, v.Device, v.Browser, v.Os,
                     v.Country, v.TimeZone, v.Language, v.ReferrerHost, v.UtmSource, v.UtmMedium, v.UtmCampaign),
@@ -99,6 +100,7 @@ public static class LiveVisitQueries
             var visits = await FilterByClickedAtAsync(
                 db,
                 db.UserVisitEntities.Where(v => ids.Contains(v.UserLinkCodeId)),
+                v => v.ClickedAt,
                 v => new Projection(
                     v.Id, v.UserLinkCodeId, v.UserId, v.ClickedAt, v.Source, v.Device, v.Browser, v.Os,
                     v.Country, v.TimeZone, v.Language, v.ReferrerHost, v.UtmSource, v.UtmMedium, v.UtmCampaign),
@@ -125,13 +127,20 @@ public static class LiveVisitQueries
     /// <summary>
     /// Applies the <c>ClickedAt &gt; since</c> cut. SQLite cannot translate a <c>DateTimeOffset</c>
     /// comparison to SQL (the same limitation <c>VisitRetentionService</c> and <c>MagicLinkService</c>
-    /// work around), so the filter runs client-side there and in the database on PostgreSQL. The
-    /// projection is applied first either way, so the SQLite path pulls narrow rows rather than
-    /// entities — acceptable because SQLite is the dev/test provider and the row counts are small.
+    /// work around), so the filter runs client-side there, pulling the (already narrow) projection into
+    /// memory first. On PostgreSQL the filter and ordering are pushed to the database — but against the
+    /// entity's own <c>ClickedAt</c> column via <paramref name="clickedAt"/>, not against the projected
+    /// <see cref="Projection"/> record: filtering by a property read off an already-constructed record
+    /// (i.e. <c>.Select(project).Where(p =&gt; p.ClickedAt &gt; since)</c>) does not translate — EF
+    /// cannot push a comparison against a freshly-materialized record's property back down into SQL —
+    /// and throws <see cref="InvalidOperationException"/> at query time, not at compile time, so this
+    /// only surfaces against a real relational provider under an actual request, never against the
+    /// in-memory/SQLite path the test suite runs on.
     /// </summary>
     private static async Task<List<Projection>> FilterByClickedAtAsync<TEntity>(
         ShortLynxDbContext db,
         IQueryable<TEntity> source,
+        System.Linq.Expressions.Expression<Func<TEntity, DateTimeOffset>> clickedAt,
         System.Linq.Expressions.Expression<Func<TEntity, Projection>> project,
         DateTimeOffset since,
         int limit,
@@ -146,10 +155,22 @@ public static class LiveVisitQueries
                       .ToList();
         }
 
-        return await source.Select(project)
-            .Where(p => p.ClickedAt > since)
-            .OrderBy(p => p.ClickedAt)
+        return await source
+            .Where(SinceFilter(clickedAt, since))
+            .OrderBy(clickedAt)
             .Take(limit)
+            .Select(project)
             .ToListAsync(ct);
+    }
+
+    /// <summary>Builds <c>entity =&gt; clickedAt(entity) &gt; since</c> as one expression tree, so the
+    /// comparison reaches the provider as a plain column predicate rather than a call to
+    /// <paramref name="clickedAt"/> the translator would have to inline itself.</summary>
+    private static System.Linq.Expressions.Expression<Func<TEntity, bool>> SinceFilter<TEntity>(
+        System.Linq.Expressions.Expression<Func<TEntity, DateTimeOffset>> clickedAt, DateTimeOffset since)
+    {
+        var body = System.Linq.Expressions.Expression.GreaterThan(
+            clickedAt.Body, System.Linq.Expressions.Expression.Constant(since));
+        return System.Linq.Expressions.Expression.Lambda<Func<TEntity, bool>>(body, clickedAt.Parameters[0]);
     }
 }

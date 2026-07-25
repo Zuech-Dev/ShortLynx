@@ -36,11 +36,25 @@ public class MeLinksCustomCodeTests : IClassFixture<ApiFactory>
         Assert.Equal(HttpStatusCode.Created, resp.StatusCode);
         var body = await resp.Content.ReadFromJsonAsync<LinkResponse>();
         Assert.Equal("my-code-12", body!.ShortCode);
+        // A client building the short URL from this response needs to know it's custom — see
+        // ShortUrlBuilderTests for why building a bare /{code} URL for one 404s.
+        Assert.True(body.IsCustom);
 
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ShortLynxDbContext>();
         var sc = await db.ShortCodeEntities.SingleAsync(x => x.Code == "my-code-12");
         Assert.True(sc.IsCustom);
+    }
+
+    [Fact]
+    public async Task Create_WithoutCustomCode_ReportsIsCustomFalse()
+    {
+        var (client, _, _) = await _factory.CreateSessionClientAsync();
+
+        var resp = await client.PostAsJsonAsync("/me/links", new CreateMyLinkRequest("https://example.com/auto"));
+        Assert.Equal(HttpStatusCode.Created, resp.StatusCode);
+        var body = await resp.Content.ReadFromJsonAsync<LinkResponse>();
+        Assert.False(body!.IsCustom);
     }
 
     [Fact]

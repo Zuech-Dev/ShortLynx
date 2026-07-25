@@ -11,7 +11,18 @@ public sealed class DashboardOptions
     /// </summary>
     public string PublicBaseUrl { get; set; } = string.Empty;
 
-    /// <summary>Builds the full short URL for a code, or the bare code when no base URL is configured.</summary>
-    public string BuildShortUrl(string code) =>
-        string.IsNullOrWhiteSpace(PublicBaseUrl) ? code : $"{PublicBaseUrl.TrimEnd('/')}/{code}";
+    /// <summary>
+    /// Builds the full short URL for a code, or the bare path when no base URL is configured.
+    /// <paramref name="isCustom"/> routes the code under <paramref name="customRoutePrefix"/> (the
+    /// configured <see cref="ShortLynx.Services.ShortCodes.ShortCodeOptions.CustomRoutePrefix"/>) since
+    /// custom codes never resolve at the root path — see <c>ShortUrlBuilder</c>, which this mirrors for
+    /// the one call site (a freshly-created link's success banner) too immediate to await a DB round
+    /// trip for custom-domain pinning, which a brand-new link can't have yet anyway.
+    /// </summary>
+    public string BuildShortUrl(string code, bool isCustom, string customRoutePrefix)
+    {
+        var prefix = customRoutePrefix.Trim('/');
+        var path = isCustom && prefix.Length > 0 ? $"{prefix}/{code}" : code;
+        return string.IsNullOrWhiteSpace(PublicBaseUrl) ? path : $"{PublicBaseUrl.TrimEnd('/')}/{path}";
+    }
 }

@@ -21,7 +21,8 @@ namespace ShortLynx.Core.Controllers;
 [Route("me/links")]
 public class MeLinksController(
     ILinkService linkService, ShortLynxDbContext db,
-    IQrCodeService qr, IOptions<LinkUrlOptions> linkOptions) : SessionControllerBase
+    IQrCodeService qr, IOptions<LinkUrlOptions> linkOptions,
+    IOptions<ShortCodeOptions> shortCodeOptions) : SessionControllerBase
 {
     // GET /me/links
     [HttpGet]
@@ -42,12 +43,16 @@ public class MeLinksController(
         var linkIds = links.Select(l => l.Id).ToHashSet();
         var codeMap = (await db.ShortCodeEntities
                 .Where(sc => linkIds.Contains(sc.LinkId))
-                .Select(sc => new { sc.LinkId, sc.Code })
+                .Select(sc => new { sc.LinkId, sc.Code, sc.IsCustom })
                 .ToListAsync(ct))
             .GroupBy(c => c.LinkId)
-            .ToDictionary(g => g.Key, g => g.First().Code);
+            .ToDictionary(g => g.Key, g => g.First());
 
-        return Ok(links.Select(l => ToLinkResponse(l, codeMap.GetValueOrDefault(l.Id, string.Empty))));
+        return Ok(links.Select(l =>
+        {
+            var c = codeMap.GetValueOrDefault(l.Id);
+            return ToLinkResponse(l, c?.Code ?? string.Empty, c?.IsCustom ?? false);
+        }));
     }
 
     // POST /me/links — create an anonymous (default) or user-attributed link in the current account.
@@ -64,11 +69,12 @@ public class MeLinksController(
             if (isUserAttributed)
             {
                 var link = await linkService.CreateUserAttributedLinkAsync(request.Url, AccountId, CurrentUserId, request.CampaignId, ct);
-                return CreatedAtAction(nameof(Get), new { id = link.Id }, ToLinkResponse(link, string.Empty));
+                return CreatedAtAction(nameof(Get), new { id = link.Id }, ToLinkResponse(link, string.Empty, false));
             }
 
             var result = await linkService.CreateAnonymousLinkAsync(request.Url, AccountId, CurrentUserId, request.CampaignId, request.CustomCode, ct);
-            return CreatedAtAction(nameof(Get), new { id = result.Link.Id }, ToLinkResponse(result.Link, result.ShortCode.Code));
+            return CreatedAtAction(nameof(Get), new { id = result.Link.Id },
+                ToLinkResponse(result.Link, result.ShortCode.Code, result.ShortCode.IsCustom));
         }
         catch (CustomCodeTakenException ex)
         {
@@ -91,8 +97,9 @@ public class MeLinksController(
     {
         var link = await db.LinkEntities.FirstOrDefaultAsync(l => l.Id == id && l.AccountId == AccountId, ct);
         if (link is null) return NotFound();
-        var code = await db.ShortCodeEntities.Where(sc => sc.LinkId == id).Select(sc => sc.Code).FirstOrDefaultAsync(ct) ?? "";
-        return Ok(ToLinkResponse(link, code));
+        var sc = await db.ShortCodeEntities.Where(x => x.LinkId == id)
+            .Select(x => new { x.Code, x.IsCustom }).FirstOrDefaultAsync(ct);
+        return Ok(ToLinkResponse(link, sc?.Code ?? "", sc?.IsCustom ?? false));
     }
 
     // POST /me/links/{id}/codes — provision user-attributed codes.
@@ -276,34 +283,50 @@ public class MeLinksController(
         var link = await db.LinkEntities.FirstOrDefaultAsync(l => l.Id == id && l.AccountId == AccountId, ct);
         if (link is null) return NotFound();
 
-        var targetCode = await ResolveCodeAsync(link, code, ct);
-        if (targetCode is null) return NotFound();
+        var resolved = await ResolveCodeAsync(link, code, ct);
+        if (resolved is null) return NotFound();
 
-        var url = await ShortUrlBuilder.BuildAsync(db, link, targetCode, linkOptions.Value.PublicBaseUrl, ct);
+        var url = await ShortUrlBuilder.BuildAsync(
+            db, link, resolved.Value.Code, resolved.Value.IsCustom, shortCodeOptions.Value.CustomRoutePrefix,
+            linkOptions.Value.PublicBaseUrl, ct);
 
         return isSvg
-            ? File(Encoding.UTF8.GetBytes(qr.GenerateSvg(url, size)), "image/svg+xml", $"{targetCode}.svg")
-            : File(qr.GeneratePng(url, size), "image/png", $"{targetCode}.png");
+            ? File(Encoding.UTF8.GetBytes(qr.GenerateSvg(url, size)), "image/svg+xml", $"{resolved.Value.Code}.svg")
+            : File(qr.GeneratePng(url, size), "image/png", $"{resolved.Value.Code}.png");
     }
+
+    private readonly record struct ResolvedCode(string Code, bool IsCustom);
 
     // Picks the code to encode: an explicit ?code= (validated against this link), else the anonymous
     // link's single short code. User-attributed links have no single code, so they require ?code=.
-    private async Task<string?> ResolveCodeAsync(LinkEntity link, string? code, CancellationToken ct)
+    // Carries IsCustom alongside the code so ShortUrlBuilder can route it under the custom prefix —
+    // a bare code lookup here previously fed a URL that 404s for vanity codes (RedirectService excludes
+    // them from the root route by design).
+    private async Task<ResolvedCode?> ResolveCodeAsync(LinkEntity link, string? code, CancellationToken ct)
     {
         if (code is not null)
         {
-            var belongs = link.Mode == LinkMode.Anonymous
-                ? await db.ShortCodeEntities.AnyAsync(sc => sc.LinkId == link.Id && sc.Code == code, ct)
-                : await db.UserLinkCodeEntities.AnyAsync(c => c.LinkId == link.Id && c.Code == code, ct);
-            return belongs ? code : null;
+            if (link.Mode != LinkMode.Anonymous)
+            {
+                var belongs = await db.UserLinkCodeEntities.AnyAsync(c => c.LinkId == link.Id && c.Code == code, ct);
+                return belongs ? new ResolvedCode(code, false) : null;
+            }
+
+            var match = await db.ShortCodeEntities
+                .Where(sc => sc.LinkId == link.Id && sc.Code == code)
+                .Select(sc => new { sc.IsCustom })
+                .FirstOrDefaultAsync(ct);
+            return match is null ? null : new ResolvedCode(code, match.IsCustom);
         }
 
         if (link.Mode != LinkMode.Anonymous) return null;
-        return await db.ShortCodeEntities.Where(sc => sc.LinkId == link.Id)
-            .Select(sc => sc.Code).FirstOrDefaultAsync(ct);
+        var sc2 = await db.ShortCodeEntities.Where(sc => sc.LinkId == link.Id)
+            .Select(sc => new { sc.Code, sc.IsCustom })
+            .FirstOrDefaultAsync(ct);
+        return sc2 is null ? null : new ResolvedCode(sc2.Code, sc2.IsCustom);
     }
 
-    private static LinkResponse ToLinkResponse(LinkEntity link, string shortCode)
+    private static LinkResponse ToLinkResponse(LinkEntity link, string shortCode, bool isCustom)
         => new(link.Id, link.OriginalUrl, link.Mode.ToString(), shortCode, link.CreatedAt, link.ExpiresAt,
-               link.CampaignId);
+               link.CampaignId, isCustom);
 }

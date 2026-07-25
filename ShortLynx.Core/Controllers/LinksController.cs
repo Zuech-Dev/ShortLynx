@@ -32,7 +32,7 @@ public class LinksController(ILinkService linkService, ShortLynxDbContext db) : 
         try
         {
             var result = await linkService.CreateAnonymousLinkAsync(request.Url, CurrentKey, request.CustomCode, ct);
-            var response = ToLinkResponse(result.Link, result.ShortCode.Code);
+            var response = ToLinkResponse(result.Link, result.ShortCode.Code, result.ShortCode.IsCustom);
             return CreatedAtAction(nameof(GetLink), new { id = result.Link.Id }, response);
         }
         catch (CustomCodeTakenException ex)
@@ -75,15 +75,19 @@ public class LinksController(ILinkService linkService, ShortLynxDbContext db) : 
         var linkIds = links.Select(l => l.Id).ToHashSet();
         var codes = await db.ShortCodeEntities
             .Where(sc => linkIds.Contains(sc.LinkId))
-            .Select(sc => new { sc.LinkId, sc.Code })
+            .Select(sc => new { sc.LinkId, sc.Code, sc.IsCustom })
             .ToListAsync(ct);
 
         var codeMap = codes
             .GroupBy(c => c.LinkId)
-            .ToDictionary(g => g.Key, g => g.First().Code);
+            .ToDictionary(g => g.Key, g => g.First());
 
         var items = links
-            .Select(l => ToLinkResponse(l, codeMap.GetValueOrDefault(l.Id, string.Empty)))
+            .Select(l =>
+            {
+                var c = codeMap.GetValueOrDefault(l.Id);
+                return ToLinkResponse(l, c?.Code ?? string.Empty, c?.IsCustom ?? false);
+            })
             .ToList();
 
         return Ok(items);
@@ -100,12 +104,12 @@ public class LinksController(ILinkService linkService, ShortLynxDbContext db) : 
 
         if (link is null) return NotFound();
 
-        var shortCode = await db.ShortCodeEntities
-            .Where(sc => sc.LinkId == id)
-            .Select(sc => sc.Code)
-            .FirstOrDefaultAsync(ct) ?? string.Empty;
+        var sc = await db.ShortCodeEntities
+            .Where(x => x.LinkId == id)
+            .Select(x => new { x.Code, x.IsCustom })
+            .FirstOrDefaultAsync(ct);
 
-        return Ok(ToLinkResponse(link, shortCode));
+        return Ok(ToLinkResponse(link, sc?.Code ?? string.Empty, sc?.IsCustom ?? false));
     }
 
     // POST /links/{id}/codes
@@ -222,7 +226,7 @@ public class LinksController(ILinkService linkService, ShortLynxDbContext db) : 
             codeStats, b.Sources, b.Devices, b.Timeline, b.HourlyDistribution));
     }
 
-    private static LinkResponse ToLinkResponse(LinkEntity link, string shortCode) =>
+    private static LinkResponse ToLinkResponse(LinkEntity link, string shortCode, bool isCustom) =>
         new(link.Id, link.OriginalUrl, link.Mode.ToString(), shortCode, link.CreatedAt, link.ExpiresAt,
-            link.CampaignId);
+            link.CampaignId, isCustom);
 }

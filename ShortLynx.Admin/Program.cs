@@ -15,6 +15,7 @@ using ShortLynx.Services.Accounts;
 using ShortLynx.Services.Entitlements;
 using ShortLynx.Services.Links;
 using ShortLynx.Services.Qr;
+using ShortLynx.Services.ShortCodes;
 using ShortLynx.Services.Social;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -99,6 +100,7 @@ app.MapGet("/qr/{linkId:guid}", async (
         IDbContextFactory<ShortLynxDbContext> dbFactory,
         IQrCodeService qr,
         IOptions<DashboardOptions> dashboard,
+        IOptions<ShortCodeOptions> shortCodeOptions,
         CancellationToken ct) =>
     {
         var userId = user.GetUserId();
@@ -112,22 +114,32 @@ app.MapGet("/qr/{linkId:guid}", async (
         if (link is null) return Results.NotFound();
 
         string? targetCode = code;
+        bool isCustom;
         if (targetCode is null)
         {
             if (link.Mode != LinkMode.Anonymous) return Results.BadRequest("A code is required for user-attributed links.");
-            targetCode = await db.ShortCodeEntities.Where(sc => sc.LinkId == linkId)
-                .Select(sc => sc.Code).FirstOrDefaultAsync(ct);
+            var sc = await db.ShortCodeEntities.Where(x => x.LinkId == linkId)
+                .Select(x => new { x.Code, x.IsCustom }).FirstOrDefaultAsync(ct);
+            targetCode = sc?.Code;
+            isCustom = sc?.IsCustom ?? false;
+        }
+        else if (link.Mode == LinkMode.Anonymous)
+        {
+            var sc = await db.ShortCodeEntities.Where(x => x.LinkId == linkId && x.Code == targetCode)
+                .Select(x => new { x.IsCustom }).FirstOrDefaultAsync(ct);
+            if (sc is null) return Results.NotFound();
+            isCustom = sc.IsCustom;
         }
         else
         {
-            var belongs = link.Mode == LinkMode.Anonymous
-                ? await db.ShortCodeEntities.AnyAsync(sc => sc.LinkId == linkId && sc.Code == targetCode, ct)
-                : await db.UserLinkCodeEntities.AnyAsync(c => c.LinkId == linkId && c.Code == targetCode, ct);
+            var belongs = await db.UserLinkCodeEntities.AnyAsync(c => c.LinkId == linkId && c.Code == targetCode, ct);
             if (!belongs) return Results.NotFound();
+            isCustom = false;
         }
         if (string.IsNullOrEmpty(targetCode)) return Results.NotFound();
 
-        var url = await ShortUrlBuilder.BuildAsync(db, link, targetCode, dashboard.Value.PublicBaseUrl, ct);
+        var url = await ShortUrlBuilder.BuildAsync(
+            db, link, targetCode, isCustom, shortCodeOptions.Value.CustomRoutePrefix, dashboard.Value.PublicBaseUrl, ct);
         return (format ?? "png").ToLowerInvariant() switch
         {
             "svg" => Results.File(System.Text.Encoding.UTF8.GetBytes(qr.GenerateSvg(url, size ?? 10)), "image/svg+xml", $"{targetCode}.svg"),

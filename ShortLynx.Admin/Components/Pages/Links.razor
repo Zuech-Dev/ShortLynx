@@ -10,6 +10,7 @@
 @inject IDbContextFactory<ShortLynxDbContext> DbFactory
 @inject IServiceScopeFactory ScopeFactory
 @inject IOptions<DashboardOptions> DashboardOpts
+@inject IOptions<ShortCodeOptions> ShortCodeOpts
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 
@@ -311,7 +312,8 @@ else
             var custom = _customCodesAvailable && !string.IsNullOrWhiteSpace(_customCode) ? _customCode : null;
             var result = await svc.CreateAnonymousLinkAsync(_form.Url!, _accountId, _uid, _form.CampaignId, custom);
             _newShortCode = result.ShortCode.Code;
-            _newShortUrl = DashboardOpts.Value.BuildShortUrl(result.ShortCode.Code);
+            _newShortUrl = DashboardOpts.Value.BuildShortUrl(
+                result.ShortCode.Code, result.ShortCode.IsCustom, ShortCodeOpts.Value.CustomRoutePrefix);
             _form = new();
             ResetCustomCode();
             _showCreate = false;

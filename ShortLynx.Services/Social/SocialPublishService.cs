@@ -74,7 +74,10 @@ public sealed class SocialPublishService(
             else
             {
                 postCode = await MintPostCodeAsync(linkId, postId, ct);
-                var postUrl = await ShortUrlBuilder.BuildAsync(db, link, postCode.Code, publicBaseUrl, ct);
+                // Social post codes are always auto-generated, never custom — customRoutePrefix is
+                // never consulted when isCustom is false, so an empty string here is inert.
+                var postUrl = await ShortUrlBuilder.BuildAsync(
+                    db, link, postCode.Code, isCustom: false, customRoutePrefix: string.Empty, publicBaseUrl, ct);
                 composed = Compose(text, postUrl);
             }
         }

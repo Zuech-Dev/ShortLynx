@@ -6,9 +6,11 @@
 @using ShortLynx.Services.Campaigns
 @using ShortLynx.Services.Links
 @using ShortLynx.Services.Social
+@using ShortLynx.Services.ShortCodes
 @inject IDbContextFactory<ShortLynxDbContext> DbFactory
 @inject IServiceScopeFactory ScopeFactory
 @inject IOptions<DashboardOptions> DashboardOpts
+@inject IOptions<ShortCodeOptions> ShortCodeOpts
 @inject IJSRuntime JS
 @inject NavigationManager Nav
 
@@ -453,7 +455,8 @@ else
             var sc = await db.ShortCodeEntities.FirstOrDefaultAsync(s => s.LinkId == Id);
             _shortCode = sc?.Code ?? string.Empty;
             if (sc is not null)
-                _shortUrl = await ShortUrlBuilder.BuildAsync(db, _link, sc.Code, DashboardOpts.Value.PublicBaseUrl);
+                _shortUrl = await ShortUrlBuilder.BuildAsync(
+                    db, _link, sc.Code, sc.IsCustom, ShortCodeOpts.Value.CustomRoutePrefix, DashboardOpts.Value.PublicBaseUrl);
         }
         else
         {
@@ -625,7 +628,8 @@ else
         var codes = await svc.CreateUserLinkCodesAsync(Id, recipients, _provision.IsOneTimeUse);
 
         var baseUrl = DashboardOpts.Value;
-        _minted = codes.Select(c => new MintedCode(c.Recipient, baseUrl.BuildShortUrl(c.Code))).ToList();
+        // Per-recipient (Mode 2) codes are never custom — UserLinkCodeEntity has no IsCustom concept.
+        _minted = codes.Select(c => new MintedCode(c.Recipient, baseUrl.BuildShortUrl(c.Code, false, string.Empty))).ToList();
         _provision.Recipients = string.Empty;
         await LoadAsync();
     }

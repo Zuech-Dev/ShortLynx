@@ -19,6 +19,56 @@
 
 ---
 
+## Choosing your front ends
+
+`ShortLynx.Core` (the API) and PostgreSQL are always required. `ShortLynx.Web` and `ShortLynx.Admin`
+are the **default** front ends — complete, supported, and what you get if you change nothing — but
+either can be swapped for your own. Neither is going away.
+
+With Docker Compose the choice is a profile:
+
+```bash
+cp .env.example .env          # ships COMPOSE_PROFILES=web,admin
+docker compose up -d          # the whole product
+```
+
+```bash
+COMPOSE_PROFILES=web    docker compose up -d   # our redirects, your dashboard
+COMPOSE_PROFILES=admin  docker compose up -d   # our dashboard, your redirect handler
+COMPOSE_PROFILES=       docker compose up -d   # API only — you supply both
+```
+
+On Railway (or any platform where each app is its own service) the same choice is simply which
+services you create: the images are independent and nothing breaks at build time if one is absent.
+
+**The two are not equally safe to drop.**
+
+| Dropping | Costs you |
+|---|---|
+| `ShortLynx.Admin` | The dashboard — **and** three server-side surfaces that happen to live in that app: the social OAuth `authorize`/`callback` routes (registered as redirect URIs with Threads, Reddit, Bluesky, Mastodon), the QR endpoint, and CSV export. The API has equivalents for QR and analytics export, but the OAuth callbacks have no home outside this app today. |
+| `ShortLynx.Web` | **Short links stop resolving.** This is the only app that serves `/{code}` — the API has no redirect route at all. It also serves the public marketing page. Do not drop it unless something else is answering those URLs. |
+
+So a "bring your own dashboard" deployment is routine; a "bring your own redirect site" deployment
+means you have genuinely reimplemented the redirect path, including visit recording and the IP-hash
+pepper (below).
+
+### Two things that must line up whatever you choose
+
+1. **`VisitSink__IpHashPepper` must be identical in Core and Web.** It's the secret that makes stored
+   visitor IPs pseudonymous rather than reversible. If the two apps disagree, the same visitor hashes
+   differently in each and unique-clicker counts silently double-count — there is no error, just
+   wrong numbers.
+
+2. **`MagicLink__ConfirmationUrlBase` is one value for the whole deployment.** It points at exactly one
+   dashboard. If you run the bundled `admin` *and* your own front end, the one it doesn't point at is
+   reachable only to an already-signed-in session. Pick which one owns sign-in deliberately; running
+   both fully requires a second API service with its own value.
+
+A front end of your own on a different origin also needs `Cors__AllowedOrigins` set on the API, and
+`Jwt__CookieSameSite=None` (with `Jwt__CookieSecure=true`) if it isn't same-site with the API.
+
+---
+
 ## Platform notes
 
 **Railway (recommended for now).** You already run apps there, it speaks Docker, the Postgres plugin is one click, and three services + a DB is well within its model. Downsides: single-region (every redirect hits that region) and cost climbs with always-on services.

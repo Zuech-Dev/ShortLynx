@@ -90,6 +90,7 @@ public static class ServiceExtensions
         services.AddScoped<IUserAdminService, UserAdminService>();
         services.AddSingleton<IQrCodeService, QrCodeService>();
         services.Configure<LinkUrlOptions>(configuration.GetSection("Links"));
+        services.Configure<LiveStreamOptions>(configuration.GetSection("LiveStream"));
 
         // User sessions (magic-link → JWT + refresh) for bring-your-own-frontend clients.
         services.AddOptions<JwtOptions>()
@@ -187,6 +188,20 @@ public static class ServiceExtensions
                 {
                     PermitLimit = o.CustomCodeCheckPermitLimit,
                     Window = TimeSpan.FromSeconds(o.CustomCodeCheckWindowSeconds),
+                    QueueLimit = 0,
+                });
+            });
+
+            // Concurrency, not a fixed window: an SSE stream's cost is the connection it holds open for
+            // up to MaxConnectionMinutes, so what needs capping is how many are open at once. QueueLimit
+            // is 0 so an over-limit client gets an immediate 429 rather than a request parked until a
+            // long-lived stream happens to end.
+            rl.AddPolicy(RateLimitPolicies.Stream, ctx =>
+            {
+                var o = ctx.RequestServices.GetRequiredService<IOptions<RateLimitOptions>>().Value;
+                return RateLimitPartition.GetConcurrencyLimiter(ClientIp(ctx), _ => new ConcurrencyLimiterOptions
+                {
+                    PermitLimit = o.StreamConcurrencyLimit,
                     QueueLimit = 0,
                 });
             });

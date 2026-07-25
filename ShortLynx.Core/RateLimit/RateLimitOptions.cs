@@ -18,4 +18,9 @@ public sealed class RateLimitOptions
     // while making enumeration of taken codes expensive.
     public int CustomCodeCheckPermitLimit { get; set; } = 40;
     public int CustomCodeCheckWindowSeconds { get; set; } = 60;
+
+    // Concurrent SSE streams per IP. A dashboard opens one per tab, so this permits a handful of tabs
+    // (and a NAT'd office of a few users) while capping the connection cost of the live feed.
+    // See the note on RateLimitPolicies.Stream for why this is a concurrency cap, not a rate.
+    public int StreamConcurrencyLimit { get; set; } = 10;
 }

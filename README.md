@@ -61,9 +61,9 @@ Three deployable apps over one PostgreSQL database:
 
 | Project | Role |
 |---|---|
-| `ShortLynx.Web` | Public redirect site (`/{code}` → 302) — the latency-sensitive hot path |
-| `ShortLynx.Core` | REST API — links, analytics, auth, API keys, domains |
-| `ShortLynx.Admin` | Blazor Server dashboard (magic-link auth) |
+| `ShortLynx.Core` | REST API — links, analytics, auth, API keys, domains. **Always required.** |
+| `ShortLynx.Web` | Public redirect site (`/{code}` → 302) — the latency-sensitive hot path. Default front end, replaceable. |
+| `ShortLynx.Admin` | Blazor Server dashboard (magic-link auth). Default front end, replaceable. |
 | `ShortLynx.Models` · `.Repository` · `.Services` · `.Data*` | Shared domain, data access, business logic |
 
 The redirect path is built for volume: rate-limit → in-memory cache → 302 → async visit
@@ -109,12 +109,22 @@ dotnet test  ShortLynx.slnx
 
 ## Deploying to production
 
-ShortLynx ships a Dockerfile per app and deploys cleanly to **Railway** (or any Docker host
-with a PostgreSQL add-on). The Core image applies EF migrations on boot when
-`RUN_MIGRATIONS=true`. Full checklist — required secrets, forwarded headers, custom-domain
-TLS, smoke tests — is in **[DEPLOY.md](DEPLOY.md)**.
+ShortLynx ships a Dockerfile per app, plus a `docker-compose.yml` for the whole stack:
 
-Bringing your own frontend against the API? See **[docs/API_AUTH.md](docs/API_AUTH.md)**.
+```bash
+cp .env.example .env    # fill in the secrets it lists
+docker compose up -d
+```
+
+It also deploys cleanly to **Railway** (or any Docker host with a PostgreSQL add-on). The Core
+image applies EF migrations on boot when `RUN_MIGRATIONS=true`. Full checklist — required
+secrets, forwarded headers, custom-domain TLS, smoke tests — is in **[DEPLOY.md](DEPLOY.md)**.
+
+**Running your own front end?** `Web` and `Admin` are the *default* front ends, not mandatory ones.
+Compose profiles select which of them you run (`COMPOSE_PROFILES=web` keeps our redirect site and
+drops the dashboard, and so on) — see
+[Choosing your front ends](DEPLOY.md#choosing-your-front-ends) for what each one costs you to
+replace, and **[docs/API_AUTH.md](docs/API_AUTH.md)** for authenticating against the API.
 
 ## Security
 

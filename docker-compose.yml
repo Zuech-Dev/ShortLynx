@@ -1,0 +1,129 @@
+# Self-hosting stack for ShortLynx.
+#
+# Which front ends you run is a deployment choice, made here with compose profiles. The API and the
+# database are always required; `web` and `admin` are the DEFAULT front ends, and you opt out of
+# either one when you're bringing your own.
+#
+#   docker compose up -d                     # full default stack (uses COMPOSE_PROFILES from .env)
+#   COMPOSE_PROFILES=web,admin docker compose up -d    # explicit: both defaults
+#   COMPOSE_PROFILES=web       docker compose up -d    # your own dashboard, our redirect site
+#   COMPOSE_PROFILES=          docker compose up -d    # API only — you supply BOTH front ends
+#
+# .env.example ships COMPOSE_PROFILES=web,admin so a plain `docker compose up -d` gives a self-hoster
+# the whole product. Opting out is deliberate, not the default.
+#
+# ⚠️ The two profiles are NOT equivalent in consequence — see DEPLOY.md, "Choosing your front ends":
+#
+#   - Dropping `admin` costs you a dashboard, and also the social OAuth callbacks, QR, and CSV export
+#     endpoints that happen to live in that app.
+#   - Dropping `web` STOPS SHORT LINKS FROM RESOLVING. It is the only app that serves /{code}; the API
+#     has no redirect route. Without a replacement, the product does not function.
+
+name: shortlynx
+
+x-database: &database
+  Database__Provider: postgresql
+  Database__ConnectionString: >-
+    Host=postgres;Port=5432;Database=${POSTGRES_DB:-shortlynx};Username=${POSTGRES_USER:-shortlynx};Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-shortlynx}
+      POSTGRES_USER: ${POSTGRES_USER:-shortlynx}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      # The apps fail fast on an unreachable database, so they must not start before it accepts
+      # connections — `depends_on` alone only waits for the container, not for readiness.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-shortlynx} -d ${POSTGRES_DB:-shortlynx}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  # ---------------------------------------------------------------------------
+  # The API. No profile: it is always required, whichever front ends you run.
+  # ---------------------------------------------------------------------------
+  core:
+    build:
+      context: .
+      dockerfile: ShortLynx.Core/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      <<: *database
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_HTTP_PORTS: 8080
+      # Exactly one service in the deployment may apply migrations. This is that service.
+      RUN_MIGRATIONS: "true"
+      Jwt__SigningKey: ${JWT_SIGNING_KEY:?set JWT_SIGNING_KEY in .env}
+      ApiKey__HmacSecret: ${API_KEY_HMAC_SECRET:?set API_KEY_HMAC_SECRET in .env}
+      ApiKey__AdminSecret: ${API_KEY_ADMIN_SECRET:?set API_KEY_ADMIN_SECRET in .env}
+      # Must match `web`'s value exactly, or the same visitor hashes differently in each app and the
+      # unique-clicker figures silently double-count.
+      VisitSink__IpHashPepper: ${IP_HASH_PEPPER:?set IP_HASH_PEPPER in .env}
+      Resend__ApiKey: ${RESEND_API_KEY:-}
+      Resend__FromAddress: ${RESEND_FROM_ADDRESS:-}
+      Admin__AllowedEmails__0: ${ADMIN_EMAIL:?set ADMIN_EMAIL in .env}
+      Admin__SuperAdminEmails__0: ${ADMIN_EMAIL}
+      MagicLink__ConfirmationUrlBase: ${MAGIC_LINK_CONFIRM_URL:-http://localhost:5201/auth/confirm}
+      Links__PublicBaseUrl: ${SHORT_BASE_URL:-http://localhost:5071}
+      # Needed only when a front end you supply is on a different origin than this API. Harmless empty.
+      Cors__AllowedOrigins__0: ${FRONTEND_ORIGIN:-}
+    ports:
+      - "${CORE_PORT:-5129}:8080"
+
+  # ---------------------------------------------------------------------------
+  # Default redirect site. Opt out ONLY if you are replacing it — see the warning above.
+  # ---------------------------------------------------------------------------
+  web:
+    profiles: [web]
+    build:
+      context: .
+      dockerfile: ShortLynx.Web/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      <<: *database
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_HTTP_PORTS: 8080
+      # Same pepper as `core` — see the note there.
+      VisitSink__IpHashPepper: ${IP_HASH_PEPPER:?set IP_HASH_PEPPER in .env}
+    ports:
+      - "${WEB_PORT:-5071}:8080"
+
+  # ---------------------------------------------------------------------------
+  # Default dashboard. Opt out if you're bringing your own.
+  # ---------------------------------------------------------------------------
+  admin:
+    profiles: [admin]
+    build:
+      context: .
+      dockerfile: ShortLynx.Admin/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      <<: *database
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_HTTP_PORTS: 8080
+      ApiKey__HmacSecret: ${API_KEY_HMAC_SECRET:?set API_KEY_HMAC_SECRET in .env}
+      Resend__ApiKey: ${RESEND_API_KEY:-}
+      Resend__FromAddress: ${RESEND_FROM_ADDRESS:-}
+      Admin__AllowedEmails__0: ${ADMIN_EMAIL:?set ADMIN_EMAIL in .env}
+      Admin__SuperAdminEmails__0: ${ADMIN_EMAIL}
+      ShortLynx__PublicBaseUrl: ${SHORT_BASE_URL:-http://localhost:5071}
+      MagicLink__ConfirmationUrlBase: ${MAGIC_LINK_CONFIRM_URL:-http://localhost:5201/auth/confirm}
+    ports:
+      - "${ADMIN_PORT:-5201}:8080"
+
+volumes:
+  postgres-data:

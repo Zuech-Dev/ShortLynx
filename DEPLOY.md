@@ -82,6 +82,27 @@ A front end of your own on a different origin also needs `Cors__AllowedOrigins` 
 
 ---
 
+## Domain DNS (Namecheap)
+
+`shrtlynx.com` is registered and DNS-managed at Namecheap. Root (`@`) and `www` are plain
+**CNAME** records pointed at the target Railway's custom-domain UI provides — exactly what Railway
+instructs you to create, and it works: Namecheap allows a literal CNAME on `@` as long as nothing
+else needs to live at the bare apex. No SSL cert to buy anywhere — Railway auto-issues and renews
+the Let's Encrypt cert once the CNAME resolves.
+
+Confirmed 2026-07-23: no conflict today because all mail (`Resend__FromAddress`) sends from
+`notifications.zuech.dev` — a completely separate domain and DNS zone, untouched by anything on
+`shrtlynx.com`.
+
+> **Before adding email on `shrtlynx.com` itself** (MX / SPF / DKIM on the bare domain): a literal
+> CNAME can't coexist with other records on the same host, so the `@` record must first be switched
+> from CNAME to an **ALIAS** record (same target value). Namecheap supports ALIAS on all of its DNS
+> tiers (Basic, Free, Premium) and explicitly recommends it over CNAME-at-`@` for exactly this
+> reason — ALIAS can coexist with MX/TXT/SPF/DKIM on the same host, CNAME can't. `www` can stay a
+> plain CNAME regardless; this only applies to the bare apex.
+
+---
+
 ## Edge protection & DDoS
 
 The app does what belongs in the app; volumetric/L7 defence belongs at the edge. Layer it like this:
@@ -107,7 +128,10 @@ The app does what belongs in the app; volumetric/L7 defence belongs at the edge.
 - **Prod hardening + health checks** — Core has HSTS, RFC-7807 ProblemDetails, and `/health`; Admin and Web expose `/health` too. *(D4.)*
 - **Email** — uses the Resend HTTP API (`ResendEmailSender`), not SMTP. Set `Resend__ApiKey` (and a verified `Resend__FromAddress`).
 
-## 🚧 Still to do before first prod deploy
+## 🔧 Required configuration for each production deploy
+
+Per-environment checklist — run through it for every new instance (self-host or a fresh
+hosted environment). The primary hosted instance is live; these remain the steps any deploy needs.
 
 - [ ] **Migrations** — the Core image can auto-apply them on boot (set `RUN_MIGRATIONS=true` on Core
   only) or apply the SQL script manually (see Migrations below). The `RehomeOwnershipToAccounts`

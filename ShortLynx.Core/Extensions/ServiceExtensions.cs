@@ -1,5 +1,6 @@
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using ShortLynx.Core.RateLimit;
 using ShortLynx.Services.Accounts;
@@ -49,8 +50,9 @@ public static class ServiceExtensions
         services.AddScoped<ICustomCodeService, CustomCodeService>();
         services.AddSingleton<IUrlValidationService, UrlValidationService>();
         // Open-source default: unlimited at every tier, so self-hosting is fully featured and free.
-        // A hosted deployment replaces this with a billing-backed policy (outside this repo).
-        services.AddSingleton<IEntitlements, UnlimitedEntitlements>();
+        // TryAdd (not Add) so a hosted composition root can register a billing-backed IEntitlements
+        // BEFORE calling this and have it win — the enforcement impl lives outside this repo.
+        services.TryAddSingleton<IEntitlements, UnlimitedEntitlements>();
 
         // Token encryption for social connections. The key ring is persisted in the DATABASE and the
         // application name is shared, so Core and Admin use one ring: tokens protected by either app are

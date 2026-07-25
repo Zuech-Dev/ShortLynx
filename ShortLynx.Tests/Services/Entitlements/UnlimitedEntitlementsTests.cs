@@ -23,4 +23,16 @@ public class UnlimitedEntitlementsTests
     [InlineData(PlanFeature.ApiAccess)]
     public async Task EveryFeature_IsEnabled(PlanFeature feature)
         => Assert.True(await _sut.IsFeatureEnabledAsync(Guid.CreateVersion7(), feature));
+
+    [Fact]
+    public async Task CanAddCustomDomain_IsAlwaysTrue()
+        => Assert.True(await _sut.CanAddCustomDomainAsync(Guid.CreateVersion7()));
+
+    [Fact]
+    public async Task GetRetentionDays_IsAlwaysNull()
+        => Assert.Null(await _sut.GetRetentionDaysAsync(Guid.CreateVersion7()));
+
+    [Fact]
+    public async Task CanAddMember_IsAlwaysTrue()
+        => Assert.True(await _sut.CanAddMemberAsync(Guid.CreateVersion7()));
 }

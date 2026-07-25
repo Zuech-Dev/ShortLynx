@@ -5,8 +5,8 @@
 > code. Now in place: `LinkService.CreateUserAttributedLinkAsync` (Mode-2 creation), the
 > `Recipient` label column on `UserLinkCodeEntity`, the dashboard provision-codes flow, the
 > `LinkMode.UserAttributed` spelling fix, `CustomDomainService` with the verification flow, and
-> the host-aware redirect in `ShortLynx.Web`. See [MASTER_PLAN.md](MASTER_PLAN.md) §7 for what
-> remains (launch, legal, billing).
+> the host-aware redirect in `ShortLynx.Web`. What remains (launch, legal, billing) is tracked in
+> `MASTER_PLAN.md` §7, an internal document in the private hosted repo — not public.
 
 ## Context
 The roadmap's security phase is complete. This phase delivers the two product features that are

@@ -301,4 +301,52 @@ public static class LinkVisitQueries
                v => (v.ShortCodeId != null && v.ShortCode!.Link.AccountId == accountId)
                  || (v.SocialPostCodeId != null && v.SocialPostCode!.Link.AccountId == accountId), ct)
          + await db.UserVisitEntities.LongCountAsync(v => v.UserLinkCode.Link.AccountId == accountId, ct);
+
+    /// <summary>
+    /// Total clicks across every link in an account (all code types), restricted to
+    /// <c>[from, to)</c> by <c>ClickedAt</c>. Same definition as <see cref="CountForAccountAsync"/> —
+    /// used by the hosted billing repo to compute a billing period's redirect count for overage
+    /// metering (HOSTED_BILLING_PLAN §9); self-host has no caller for this today.
+    /// </summary>
+    public static async Task<long> CountForAccountInRangeAsync(
+        ShortLynxDbContext db, Guid accountId, DateTimeOffset from, DateTimeOffset to, CancellationToken ct = default)
+    {
+        var shortCodeIds = await db.ShortCodeEntities.Where(sc => sc.Link.AccountId == accountId).Select(sc => sc.Id).ToListAsync(ct);
+        var socialPostCodeIds = await db.SocialPostCodeEntities.Where(sp => sp.Link.AccountId == accountId).Select(sp => sp.Id).ToListAsync(ct);
+        var userLinkCodeIds = await db.UserLinkCodeEntities.Where(u => u.Link.AccountId == accountId).Select(u => u.Id).ToListAsync(ct);
+
+        // SQLite (dev/tests) can't compare DateTimeOffset in SQL — same limitation
+        // VisitRetentionService.PruneOnceAsync already works around: resolve the id-filtered rows'
+        // ClickedAt values, then apply the range client-side. PostgreSQL takes the single-statement
+        // fast path (the range pushed straight into the WHERE clause).
+        if (db.Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            var shortCodeClicks = await db.VisitEntities
+                .Where(v => v.ShortCodeId != null && shortCodeIds.Contains(v.ShortCodeId.Value))
+                .Select(v => v.ClickedAt).ToListAsync(ct);
+            var socialPostClicks = await db.VisitEntities
+                .Where(v => v.SocialPostCodeId != null && socialPostCodeIds.Contains(v.SocialPostCodeId.Value))
+                .Select(v => v.ClickedAt).ToListAsync(ct);
+            var userClicks = await db.UserVisitEntities
+                .Where(v => userLinkCodeIds.Contains(v.UserLinkCodeId))
+                .Select(v => v.ClickedAt).ToListAsync(ct);
+
+            return shortCodeClicks.Count(c => c >= from && c < to)
+                 + socialPostClicks.Count(c => c >= from && c < to)
+                 + userClicks.Count(c => c >= from && c < to);
+        }
+
+        var shortCodeVisits = await db.VisitEntities.LongCountAsync(
+            v => v.ClickedAt >= from && v.ClickedAt < to &&
+                 v.ShortCodeId != null && shortCodeIds.Contains(v.ShortCodeId.Value), ct);
+
+        var socialPostVisits = await db.VisitEntities.LongCountAsync(
+            v => v.ClickedAt >= from && v.ClickedAt < to &&
+                 v.SocialPostCodeId != null && socialPostCodeIds.Contains(v.SocialPostCodeId.Value), ct);
+
+        var userVisits = await db.UserVisitEntities.LongCountAsync(
+            v => v.ClickedAt >= from && v.ClickedAt < to && userLinkCodeIds.Contains(v.UserLinkCodeId), ct);
+
+        return shortCodeVisits + socialPostVisits + userVisits;
+    }
 }

@@ -1,0 +1,57 @@
+name: Publish packages
+
+# Publishes the ShortLynx class libraries (Models / Data / Repository / Services) to this repo's
+# GitHub Packages NuGet feed, so the out-of-repo hosted build can consume them as pinned, versioned
+# dependencies. See docs/HOSTED_BILLING_PLAN.md (internal) for why these four are packaged.
+#
+# Trigger: push a tag shaped like `pkg-v1.2.3`. The package version is taken from the tag
+# (the `pkg-v` prefix is stripped). Apps, tests, and migration projects have IsPackable=false
+# (Directory.Build.props) and are never published.
+#
+# Consuming (in the private repo): add the source and restore with a GitHub PAT that has
+# `read:packages`:
+#   dotnet nuget add source https://nuget.pkg.github.com/Zuech-Dev/index.json \
+#     --name shortlynx --username <you> --password <PAT> --store-password-in-clear-text
+
+on:
+  push:
+    tags:
+      - 'pkg-v*'
+
+jobs:
+  publish:
+    name: Pack & push to GitHub Packages
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Derive version from tag
+        id: ver
+        run: echo "version=${GITHUB_REF_NAME#pkg-v}" >> "$GITHUB_OUTPUT"
+
+      - name: Restore
+        run: dotnet restore ShortLynx.slnx
+
+      - name: Pack
+        run: |
+          for proj in Models Data Repository Services; do
+            dotnet pack "ShortLynx.$proj/ShortLynx.$proj.csproj" \
+              -c Release --no-restore \
+              -p:Version="${{ steps.ver.outputs.version }}" \
+              -o "${{ github.workspace }}/artifacts"
+          done
+
+      - name: Push to GitHub Packages
+        run: |
+          dotnet nuget push "${{ github.workspace }}/artifacts/*.nupkg" \
+            --source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" \
+            --api-key "${{ secrets.GITHUB_TOKEN }}" \
+            --skip-duplicate

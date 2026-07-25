@@ -19,6 +19,9 @@ public class MeLinksEntitlementsTests : IClassFixture<ApiFactory>
         public Task<bool> CanCreateLinkAsync(Guid accountId, CancellationToken ct = default) => Task.FromResult(false);
         public Task<bool> CanCreateCustomCodeAsync(Guid accountId, CancellationToken ct = default) => Task.FromResult(false);
         public Task<bool> IsFeatureEnabledAsync(Guid accountId, PlanFeature feature, CancellationToken ct = default) => Task.FromResult(false);
+        public Task<bool> CanAddCustomDomainAsync(Guid accountId, CancellationToken ct = default) => Task.FromResult(false);
+        public Task<int?> GetRetentionDaysAsync(Guid accountId, CancellationToken ct = default) => Task.FromResult<int?>(0);
+        public Task<bool> CanAddMemberAsync(Guid accountId, CancellationToken ct = default) => Task.FromResult(false);
     }
 
     [Fact]

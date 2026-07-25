@@ -99,12 +99,12 @@ nunit-*.xml
 **/bin\\Debug/
 **/obj\\Debug/
 
-# Internal business docs — not for the public repo
-docs/MASTER_PLAN.md
-docs/ANALYTICS_METRICS_PLAN.md
-docs/TRACKING_DISCLOSURE_PLAN.md
-docs/ELV2_LICENSE_PLAN.md
-docs/*
+# NOTE: docs/ is no longer ignored. The internal design, strategy, and legal-draft docs that used to
+# live here gitignored now live in the private Zuech-Dev/ShortLynx.Hosted repo under its docs/, where
+# they can actually be version-controlled. Everything remaining in docs/ here is public and tracked.
+#
+# The old blanket `docs/*` rule is deliberately gone: it silently swallowed any NEW doc added to
+# docs/, which made public documentation invisible unless someone remembered to `git add -f`.
 
 # macOS junk
 .DS_Store

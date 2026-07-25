@@ -47,7 +47,7 @@ Nine projects. The dependency graph is strictly acyclic and deliberately shallow
 | `ShortLynx.Core` | REST API — MVC controllers, API-key + JWT auth | Data, Repository, Services, Data.PostgreSql |
 | `ShortLynx.Admin` | Blazor Server dashboard, magic-link auth | same |
 | `ShortLynx.Web` | Public site + the `/{code}` redirect hot path | same |
-| `ShortLynx.Tests` | All 627 tests, every layer | Admin, Core, Data, Repository, Services |
+| `ShortLynx.Tests` | All 780 tests, every layer | Admin, Core, Data, Repository, Services |
 | `ShortLynx.Models` | **Empty.** Zero files, zero references. | — |
 
 `ShortLynx.Models` is a vestigial scaffold project. It is still `IsPackable`, so an empty NuGet
@@ -233,7 +233,7 @@ Worked example: a new account-scoped resource exposed on the API and the dashboa
 
 ### Testing
 
-627 tests, xUnit, in `ShortLynx.Tests`. Mirror the structure of what you're testing
+780 tests, xUnit, in `ShortLynx.Tests`. Mirror the structure of what you're testing
 (`Services/`, `Api/`, `Repository/`, `Admin/`, `Data/`).
 
 - **Unit** — `TestDatabase.CreateAsync()` gives a shared in-memory SQLite database; `CreateContext()`
@@ -251,10 +251,14 @@ actually been bitten by, both worth guarding against:
 
 - A quota test that seeds the same counter field the implementation reads will pass whether or not the
   quota does anything. Seed the *real* resource.
-- An integration test that synthesises a request header cannot validate assumptions about the *real*
-  edge. `ForwardedHeadersTests` injects a single-hop `X-Forwarded-For` and passes — while production
-  sends two hops (see [Known traps](#known-traps)). If your test constructs the input that the
-  environment is supposed to provide, it proves your parsing, not your configuration.
+- An integration test that synthesises a request header proves your *parsing*, not your
+  *configuration*. `ForwardedHeadersTests`'s original two cases injected a single-hop
+  `X-Forwarded-For` and passed for a year while production — which sends two hops — was broken. The
+  fix was not just changing `ForwardLimit`; it was making the test model the real shape, including
+  that the edge's own entry **rotates** per connection. A constant second entry would have passed
+  under both the correct and the broken setting, proving nothing. When a test supplies the input the
+  environment is supposed to supply, ask what it would take for the test to pass while production
+  fails.
 
 When fixing a bug, verify the new test **fails against the unfixed code**. Otherwise you've written a
 test for the fix, not for the bug.
@@ -263,12 +267,16 @@ test for the fix, not for the bug.
 
 ## Known traps
 
-- **`ForwardLimit = 1` is wrong for the current deployment.** All three apps trust exactly one
-  forwarded hop, but the production edge sends two (`<client>, <edge>`), so `RemoteIpAddress` resolves
-  to the rotating internal edge address rather than the client. Consequences: per-IP rate limiting
-  never partitions real clients together, and in `Web` the same value feeds `RawIp` → `HashedIp` *and*
-  GeoIP country resolution, so visit analytics attribute clicks to the infrastructure rather than the
-  visitor. Confirmed against the live deployment. The existing test cannot catch it (above).
+- **`ForwardLimit` must match the edge's real hop count.** *Fixed 2026-07-25 — recorded here because
+  the failure mode is silent and easy to reintroduce.* All three apps trusted exactly one forwarded
+  hop, but the production edge sends two (`<client>, <edge>`), so `RemoteIpAddress` resolved to the
+  rotating internal edge address rather than the client. Per-IP rate limiting therefore never
+  partitioned real clients together (nothing was ever throttled), and in `Web` the same value feeds
+  `RawIp` → `HashedIp` *and* GeoIP country resolution, so visit analytics attributed clicks to the
+  infrastructure rather than the visitor. Now `2`, overridable via `ForwardedHeaders:ForwardLimit`, and
+  covered by tests that model a *rotating* edge hop. If a proxy is ever added in front (e.g.
+  Cloudflare on a custom domain), this must increase — and note the analytics consequence, not just
+  the rate-limiting one.
 - **A literal `bin\Debug` directory** (one folder whose *name* contains a backslash) is occasionally
   created by MSBuild's BuildHost on macOS. It is gitignored via `**/bin\\Debug/`, but if it ever gets
   committed it breaks clean CI and Docker builds. Check `git status` before committing.

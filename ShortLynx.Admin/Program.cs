@@ -21,15 +21,32 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Honour X-Forwarded-* from Railway's edge proxy so the client IP (rate limiting, analytics IP hashing)
 // and original scheme (HTTPS redirect) are correct. Railway's edge IP is dynamic, so we can't pin a
-// KnownProxy; instead we trust one upstream hop unconditionally — sound because the container is only
-// reachable through that edge (no direct ingress), and Railway's Envoy writes the rightmost
-// X-Forwarded-For entry. WITHOUT a trusted network the middleware silently drops X-Forwarded-*, leaving
-// RemoteIpAddress as an internal Railway address that varies per connection — which is why per-IP rate
-// limiting didn't partition real clients together in production.
-builder.Services.Configure<ForwardedHeadersOptions>(options =>
+// KnownProxy; instead the upstream hops are trusted unconditionally — sound because the container is
+// only reachable through that edge (no direct ingress). WITHOUT a trusted network the middleware
+// silently drops X-Forwarded-* altogether.
+//
+// ForwardLimit must equal the number of hops the edge actually appends. Measured against the live
+// deployment 2026-07-25, the header arrives with TWO entries:
+//     X-Forwarded-For: <real client>, <Railway edge>
+// The middleware consumes entries right-to-left, so ForwardLimit=1 consumes only Railway's own entry
+// and leaves RemoteIpAddress set to *that* — an internal address that rotates between connections.
+// Consequences, both confirmed in production: every per-IP rate limiter silently stopped working (no
+// burst ever shared a partition, so nothing was ever throttled), and in ShortLynx.Web the same value
+// feeds the visit record's RawIp -> HashedIp and GeoIP country lookup, so click analytics were
+// attributed to Railway's infrastructure instead of the visitor. ForwardLimit=2 steps past the edge
+// hop onto the real client.
+//
+// Overridable by configuration so a change in edge topology — or an added layer, e.g. Cloudflare in
+// front of a custom domain — can be corrected without shipping code. It is deliberately an exact hop
+// count rather than an "unlimited" mode: unlimited would walk to the leftmost entry, which a client
+// can forge, making the resolved IP attacker-controlled.
+// Bound through IConfiguration lazily (not read eagerly off builder.Configuration) so the value is
+// resolved after the host is fully composed — that keeps the knob genuinely overridable, including by
+// test hosts that add their configuration during Build rather than before it.
+builder.Services.AddOptions<ForwardedHeadersOptions>().Configure<IConfiguration>((options, cfg) =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-    options.ForwardLimit = 1; // trust exactly one hop (the edge); the rightmost XFF entry is Railway's
+    options.ForwardLimit = cfg.GetValue<int?>("ForwardedHeaders:ForwardLimit") ?? 2;
     options.KnownIPNetworks.Clear();
     options.KnownProxies.Clear();
     options.KnownIPNetworks.Add(new System.Net.IPNetwork(IPAddress.IPv6Any, 0)); // ::/0 — Railway's internal mesh is IPv6

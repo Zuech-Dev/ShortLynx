@@ -126,9 +126,13 @@ public class LinksController(ILinkService linkService, ShortLynxDbContext db) : 
 
         if (link is null) return NotFound();
 
-        var codes = await linkService.CreateUserLinkCodesAsync(id, request.UserIds, ct);
+        var recipients = ResolveRecipients(request);
+        if (recipients is null)
+            return BadRequest(new { error = "Provide either userIds or recipients." });
 
-        var response = codes.Select(c => new UserCodeResponse(c.UserId, c.Code)).ToList();
+        var codes = await linkService.CreateUserLinkCodesAsync(id, recipients, request.IsOneTimeUse, ct);
+
+        var response = codes.Select(c => new UserCodeResponse(c.UserId, c.Code, c.Recipient, c.IsOneTimeUse)).ToList();
         return Ok(response);
     }
 
@@ -213,7 +217,7 @@ public class LinksController(ILinkService linkService, ShortLynxDbContext db) : 
                 .GroupBy(v => v.UserLinkCodeId)
                 .ToDictionary(g => g.Key, g => g.LongCount());
             codeStats = codes
-                .Select(c => new CodeClickStats(c.Code, c.UserId, countByCode.GetValueOrDefault(c.Id, 0)))
+                .Select(c => new CodeClickStats(c.Code, c.UserId, countByCode.GetValueOrDefault(c.Id, 0), c.Recipient))
                 .ToList();
             rows = visits.Select(v => new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt)).ToList();
         }
@@ -229,4 +233,14 @@ public class LinksController(ILinkService linkService, ShortLynxDbContext db) : 
     private static LinkResponse ToLinkResponse(LinkEntity link, string shortCode, bool isCustom) =>
         new(link.Id, link.OriginalUrl, link.Mode.ToString(), shortCode, link.CreatedAt, link.ExpiresAt,
             link.CampaignId, isCustom);
+
+    // Null means neither field was usably supplied — the caller returns 400.
+    private static IReadOnlyCollection<CodeRecipient>? ResolveRecipients(CreateUserCodesRequest request)
+    {
+        if (request.Recipients is { Length: > 0 })
+            return request.Recipients.Select(r => new CodeRecipient(r.UserId, r.Recipient)).ToList();
+        if (request.UserIds is { Length: > 0 })
+            return request.UserIds.Select(id => new CodeRecipient(id)).ToList();
+        return null;
+    }
 }

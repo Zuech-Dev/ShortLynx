@@ -8,7 +8,7 @@ namespace ShortLynx.Services.Analytics;
 public readonly record struct LinkVisitRow(Guid LinkId, VisitRow Row);
 
 /// <summary>Clicks on one code of a link (the shared code, or one recipient's code).</summary>
-public readonly record struct CodeClickCount(Guid CodeId, string Code, Guid? UserId, long Clicks);
+public readonly record struct CodeClickCount(Guid CodeId, string Code, Guid? UserId, long Clicks, string? Recipient = null);
 
 /// <summary>
 /// How a link's clicks split by what we can actually attribute them to. Post clicks are *exact* (the
@@ -195,7 +195,7 @@ public static class LinkVisitQueries
 
         var codes = await db.UserLinkCodeEntities
             .Where(c => c.LinkId == link.Id)
-            .Select(c => new { c.Id, c.Code, c.UserId })
+            .Select(c => new { c.Id, c.Code, c.UserId, c.Recipient })
             .ToListAsync(ct);
         if (codes.Count == 0) return [];
 
@@ -208,7 +208,7 @@ public static class LinkVisitQueries
             .ToDictionary(x => x.CodeId, x => x.Clicks);
 
         return codes
-            .Select(c => new CodeClickCount(c.Id, c.Code, c.UserId, countByCode.GetValueOrDefault(c.Id, 0)))
+            .Select(c => new CodeClickCount(c.Id, c.Code, c.UserId, countByCode.GetValueOrDefault(c.Id, 0), c.Recipient))
             .ToList();
     }
 

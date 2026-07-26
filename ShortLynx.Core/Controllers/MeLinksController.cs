@@ -102,7 +102,8 @@ public class MeLinksController(
         return Ok(ToLinkResponse(link, sc?.Code ?? "", sc?.IsCustom ?? false));
     }
 
-    // POST /me/links/{id}/codes — provision user-attributed codes.
+    // POST /me/links/{id}/codes — provision user-attributed codes. Either userIds (bare, no labels,
+    // never one-time — back-compat) or recipients (labelled, honours isOneTimeUse).
     [HttpPost("{id:guid}/codes")]
     [RequireAccountAction(AccountAction.ManageResources)]
     public async Task<IActionResult> CreateCodes(Guid id, [FromBody] CreateUserCodesRequest request, CancellationToken ct)
@@ -110,8 +111,12 @@ public class MeLinksController(
         if (!await db.LinkEntities.AnyAsync(l => l.Id == id && l.AccountId == AccountId, ct))
             return NotFound();
 
-        var codes = await linkService.CreateUserLinkCodesAsync(id, request.UserIds, ct);
-        return Ok(codes.Select(c => new UserCodeResponse(c.UserId, c.Code)));
+        var recipients = ResolveRecipients(request);
+        if (recipients is null)
+            return BadRequest(new { error = "Provide either userIds or recipients." });
+
+        var codes = await linkService.CreateUserLinkCodesAsync(id, recipients, request.IsOneTimeUse, ct);
+        return Ok(codes.Select(c => new UserCodeResponse(c.UserId, c.Code, c.Recipient, c.IsOneTimeUse)));
     }
 
     // PUT /me/links/{id}/domain — pin/unpin to a verified account domain.
@@ -147,7 +152,7 @@ public class MeLinksController(
 
         var rows = await LinkVisitQueries.LoadLinkRowsAsync(db, link, ct);
         var codeStats = (await LinkVisitQueries.LoadCodeCountsAsync(db, link, ct))
-            .Select(c => new CodeClickStats(c.Code, c.UserId, c.Clicks))
+            .Select(c => new CodeClickStats(c.Code, c.UserId, c.Clicks, c.Recipient))
             .ToList();
 
         var b = ClickAggregator.Summarize(rows);
@@ -329,4 +334,14 @@ public class MeLinksController(
     private static LinkResponse ToLinkResponse(LinkEntity link, string shortCode, bool isCustom)
         => new(link.Id, link.OriginalUrl, link.Mode.ToString(), shortCode, link.CreatedAt, link.ExpiresAt,
                link.CampaignId, isCustom);
+
+    // Null means neither field was usably supplied — the caller returns 400.
+    private static IReadOnlyCollection<CodeRecipient>? ResolveRecipients(CreateUserCodesRequest request)
+    {
+        if (request.Recipients is { Length: > 0 })
+            return request.Recipients.Select(r => new CodeRecipient(r.UserId, r.Recipient)).ToList();
+        if (request.UserIds is { Length: > 0 })
+            return request.UserIds.Select(id => new CodeRecipient(id)).ToList();
+        return null;
+    }
 }

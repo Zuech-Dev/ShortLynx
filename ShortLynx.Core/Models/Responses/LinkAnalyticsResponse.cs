@@ -5,7 +5,11 @@ namespace ShortLynx.Core.Models.Responses;
 public sealed record CodeClickStats(
     string Code,
     Guid? UserId,
-    long ClickCount);
+    long ClickCount,
+    // Null for an anonymous link's shared code (no recipient concept) and for codes minted via the
+    // legacy bare-userIds request shape. Appended last for the same additive reason as
+    // LinkResponse.CampaignId.
+    string? Recipient = null);
 
 public sealed record LinkAnalyticsResponse(
     Guid LinkId,

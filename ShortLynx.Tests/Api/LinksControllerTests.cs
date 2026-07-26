@@ -185,6 +185,35 @@ public class LinksControllerTests : IClassFixture<ApiFactory>
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
+    [Fact]
+    public async Task CreateUserCodes_WithRecipients_StampsLabelAndOneTimeFlag()
+    {
+        var (client, _) = await CreateAuthenticatedClientAsync();
+        var link = await (await client.PostAsJsonAsync("/links", new CreateLinkRequest("https://example.com")))
+            .Content.ReadFromJsonAsync<LinkResponse>();
+
+        var recipients = new[] { new CodeRecipientRequest(Guid.CreateVersion7(), "alice@example.com") };
+        var response = await client.PostAsJsonAsync($"/links/{link!.Id}/codes",
+            new CreateUserCodesRequest(Recipients: recipients, IsOneTimeUse: true));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var code = (await response.Content.ReadFromJsonAsync<List<UserCodeResponse>>())!.Single();
+        Assert.Equal("alice@example.com", code.Recipient);
+        Assert.True(code.IsOneTimeUse);
+    }
+
+    [Fact]
+    public async Task CreateUserCodes_NeitherUserIdsNorRecipients_Returns400()
+    {
+        var (client, _) = await CreateAuthenticatedClientAsync();
+        var link = await (await client.PostAsJsonAsync("/links", new CreateLinkRequest("https://example.com")))
+            .Content.ReadFromJsonAsync<LinkResponse>();
+
+        var response = await client.PostAsJsonAsync($"/links/{link!.Id}/codes", new CreateUserCodesRequest());
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
     // ── GET /links/{id}/analytics ─────────────────────────────────────────────
 
     [Fact]

@@ -21,4 +21,8 @@ public sealed record LinkResponse(
     // route. A client building a copyable/QR-encoded short URL from ShortCode needs this to route it
     // correctly; without it, a custom-coded link's displayed URL 404s. Always false for
     // user-attributed links, which have no shared ShortCode to begin with.
-    bool IsCustom = false);
+    bool IsCustom = false,
+    // The verified custom domain this link is pinned to, or null when it resolves on any host. Same
+    // "PUT sets it, nothing could read it back" gap CampaignId above was added to fix — a domain-pin
+    // control has no way to show which domain (if any) is already selected without this.
+    Guid? CustomDomainId = null);

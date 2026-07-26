@@ -232,7 +232,7 @@ public class LinksController(ILinkService linkService, ShortLynxDbContext db) : 
 
     private static LinkResponse ToLinkResponse(LinkEntity link, string shortCode, bool isCustom) =>
         new(link.Id, link.OriginalUrl, link.Mode.ToString(), shortCode, link.CreatedAt, link.ExpiresAt,
-            link.CampaignId, isCustom);
+            link.CampaignId, isCustom, link.CustomDomainId);
 
     // Null means neither field was usably supplied — the caller returns 400.
     private static IReadOnlyCollection<CodeRecipient>? ResolveRecipients(CreateUserCodesRequest request)

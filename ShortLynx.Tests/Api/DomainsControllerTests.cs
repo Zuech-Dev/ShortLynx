@@ -169,6 +169,30 @@ public class DomainsControllerTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task SetLinkDomain_ThenGetLink_ReflectsThePin()
+    {
+        // PUT sets the pin but returns no body — a client offering a domain picker on the link needs
+        // GET to read it back, same gap CampaignId was added to LinkResponse to close.
+        var (client, _) = await CreateUserKeyClientAsync();
+
+        var linkResp = await client.PostAsJsonAsync("/links", new CreateLinkRequest("https://example.com"));
+        var link = await linkResp.Content.ReadFromJsonAsync<LinkResponse>();
+        Assert.NotNull(link);
+
+        var added = await AddDomainAsync(client, UniqueDomain());
+        _factory.Dns.Publish(added.VerificationHost, added.VerificationTxtValue);
+        await client.PostAsync($"/domains/{added.Id}/verify", null);
+        await client.PutAsJsonAsync($"/links/{link.Id}/domain", new SetLinkDomainRequest(added.Id));
+
+        var pinned = await (await client.GetAsync($"/links/{link.Id}")).Content.ReadFromJsonAsync<LinkResponse>();
+        Assert.Equal(added.Id, pinned!.CustomDomainId);
+
+        await client.PutAsJsonAsync($"/links/{link.Id}/domain", new SetLinkDomainRequest(null));
+        var unpinned = await (await client.GetAsync($"/links/{link.Id}")).Content.ReadFromJsonAsync<LinkResponse>();
+        Assert.Null(unpinned!.CustomDomainId);
+    }
+
+    [Fact]
     public async Task SetLinkDomain_UnverifiedDomain_Returns400()
     {
         var (client, _) = await CreateUserKeyClientAsync();

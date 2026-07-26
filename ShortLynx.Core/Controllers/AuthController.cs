@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
+using ShortLynx.Core.Auth;
 using ShortLynx.Core.Models.Requests;
 using ShortLynx.Core.Models.Responses;
 using ShortLynx.Core.RateLimit;
@@ -129,35 +130,7 @@ public class AuthController(
     private static int ExpiresInSeconds(DateTimeOffset at)
         => Math.Max(0, (int)(at - DateTimeOffset.UtcNow).TotalSeconds);
 
-    private void SetSessionCookies(SessionTokens tokens)
-    {
-        Response.Cookies.Append(Jwt.AccessCookieName, tokens.AccessToken, CookieOptions(tokens.AccessExpiresAt));
-        Response.Cookies.Append(Jwt.RefreshCookieName, tokens.RefreshToken, CookieOptions(tokens.RefreshExpiresAt));
+    private void SetSessionCookies(SessionTokens tokens) => SessionCookieWriter.SetSessionCookies(Response, tokens, Jwt);
 
-        // Non-httpOnly CSRF token (double-submit): the SPA reads it and echoes it in the X-CSRF-Token header.
-        var csrf = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(16));
-        var csrfOptions = CookieOptions(tokens.RefreshExpiresAt);
-        csrfOptions.HttpOnly = false;
-        Response.Cookies.Append(Jwt.CsrfCookieName, csrf, csrfOptions);
-    }
-
-    private void ClearSessionCookies()
-    {
-        var expired = CookieOptions(DateTimeOffset.UtcNow.AddDays(-1));
-        Response.Cookies.Append(Jwt.AccessCookieName, "", expired);
-        Response.Cookies.Append(Jwt.RefreshCookieName, "", expired);
-        var csrfExpired = CookieOptions(DateTimeOffset.UtcNow.AddDays(-1));
-        csrfExpired.HttpOnly = false;
-        Response.Cookies.Append(Jwt.CsrfCookieName, "", csrfExpired);
-    }
-
-    private CookieOptions CookieOptions(DateTimeOffset expires) => new()
-    {
-        HttpOnly = true,
-        Secure = Jwt.CookieSecure,
-        SameSite = Enum.TryParse<SameSiteMode>(Jwt.CookieSameSite, ignoreCase: true, out var s) ? s : SameSiteMode.Lax,
-        Domain = string.IsNullOrWhiteSpace(Jwt.CookieDomain) ? null : Jwt.CookieDomain,
-        Path = "/",
-        Expires = expires,
-    };
+    private void ClearSessionCookies() => SessionCookieWriter.ClearSessionCookies(Response, Jwt);
 }

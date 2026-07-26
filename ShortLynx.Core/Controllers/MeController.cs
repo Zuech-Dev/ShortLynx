@@ -1,14 +1,20 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using ShortLynx.Core.Auth;
 using ShortLynx.Core.Models.Requests;
 using ShortLynx.Core.Models.Responses;
+using ShortLynx.Data.Context;
 using ShortLynx.Data.Enums;
 using ShortLynx.Services.Accounts;
+using ShortLynx.Services.Auth;
 
 namespace ShortLynx.Core.Controllers;
 
 [Route("me")]
-public class MeController(IAccountService accounts) : SessionControllerBase
+public class MeController(
+    IAccountService accounts, ShortLynxDbContext db, IUserSessionService sessions,
+    IOptions<JwtOptions> jwtOptions) : SessionControllerBase
 {
     // GET /me — the current session's user + active account.
     [HttpGet]
@@ -21,6 +27,27 @@ public class MeController(IAccountService accounts) : SessionControllerBase
     {
         var list = await accounts.ListAccountsForUserAsync(CurrentUserId, ct);
         return Ok(list.Select(a => new AccountResponse(a.AccountId, a.Name, a.Role.ToString())));
+    }
+
+    // POST /me/switch-account — re-issues the session scoped to a different account the user belongs
+    // to, so the dashboard can act as it without a fresh sign-in. Membership is re-checked here, not
+    // trusted from the list the client displayed, so a stale/tampered client can't switch into an
+    // account it was removed from between loading the list and clicking it.
+    [HttpPost("switch-account")]
+    public async Task<IActionResult> SwitchAccount([FromBody] SwitchAccountRequest request, CancellationToken ct)
+    {
+        var target = (await accounts.ListAccountsForUserAsync(CurrentUserId, ct))
+            .FirstOrDefault(a => a.AccountId == request.AccountId);
+        if (target is null)
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = "You're not a member of that account." });
+
+        var user = await db.UserAccountEntities.FirstOrDefaultAsync(u => u.Id == CurrentUserId, ct);
+        if (user is null) return Unauthorized();
+
+        var tokens = await sessions.IssueAsync(user, target.AccountId, target.Role, ct);
+        SessionCookieWriter.SetSessionCookies(Response, tokens, jwtOptions.Value);
+
+        return Ok(new UserSummary(user.Id, user.Email, user.IsAdmin, target.AccountId, target.Role.ToString()));
     }
 
     // GET /me/members — members of the current account.

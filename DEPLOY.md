@@ -1,7 +1,10 @@
 # ShortLynx — Deploy Checklist
 
 **Stack:** .NET 10 · PostgreSQL · three deployable apps + Resend (email) · DNS (custom domains)
-**Target:** Railway (recommended — see platform notes) · 324 tests green at time of writing
+**Target:** Railway (recommended — see platform notes) · test suite green in CI
+
+<!-- A hard test count used to live here and drifted out of step with the README's. A number nobody
+     re-checks is worse than no number: it reads as current and isn't. CI is the live answer. -->
 
 ---
 

@@ -46,6 +46,8 @@ And it does it **without selling out the clicker.** Privacy isn't a bolt-on here
   (a unique code per recipient, per-contact attribution)
 - **Privacy-preserving analytics** — clicks, unique clickers, sources, devices, timeline,
   hour-of-day, UTM capture, country + timezone (opt-in GeoIP)
+- **Live click feed** — `GET /me/stream` (Server-Sent Events) pushes clicks to a dashboard as they
+  land, with `GET /me/clicks` for the matching historical window
 - **Custom domains** — bring your own, DNS-verified, with per-link domain pinning
 - **Campaigns** — group links for roll-up reporting with shared UTM templates
 - **Social publishing** — post a link to Bluesky, Mastodon, Threads, or Reddit, with
@@ -64,14 +66,15 @@ Three deployable apps over one PostgreSQL database:
 | `ShortLynx.Core` | REST API — links, analytics, auth, API keys, domains. **Always required.** |
 | `ShortLynx.Web` | Public redirect site (`/{code}` → 302) — the latency-sensitive hot path. Default front end, replaceable. |
 | `ShortLynx.Admin` | Blazor Server dashboard (magic-link auth). Default front end, replaceable. |
-| `ShortLynx.Models` · `.Repository` · `.Services` · `.Data*` | Shared domain, data access, business logic |
+| `ShortLynx.Data` · `.Data.PostgreSql` · `.Data.Sqlite` | EF Core entities, `ShortLynxDbContext`, per-provider migrations |
+| `ShortLynx.Repository` · `.Services` | Data access and business logic |
 
 The redirect path is built for volume: rate-limit → in-memory cache → 302 → async visit
 event via `System.Threading.Channels` → background service batches writes. Raw signals are
 reduced to low-entropy dimensions at write time and the originals discarded.
 
 Built on **.NET 10** and **EF Core** (PostgreSQL in production, per-provider migration
-projects). 710 passing tests.
+projects), with the suite run on every PR by CI.
 
 ## Quickstart (local development)
 

@@ -9,6 +9,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 dotnet build ShortLynx.slnx
 ```
 
+**Test:**
+```bash
+dotnet test ShortLynx.slnx
+```
+
 **Run individual apps:**
 ```bash
 dotnet run --project ShortLynx.Core/ShortLynx.Core.csproj       # REST API  → http://localhost:5129 / https://localhost:7271
@@ -16,7 +21,16 @@ dotnet run --project ShortLynx.Admin/ShortLynx.Admin.csproj     # Admin UI  → 
 dotnet run --project ShortLynx.Web/ShortLynx.Web.csproj         # Public UI → http://localhost:5071 / https://localhost:7158
 ```
 
-No test projects exist yet.
+**Run the whole stack in Docker:**
+```bash
+cp .env.example .env    # fill in the secrets it lists
+docker compose up -d
+```
+
+`ShortLynx.Web` and `ShortLynx.Admin` sit behind compose profiles, so a deployer bringing their own
+front end can opt out of either (`COMPOSE_PROFILES=web` keeps redirects, drops the dashboard). See
+DEPLOY.md — dropping `web` stops short links resolving, since it is the only app that serves
+`/{code}`.
 
 ## Frontend build (Tailwind CSS)
 
@@ -52,12 +66,14 @@ ShortLynx is a self-hosted .NET 10 short-link service with two link modes:
 
 | Project | Role |
 |---|---|
-| `ShortLynx.Models` | EF Core entities and shared data structures |
+| `ShortLynx.Data` | EF Core entities, enums, and `ShortLynxDbContext` |
+| `ShortLynx.Models` | **Empty** — holds only a `.csproj`. Entities live in `ShortLynx.Data`; don't add them here without moving the rest. |
 | `ShortLynx.Repository` | Data access layer, `IDbOperations` abstraction for bulk ops |
 | `ShortLynx.Services` | Business logic; `IShortCodeGenerator`, `IVisitEventSink` interfaces |
-| `ShortLynx.Core` | ASP.NET Core REST API (link creation, redirect, analytics) |
-| `ShortLynx.Admin` | Blazor Server admin dashboard |
-| `ShortLynx.Web` | Razor Pages public-facing site (handles redirects) |
+| `ShortLynx.Core` | ASP.NET Core REST API (links, auth, analytics, live click feed) — **always required** |
+| `ShortLynx.Admin` | Blazor Server admin dashboard — the default front end, replaceable |
+| `ShortLynx.Web` | Razor Pages public site — serves `/{code}` redirects. Default front end, replaceable, but nothing else serves redirects |
+| `ShortLynx.Tests` | The whole test suite — API integration (`WebApplicationFactory`), services, data |
 
 Database migrations live in separate per-provider projects (PostgreSQL default, SQLite for dev). Provider wiring is isolated to the composition root via an `AddShortLynxDatabase()` extension method.
 
@@ -77,6 +93,25 @@ Rate limit by IP → in-memory cache lookup → 302 redirect response → async 
 - All primary keys use `Guid.CreateVersion7()` (sequential GUIDs, .NET 9+)
 - Short codes are decoupled from entity IDs — never derive the short code from the PK
 
+### Live click feed
+
+`GET /me/stream` is an account-scoped SSE feed of clicks as they land; `GET /me/clicks` returns the
+same row shape for a historical window, so a client merges the two into one list.
+
+It **tails the visits table** rather than subscribing to `IVisitEventSink`. That looks like the
+obvious wiring and cannot work: redirects are served by `ShortLynx.Web`, a different process from the
+API a dashboard talks to, so an in-process fan-out reaches nothing in production while working
+perfectly in a single-process dev run.
+
+The cursor is the subtle part. `ClickedAt` is stamped at redirect time but the row commits up to a
+batch later, so rows do **not** become visible in `ClickedAt` order — a click can appear behind a
+high-water mark already advanced past it. Each poll re-queries a window behind the cursor and
+de-duplicates by id. Polling strictly forward loses those clicks silently and permanently.
+
 ### Current state
 
-Most projects contain only placeholder `Class1.cs` stubs. DESIGN.md is the authoritative spec for entities, API surface, and decisions still pending (Redis dependency, data retention policy, one-time-use vs multi-use codes, custom domains).
+Feature-complete against DESIGN.md's core spec, with a substantial test suite in `ShortLynx.Tests`
+(API integration tests via `WebApplicationFactory`, plus service and data tests). DESIGN.md remains
+the authoritative spec for entities, the API surface, and the decisions still pending (Redis
+dependency, data retention policy, one-time-use vs multi-use codes, custom domains).
+

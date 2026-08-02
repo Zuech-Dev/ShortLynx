@@ -75,6 +75,10 @@ services:
       Links__PublicBaseUrl: ${SHORT_BASE_URL:-http://localhost:5071}
       # Needed only when a front end you supply is on a different origin than this API. Harmless empty.
       Cors__AllowedOrigins__0: ${FRONTEND_ORIGIN:-}
+      # Both entirely optional — blank means console logging only, no outbound telemetry.
+      Sentry__Dsn: ${SENTRY_DSN:-}
+      Axiom__ApiToken: ${AXIOM_API_TOKEN:-}
+      Axiom__Dataset: ${AXIOM_DATASET:-}
     ports:
       - "${CORE_PORT:-5129}:8080"
 
@@ -96,6 +100,10 @@ services:
       ASPNETCORE_HTTP_PORTS: 8080
       # Same pepper as `core` — see the note there.
       VisitSink__IpHashPepper: ${IP_HASH_PEPPER:?set IP_HASH_PEPPER in .env}
+      # Both entirely optional — blank means console logging only, no outbound telemetry.
+      Sentry__Dsn: ${SENTRY_DSN:-}
+      Axiom__ApiToken: ${AXIOM_API_TOKEN:-}
+      Axiom__Dataset: ${AXIOM_DATASET:-}
     ports:
       - "${WEB_PORT:-5071}:8080"
 
@@ -122,6 +130,10 @@ services:
       Admin__SuperAdminEmails__0: ${ADMIN_EMAIL}
       ShortLynx__PublicBaseUrl: ${SHORT_BASE_URL:-http://localhost:5071}
       MagicLink__ConfirmationUrlBase: ${MAGIC_LINK_CONFIRM_URL:-http://localhost:5201/auth/confirm}
+      # Both entirely optional — blank means console logging only, no outbound telemetry.
+      Sentry__Dsn: ${SENTRY_DSN:-}
+      Axiom__ApiToken: ${AXIOM_API_TOKEN:-}
+      Axiom__Dataset: ${AXIOM_DATASET:-}
     ports:
       - "${ADMIN_PORT:-5201}:8080"
 

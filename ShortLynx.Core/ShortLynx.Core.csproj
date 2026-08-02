@@ -33,6 +33,9 @@
         <PackageReference Include="Serilog.Settings.Configuration" Version="10.0.0" />
         <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
         <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
+        <!-- UseSentry() needs the ASP.NET Core shared framework, which only a Web SDK project like this
+             one carries — see ShortLynx.Services/Observability/ObservabilityExtensions.cs's doc comment. -->
+        <PackageReference Include="Sentry.AspNetCore" Version="6.8.0" />
     </ItemGroup>
 
     <ItemGroup>

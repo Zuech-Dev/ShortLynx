@@ -1,11 +1,31 @@
 using System.Net;
 using Microsoft.AspNetCore.HttpOverrides;
 using ShortLynx.Repository;
+using ShortLynx.Services.Observability;
 using ShortLynx.Services.Visits;
 using ShortLynx.Services.Redirect;
 using ShortLynx.Web.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.AddShortLynxLogging();
+
+// Error tracking, opt-in — unset means exactly today's behavior, no outbound telemetry at all. See
+// ObservabilityExtensions.cs's doc comment for why UseSentry() is called here directly rather than
+// from that shared method (it needs the ASP.NET Core shared framework, which only a Web SDK app has).
+var sentryDsn = builder.Configuration["Sentry:Dsn"];
+if (!string.IsNullOrWhiteSpace(sentryDsn))
+{
+    builder.WebHost.UseSentry(o =>
+    {
+        o.Dsn = sentryDsn;
+        o.Environment = builder.Environment.EnvironmentName;
+        // Explicit, even though it's the SDK default: no request bodies, full headers, or user claims
+        // leave the process. Belt-and-suspenders on top of ScrubSensitiveData, matching how VisitSink
+        // treats IP hashing (pepper AND hourly rotation, not just one).
+        o.SendDefaultPii = false;
+        o.SetBeforeSend((@event, _) => ObservabilityExtensions.ScrubSensitiveData(@event));
+    });
+}
 
 // Honour X-Forwarded-* from Railway's edge proxy so the client IP (rate limiting, analytics IP hashing)
 // and original scheme (HTTPS redirect) are correct. Railway's edge IP is dynamic, so we can't pin a

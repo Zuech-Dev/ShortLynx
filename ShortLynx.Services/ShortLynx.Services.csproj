@@ -19,6 +19,20 @@
         <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.7" />
         <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.18.0" />
         <PackageReference Include="QRCoder" Version="1.8.0" />
+        <!-- Observability (ShortLynx.Services.Observability): shared here, not in ShortLynx.Core, so
+             Admin/Web (which don't reference Core) can also call AddShortLynxLogging(). Sentry.AspNetCore
+             itself is NOT here — it's a plain Microsoft.NET.Sdk class library, and Sentry.AspNetCore's
+             UseSentry() extension needs the full ASP.NET Core shared-framework type identity (Web SDK
+             only) to resolve; a FrameworkReference override doesn't reproduce it (confirmed by isolated
+             test). So each Web SDK app references Sentry.AspNetCore directly and calls UseSentry() from
+             its own Program.cs; only the base Sentry package (for SentryEvent, in ScrubSensitiveData) and
+             the Serilog/Axiom logging pipeline — neither ASP.NET-Core-specific — live here. -->
+        <PackageReference Include="Sentry" Version="6.8.0" />
+        <PackageReference Include="Serilog" Version="4.3.1" />
+        <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
+        <PackageReference Include="Serilog.Enrichers.Environment" Version="3.0.1" />
+        <PackageReference Include="Serilog.Formatting.Elasticsearch" Version="10.0.0" />
+        <PackageReference Include="Serilog.Sinks.Http" Version="9.2.1" />
     </ItemGroup>
 
     <ItemGroup>

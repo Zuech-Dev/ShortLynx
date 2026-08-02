@@ -17,6 +17,9 @@
           <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
         <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.1" />
+        <!-- UseSentry() needs the ASP.NET Core shared framework, which only a Web SDK project like this
+             one carries — see ShortLynx.Services/Observability/ObservabilityExtensions.cs's doc comment. -->
+        <PackageReference Include="Sentry.AspNetCore" Version="6.8.0" />
     </ItemGroup>
 
     <ItemGroup>

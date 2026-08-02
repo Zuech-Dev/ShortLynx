@@ -90,14 +90,17 @@ public static class ServiceExtensions
         services.AddHttpClient<ISocialConnector, MastodonConnector>();
         // OAuth-only platforms (gated: Meta App Review / Reddit pre-approval) — registered as concrete
         // typed clients and bridged onto ISocialConnector so they participate in publish/metrics like
-        // Bluesky/Mastodon; the dashboard's authorize/callback endpoints pick the right one out of the
-        // set via OAuthConnectorResolver (a single IOAuthSocialConnector registration can't hold two).
+        // Bluesky/Mastodon. The authorize/callback HTTP endpoints themselves live in Core's
+        // SocialOAuthController now, not here — Admin's Social page just deep-links to them (see
+        // CoreApiOptions below) — but Admin still runs these connectors for the same publish/metrics
+        // paths Core does, resolved per-platform via OAuthConnectorResolver.
         services.Configure<ThreadsOptions>(configuration.GetSection("Threads"));
         services.AddHttpClient<ThreadsConnector>();
         services.AddScoped<ISocialConnector>(sp => sp.GetRequiredService<ThreadsConnector>());
         services.Configure<RedditOptions>(configuration.GetSection("Reddit"));
         services.AddHttpClient<RedditConnector>();
         services.AddScoped<ISocialConnector>(sp => sp.GetRequiredService<RedditConnector>());
+        services.Configure<ShortLynx.Services.CoreApiOptions>(configuration.GetSection("CoreApi"));
         services.AddScoped<ISocialConnectionService, SocialConnectionService>();
         services.AddScoped<ISocialPublishService, SocialPublishService>();
         services.Configure<SocialMetricsOptions>(configuration.GetSection("SocialMetrics"));

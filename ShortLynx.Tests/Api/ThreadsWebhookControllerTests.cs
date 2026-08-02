@@ -2,22 +2,29 @@ using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using ShortLynx.Data.Context;
 using ShortLynx.Data.Entities;
 using ShortLynx.Data.Enums;
 
-namespace ShortLynx.Tests.Admin;
+namespace ShortLynx.Tests.Api;
 
-// Meta calls these two webhooks server-to-server (no browser, no session) when a user disconnects the
-// app or requests data deletion via Meta's own UI — see docs/META_APP_SETUP.md. AdminFactory's
-// "Threads:AppSecret" test config matches the secret used to sign requests here.
-public class ThreadsWebhookTests : IClassFixture<AdminFactory>
+// ThreadsWebhookController replaces ShortLynx.Admin's former deauthorize/delete minimal APIs
+// (Program.cs) — ported close to verbatim from ShortLynx.Tests/Admin/ThreadsWebhookTests.cs, targeting
+// Core's ApiFactory instead of AdminFactory. These calls are unauthenticated server-to-server webhooks
+// (no browser, no session), so the interesting behavior is entirely in the HMAC verification.
+public class ThreadsWebhookControllerTests : IClassFixture<ApiFactory>
 {
-    private const string AppSecret = "test-meta-app-secret"; // must match AdminFactory's test config
-    private readonly AdminFactory _factory;
-    public ThreadsWebhookTests(AdminFactory factory) => _factory = factory;
+    private const string AppSecret = "test-threads-webhook-secret";
+    private readonly ApiFactory _factory;
+    public ThreadsWebhookControllerTests(ApiFactory factory) => _factory = factory;
+
+    private WebApplicationFactory<ShortLynx.Core.CoreApiEntryPoint> ConfiguredHost()
+        => _factory.WithWebHostBuilder(b => b.ConfigureAppConfiguration((_, cfg) =>
+            cfg.AddInMemoryCollection(new Dictionary<string, string?> { ["Threads:AppSecret"] = AppSecret })));
 
     private static string Base64UrlEncode(byte[] bytes)
         => Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
@@ -30,11 +37,11 @@ public class ThreadsWebhookTests : IClassFixture<AdminFactory>
         return $"{Base64UrlEncode(signature)}.{payload}";
     }
 
-    private async Task<Guid> SeedConnectionAsync(string externalAccountId)
+    private async Task<Guid> SeedConnectionAsync(
+        WebApplicationFactory<ShortLynx.Core.CoreApiEntryPoint> host, string externalAccountId)
     {
-        using var scope = _factory.Services.CreateScope();
-        var dbFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<ShortLynxDbContext>>();
-        await using var db = await dbFactory.CreateDbContextAsync();
+        using var scope = host.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ShortLynxDbContext>();
 
         var account = new AccountEntity { Id = Guid.CreateVersion7(), Name = "Test", CreatedAt = DateTimeOffset.UtcNow, IsActive = true };
         var connection = new SocialConnectionEntity
@@ -49,11 +56,11 @@ public class ThreadsWebhookTests : IClassFixture<AdminFactory>
         return connection.Id;
     }
 
-    private async Task<bool> ConnectionExistsAsync(Guid connectionId)
+    private async Task<bool> ConnectionExistsAsync(
+        WebApplicationFactory<ShortLynx.Core.CoreApiEntryPoint> host, Guid connectionId)
     {
-        using var scope = _factory.Services.CreateScope();
-        var dbFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<ShortLynxDbContext>>();
-        await using var db = await dbFactory.CreateDbContextAsync();
+        using var scope = host.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ShortLynxDbContext>();
         return await db.SocialConnectionEntities.AnyAsync(c => c.Id == connectionId);
     }
 
@@ -62,35 +69,39 @@ public class ThreadsWebhookTests : IClassFixture<AdminFactory>
     [Fact]
     public async Task Deauthorize_ValidSignedRequest_DeletesMatchingConnection()
     {
-        var connectionId = await SeedConnectionAsync("17800000000000001");
+        var host = ConfiguredHost();
+        var connectionId = await SeedConnectionAsync(host, "17800000000000001");
         var body = new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["signed_request"] = BuildSignedRequest("17800000000000001"),
         });
 
-        var resp = await _factory.CreateClient().PostAsync("/webhooks/threads/deauthorize", body);
+        var resp = await host.CreateClient().PostAsync("/webhooks/threads/deauthorize", body);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
-        Assert.False(await ConnectionExistsAsync(connectionId));
+        Assert.False(await ConnectionExistsAsync(host, connectionId));
     }
 
     [Fact]
     public async Task Deauthorize_TamperedSignature_Returns400_ConnectionSurvives()
     {
-        var connectionId = await SeedConnectionAsync("17800000000000002");
+        var host = ConfiguredHost();
+        var connectionId = await SeedConnectionAsync(host, "17800000000000002");
         var forged = BuildSignedRequest("17800000000000002", secret: "wrong-secret");
         var body = new FormUrlEncodedContent(new Dictionary<string, string> { ["signed_request"] = forged });
 
-        var resp = await _factory.CreateClient().PostAsync("/webhooks/threads/deauthorize", body);
+        var resp = await host.CreateClient().PostAsync("/webhooks/threads/deauthorize", body);
 
         Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
-        Assert.True(await ConnectionExistsAsync(connectionId)); // an invalid signature must delete nothing
+        Assert.True(await ConnectionExistsAsync(host, connectionId)); // an invalid signature must delete nothing
     }
 
     [Fact]
     public async Task Deauthorize_MissingSignedRequestField_Returns400()
     {
-        var resp = await _factory.CreateClient().PostAsync("/webhooks/threads/deauthorize",
+        var host = ConfiguredHost();
+
+        var resp = await host.CreateClient().PostAsync("/webhooks/threads/deauthorize",
             new FormUrlEncodedContent(new Dictionary<string, string>()));
 
         Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
@@ -99,13 +110,14 @@ public class ThreadsWebhookTests : IClassFixture<AdminFactory>
     [Fact]
     public async Task Deauthorize_UnknownUserId_Returns200_NoOp()
     {
+        var host = ConfiguredHost();
         // A genuine callback for a user_id we have no connection for must not error — nothing to do.
         var body = new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["signed_request"] = BuildSignedRequest("99999999999999999"),
         });
 
-        var resp = await _factory.CreateClient().PostAsync("/webhooks/threads/deauthorize", body);
+        var resp = await host.CreateClient().PostAsync("/webhooks/threads/deauthorize", body);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
     }
@@ -115,16 +127,17 @@ public class ThreadsWebhookTests : IClassFixture<AdminFactory>
     [Fact]
     public async Task Delete_ValidSignedRequest_DeletesConnection_AndReturnsMetaShape()
     {
-        var connectionId = await SeedConnectionAsync("17800000000000003");
+        var host = ConfiguredHost();
+        var connectionId = await SeedConnectionAsync(host, "17800000000000003");
         var body = new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["signed_request"] = BuildSignedRequest("17800000000000003"),
         });
 
-        var resp = await _factory.CreateClient().PostAsync("/webhooks/threads/delete", body);
+        var resp = await host.CreateClient().PostAsync("/webhooks/threads/delete", body);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
-        Assert.False(await ConnectionExistsAsync(connectionId));
+        Assert.False(await ConnectionExistsAsync(host, connectionId));
 
         using var json = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
         var url = json.RootElement.GetProperty("url").GetString();
@@ -137,12 +150,13 @@ public class ThreadsWebhookTests : IClassFixture<AdminFactory>
     [Fact]
     public async Task Delete_TamperedSignature_Returns400()
     {
+        var host = ConfiguredHost();
         var body = new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["signed_request"] = BuildSignedRequest("178", secret: "wrong-secret"),
         });
 
-        var resp = await _factory.CreateClient().PostAsync("/webhooks/threads/delete", body);
+        var resp = await host.CreateClient().PostAsync("/webhooks/threads/delete", body);
 
         Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
     }
@@ -150,7 +164,9 @@ public class ThreadsWebhookTests : IClassFixture<AdminFactory>
     [Fact]
     public async Task DeleteStatus_Page_Renders()
     {
-        var resp = await _factory.CreateClient().GetAsync("/social/threads/delete-status?id=abc123");
+        var host = ConfiguredHost();
+
+        var resp = await host.CreateClient().GetAsync("/social/threads/delete-status?id=abc123");
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         Assert.Contains("Deletion complete", await resp.Content.ReadAsStringAsync());

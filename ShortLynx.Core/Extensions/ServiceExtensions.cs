@@ -65,10 +65,11 @@ public static class ServiceExtensions
         // Social connectors (one per platform, typed HttpClients) + the account-scoped connection service.
         services.AddHttpClient<ShortLynx.Services.Social.ISocialConnector, ShortLynx.Services.Social.BlueskyConnector>();
         services.AddHttpClient<ShortLynx.Services.Social.ISocialConnector, ShortLynx.Services.Social.MastodonConnector>();
-        // OAuth-only platforms (Threads, Reddit) — the authorize/callback endpoints live on Admin, but
-        // Core's /me/links/{id}/publish and the metrics puller both run ISocialConnector over any
-        // connected platform, so they're part of this collection here too (concrete typed clients,
-        // bridged; a single IOAuthSocialConnector registration can't hold two implementations).
+        // OAuth-only platforms (Threads, Reddit) — SocialOAuthController hosts the authorize/callback
+        // endpoints (moved here from Admin so the flow doesn't depend on Admin's cookie session); Core's
+        // /me/links/{id}/publish and the metrics puller also run ISocialConnector over any connected
+        // platform, so they're part of this collection here too (concrete typed clients, bridged; a
+        // single IOAuthSocialConnector registration can't hold two implementations).
         services.Configure<ShortLynx.Services.Social.ThreadsOptions>(configuration.GetSection("Threads"));
         services.AddHttpClient<ShortLynx.Services.Social.ThreadsConnector>();
         services.AddScoped<ShortLynx.Services.Social.ISocialConnector>(
@@ -77,6 +78,7 @@ public static class ServiceExtensions
         services.AddHttpClient<ShortLynx.Services.Social.RedditConnector>();
         services.AddScoped<ShortLynx.Services.Social.ISocialConnector>(
             sp => sp.GetRequiredService<ShortLynx.Services.Social.RedditConnector>());
+        services.Configure<ShortLynx.Services.Social.SocialOAuthOptions>(configuration.GetSection("SocialOAuth"));
         services.AddScoped<ShortLynx.Services.Social.ISocialConnectionService, ShortLynx.Services.Social.SocialConnectionService>();
         services.AddScoped<ShortLynx.Services.Social.ISocialPublishService, ShortLynx.Services.Social.SocialPublishService>();
         services.Configure<ShortLynx.Services.Social.SocialMetricsOptions>(configuration.GetSection("SocialMetrics"));

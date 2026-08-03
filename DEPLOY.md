@@ -243,6 +243,14 @@ Dashboard__PublicBaseUrl       = https://<short-domain>      # builds full short
 
 **Web only:** database block **plus** `VisitSink__IpHashPepper` (above). No email/admin secrets.
 
+```
+# Optional — unset (the default) means an unknown/expired code returns a plain 404, exactly today's
+# behavior. Set this to redirect those visitors somewhere instead (e.g. your marketing site). Not
+# defaulted to anything by this project on your behalf — this is the OSS app every self-hoster runs,
+# so a baked-in fallback here would send someone else's visitors to a URL they never chose.
+Redirect__NotFoundRedirectUrl = https://your-site.example
+```
+
 > Optional `CustomDomain__VerificationHostLabel` / `CustomDomain__TxtValuePrefix` override the TXT record host/value shown to users; defaults (`_shortlynx-verify` / `shortlynx-verify=`) are fine.
 
 ---

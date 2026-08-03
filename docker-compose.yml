@@ -104,6 +104,8 @@ services:
       Sentry__Dsn: ${SENTRY_DSN:-}
       Axiom__ApiToken: ${AXIOM_API_TOKEN:-}
       Axiom__Dataset: ${AXIOM_DATASET:-}
+      # Optional — blank means an unknown/expired code 404s, exactly today's behavior.
+      Redirect__NotFoundRedirectUrl: ${NOT_FOUND_REDIRECT_URL:-}
     ports:
       - "${WEB_PORT:-5071}:8080"
 

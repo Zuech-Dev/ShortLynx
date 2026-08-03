@@ -1,5 +1,6 @@
 using System.Net;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.Extensions.Options;
 using ShortLynx.Repository;
 using ShortLynx.Services.Observability;
 using ShortLynx.Services.Visits;
@@ -114,10 +115,13 @@ app.MapGet($"/{customPrefix}/{{code}}", async (
     string code,
     HttpContext ctx,
     IRedirectService redirectSvc,
-    IVisitEventSink sink) =>
+    IVisitEventSink sink,
+    IOptions<RedirectOptions> redirectOptions) =>
 {
     var entry = await redirectSvc.LookupCustomAsync(code, ctx.Request.Host.Host, ctx.RequestAborted);
-    return entry is null ? Results.NotFound() : await RecordVisitAndRedirect(ctx, entry, sink, anonByChoice: false);
+    return entry is null
+        ? NotFoundResult(redirectOptions.Value)
+        : await RecordVisitAndRedirect(ctx, entry, sink, anonByChoice: false);
 }).RequireRateLimiting("redirect");
 
 // Short-link redirect endpoint — must come after Razor Pages so literal routes (/Privacy, /Error)
@@ -126,10 +130,11 @@ app.MapGet("/{code}", async (
     string code,
     HttpContext ctx,
     IRedirectService redirectSvc,
-    IVisitEventSink sink) =>
+    IVisitEventSink sink,
+    IOptions<RedirectOptions> redirectOptions) =>
 {
     var entry = await redirectSvc.LookupAsync(code, ctx.Request.Host.Host, ctx.RequestAborted);
-    if (entry is null) return Results.NotFound();
+    if (entry is null) return NotFoundResult(redirectOptions.Value);
 
     // Mode 2 disclosure gate: when the operator has no privacy policy, the recipient must have made
     // a choice (30-day preference cookie) before any tracking fires; otherwise pause on the
@@ -153,6 +158,13 @@ app.MapGet("/{code}", async (
 }).RequireRateLimiting("redirect");
 
 app.Run();
+
+// Shared miss path for both routes above. Empty/unset NotFoundRedirectUrl (the default for every
+// deployment that hasn't explicitly opted in) keeps today's behavior exactly: a plain 404.
+static IResult NotFoundResult(RedirectOptions options)
+    => string.IsNullOrWhiteSpace(options.NotFoundRedirectUrl)
+        ? Results.NotFound()
+        : Results.Redirect(options.NotFoundRedirectUrl, permanent: false);
 
 // Shared tail of both redirect paths: derive the request signals, enqueue the async visit event, 302.
 static async Task<IResult> RecordVisitAndRedirect(HttpContext ctx, RedirectCacheEntry entry, IVisitEventSink sink, bool anonByChoice)

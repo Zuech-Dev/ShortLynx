@@ -158,7 +158,10 @@ Tiers: **A (open, build first): Bluesky, Mastodon** · **B (official, gated): Th
   for the browser-redirect connect flow.
 - ✅ **The four URLs Meta's dashboard requires**: `/social/threads/authorize` + `/social/threads/callback`
   (OAuth), `/webhooks/threads/deauthorize` + `/webhooks/threads/delete` (Meta-signed server-to-server
-  callbacks, verified via `MetaSignedRequestParser`) — all live on the Admin app.
+  callbacks, verified via `MetaSignedRequestParser`) — all live on **Core** (`SocialOAuthController`/
+  `ThreadsWebhookController`), reachable regardless of whether Admin runs. Moved there from Admin
+  2026-08-02 so the flow doesn't depend on Admin's cookie session; Admin's Social page deep-links to
+  Core's routes instead.
 - ⬜ **Meta's own approval process** (Business Portfolio, Tech-Provider Verification, the
   `threads_basic`/`threads_content_publish`/`threads_manage_insights` permission review) — entirely on
   Meta's side; ~2–4 weeks. Walkthrough + exact Railway config: [META_APP_SETUP.md](META_APP_SETUP.md) §6-7.
@@ -166,7 +169,7 @@ Tiers: **A (open, build first): Bluesky, Mastodon** · **B (official, gated): Th
   the token endpoint, mandatory descriptive User-Agent), publish as **self posts to the user's own
   profile only** (`u_{username}` — arbitrary-subreddit posting deliberately excluded: per-subreddit
   self-promotion rules make it a ban magnet), metrics via `/api/info` (score → Likes, comments →
-  Replies; Reddit exposes no views). The dashboard's OAuth endpoints are now a shared per-platform flow
+  Replies; Reddit exposes no views). Core's OAuth endpoints are a shared per-platform flow
   (`/social/{threads|reddit}/authorize|callback`), with connectors resolved platform-keyed out of the
   registered set.
 - ⬜ **Reddit's own approval process** (app registration + data-API access request; ~2–4 weeks; dev

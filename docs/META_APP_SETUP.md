@@ -53,14 +53,15 @@ spot-checks these URLs.
      callback URL below, now that it's a real, working endpoint.
    - **Category**: something accurate, e.g. "Business" or "Productivity".
 5. Add the **Threads** product to the app (App Dashboard → Add Product → Threads API), then under its
-   **Settings**, fill in the three callback fields with the endpoints this repo now serves on the Admin
-   app (`shortlynx.dev` — the dashboard, not the public redirect domain):
+   **Settings**, fill in the three callback fields with the endpoints this repo serves on **Core**
+   (`SocialOAuthController`/`ThreadsWebhookController` — not the Admin dashboard; substitute Core's own
+   public host below, e.g. `api.<your-domain>`):
 
    | Field | Value |
    |---|---|
-   | Redirect Callback URL(s) | `https://shortlynx.dev/social/threads/callback` |
-   | Uninstall Callback URL | `https://shortlynx.dev/webhooks/threads/deauthorize` |
-   | Delete Callback URL | `https://shortlynx.dev/webhooks/threads/delete` |
+   | Redirect Callback URL(s) | `https://<your-core-host>/social/threads/callback` |
+   | Uninstall Callback URL | `https://<your-core-host>/webhooks/threads/deauthorize` |
+   | Delete Callback URL | `https://<your-core-host>/webhooks/threads/delete` |
 
    > **The redirect URI field must be submitted as a real URL, not just typed text.** After pasting it,
    > press Enter/Tab so it becomes a chip/pill before saving — a common Meta-dashboard gotcha is the form
@@ -118,14 +119,16 @@ Expect **~2–4 weeks** total for this stage, consistent with the plan doc's est
 
 Once you have the **Threads app ID** and **Threads app secret** (available immediately after app
 creation — you don't need to wait for Tech-Provider Verification to finish to start testing), set these
-on **both** the `core` and `admin` Railway services (both run `ThreadsConnector` — Admin serves the OAuth
-callback, Core can also publish/pull metrics via its `/me/*` API):
+on **both** the `core` and `admin` Railway services — both run `ThreadsConnector` for publish/metrics
+calls, but only Core needs `RedirectUri` (it's the one serving the OAuth callback; Admin's copy of this
+section has no `RedirectUri` key at all):
 
-| Variable | Value |
-|---|---|
-| `Threads__AppId` | the **Threads app ID** (not the app-level App ID shown at the top of the settings page) |
-| `Threads__AppSecret` | the **Threads app secret** — **never commit this**, Railway env only |
-| `Threads__RedirectUri` | `https://shortlynx.dev/social/threads/callback` (must exactly match what's in the Meta dashboard) |
+| Variable | Set on | Value |
+|---|---|---|
+| `Threads__AppId` | Core + Admin | the **Threads app ID** (not the app-level App ID shown at the top of the settings page) |
+| `Threads__AppSecret` | Core + Admin | the **Threads app secret** — **never commit this**, Railway env only |
+| `Threads__RedirectUri` | **Core only** | `https://<your-core-host>/social/threads/callback` (must exactly match what's in the Meta dashboard) |
+| `SocialOAuth__ReturnUrlBase` | Core only | where Core sends the browser back after success/failure — your Admin instance's `/social` page, e.g. `https://<your-admin-host>/social` |
 
 > **Two credential pairs live on the same settings page** — the app-level "App ID"/"App secret" at the
 > top (general Meta/Facebook Graph API) and a separate "Threads app ID"/"Threads app secret" further down

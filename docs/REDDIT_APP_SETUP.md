@@ -12,8 +12,9 @@ credentials and the API approval to use it.
    recommended — it also becomes the default profile posts publish to when users connect it).
 2. Go to **reddit.com/prefs/apps** → **create another app…**:
    - **Type:** `web app` (required for the authorization-code + refresh-token flow the connector uses).
-   - **Redirect URI:** `https://shortlynx.dev/social/reddit/callback` — must match `Reddit:RedirectUri`
-     exactly. Add a localhost/tunnel URI here later if you want local testing (same drill as Threads).
+   - **Redirect URI:** `https://<your-core-host>/social/reddit/callback` — Core serves this callback
+     (`SocialOAuthController`, not Admin) — must match `Reddit:RedirectUri` exactly. Add a
+     localhost/tunnel URI here later if you want local testing (same drill as Threads).
 3. Note the credentials:
    - **Client ID** — the string under the app name (there's no label).
    - **Secret** — labeled.
@@ -35,15 +36,16 @@ Since 2023, production use of Reddit's data API requires registration approval:
 
 ## 3. Set the Railway config
 
-On **both** `admin` and `core` services (Admin runs the OAuth callback; Core refreshes tokens during
-publish/metrics):
+`Reddit__AppId`/`AppSecret`/`UserAgent` go on **both** `admin` and `core` (both run `RedditConnector`
+for publish/metrics calls). `Reddit__RedirectUri` is **Core only** — it's the one serving the OAuth
+callback; Admin's copy of this section has no `RedirectUri` key at all:
 
-| Variable | Value |
-|---|---|
-| `Reddit__AppId` | the client ID from step 1 |
-| `Reddit__AppSecret` | the secret — **never commit it**, Railway env / user-secrets only |
-| `Reddit__RedirectUri` | `https://shortlynx.dev/social/reddit/callback` |
-| `Reddit__UserAgent` | `web:shortlynx:v1.0 (by /u/<your-reddit-username>)` — Reddit **requires** a descriptive UA naming a responsible account and blocks default library values |
+| Variable | Set on | Value |
+|---|---|---|
+| `Reddit__AppId` | Core + Admin | the client ID from step 1 |
+| `Reddit__AppSecret` | Core + Admin | the secret — **never commit it**, Railway env / user-secrets only |
+| `Reddit__RedirectUri` | **Core only** | `https://<your-core-host>/social/reddit/callback` |
+| `Reddit__UserAgent` | Core + Admin | `web:shortlynx:v1.0 (by /u/<your-reddit-username>)` — Reddit **requires** a descriptive UA naming a responsible account and blocks default library values |
 
 ## 4. Test
 

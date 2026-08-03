@@ -48,7 +48,7 @@ services you create: the images are independent and nothing breaks at build time
 
 | Dropping | Costs you |
 |---|---|
-| `ShortLynx.Admin` | The dashboard — **and** three server-side surfaces that happen to live in that app: the social OAuth `authorize`/`callback` routes (registered as redirect URIs with Threads, Reddit, Bluesky, Mastodon), the QR endpoint, and CSV export. The API has equivalents for QR and analytics export, but the OAuth callbacks have no home outside this app today. |
+| `ShortLynx.Admin` | The dashboard — **and** two server-side surfaces that happen to live in that app: the QR endpoint and CSV export. The API has equivalents for both. The Threads/Reddit OAuth `authorize`/`callback` routes and Meta's App Review webhooks live on `ShortLynx.Core` (`SocialOAuthController`/`ThreadsWebhookController`) regardless of whether Admin runs — Admin's Social page just deep-links to them. |
 | `ShortLynx.Web` | **Short links stop resolving.** This is the only app that serves `/{code}` — the API has no redirect route at all. It also serves the public marketing page. Do not drop it unless something else is answering those URLs. |
 
 So a "bring your own dashboard" deployment is routine; a "bring your own redirect site" deployment
@@ -185,6 +185,18 @@ GEOIP_MAX_AGE_DAYS    = 30    # optional; refresh cadence when the file already 
 > Privacy note: only **country + IANA timezone** are ever read from the database (MASTER_PLAN P1);
 > the resolver never touches city, region, or coordinates.
 
+**All three services — observability (optional; unset = console logging only, no outbound telemetry):**
+```
+# Error tracking (sentry.io, free tier). Same DSN can be reused across services, or give each its own
+# Sentry project if you want them told apart there.
+Sentry__Dsn = <dsn from your Sentry project>
+
+# Structured log shipping (axiom.co, free tier). Both required together — set one without the other
+# and it's treated the same as unset.
+Axiom__ApiToken = <axiom api token>
+Axiom__Dataset  = <axiom dataset name>
+```
+
 **Core only:**
 ```
 ApiKey__AdminSecret            = <16+ random chars>   # gates POST /api-keys
@@ -262,7 +274,7 @@ Pick one:
 ---
 
 ## Pre-Deploy
-- [ ] `dotnet test ShortLynx.slnx` green (currently 324)
+- [ ] `dotnet test ShortLynx.slnx` green (see CI for current count)
 - [ ] Working tree committed on `implementation`; pushed to origin
 - [ ] **DB password rotated** (the old one was leaked — see git-scrub history) and set only in Railway variables
 - [ ] All secrets above set in Railway; **no** secrets in any committed `appsettings*.json`

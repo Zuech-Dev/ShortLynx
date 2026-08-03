@@ -7,7 +7,6 @@
 @inject IServiceScopeFactory ScopeFactory
 @inject IDbContextFactory<ShortLynxDbContext> DbFactory
 @inject NavigationManager Nav
-@inject Microsoft.Extensions.Options.IOptions<ShortLynx.Services.CoreApiOptions> CoreApiOpts
 
 <PageTitle>Social Accounts — ShortLynx Admin</PageTitle>
 
@@ -16,11 +15,6 @@
     @if (_canWrite)
     {
         <div class="flex gap-2">
-            @* The authorize routes moved to Core's SocialOAuthController — Meta/Reddit's registered
-               redirect URI now points there, so these have to be absolute links to Core's own host
-               rather than a relative href, unlike everything else on this page. *@
-            <a class="btn btn-outline" href="@($"{CoreApiOpts.Value.PublicBaseUrl}/social/threads/authorize")" data-testid="connect-threads">Connect Threads</a>
-            <a class="btn btn-outline" href="@($"{CoreApiOpts.Value.PublicBaseUrl}/social/reddit/authorize")" data-testid="connect-reddit">Connect Reddit</a>
             <button class="btn btn-primary" data-testid="connect-toggle" @onclick="() => _showConnect = !_showConnect">
                 @(_showConnect ? "Cancel" : "+ Connect account")
             </button>
@@ -29,9 +23,13 @@
 </div>
 
 <p class="text-gray-500 text-sm mb-3 max-w-[640px]">
-    Connect Bluesky, Mastodon, or Threads accounts to publish tracked links directly and pull post
-    engagement. Credentials/authorization are verified with the platform and tokens are stored
-    encrypted — they are never shown again.
+    Connect Bluesky or Mastodon accounts to publish tracked links directly and pull post engagement.
+    Credentials are verified with the platform and tokens are stored encrypted — they are never shown
+    again.
+</p>
+<p class="text-gray-500 text-sm mb-3 max-w-[640px]">
+    Threads and Reddit connect through the ShortLynx dashboard, not here — <code>SocialOAuthController</code>
+    requires the dashboard's session (JWT), which this Admin login doesn't hold (see PORTALS.md).
 </p>
 
 @if (_oauthConnected is not null)

@@ -88,24 +88,6 @@ public class SocialComponentTests : BunitContext
     }
 
     [Fact]
-    public void ConnectThreadsLink_PointsAtOAuthAuthorizeEndpoint()
-    {
-        var cut = Render<Social>();
-
-        var link = cut.Find("[data-testid=connect-threads]");
-        Assert.Equal("/social/threads/authorize", link.GetAttribute("href"));
-    }
-
-    [Fact]
-    public void ConnectRedditLink_PointsAtOAuthAuthorizeEndpoint()
-    {
-        var cut = Render<Social>();
-
-        var link = cut.Find("[data-testid=connect-reddit]");
-        Assert.Equal("/social/reddit/authorize", link.GetAttribute("href"));
-    }
-
-    [Fact]
     public void RedditErrorQueryParam_ShowsFriendlyErrorBanner()
     {
         Services.GetRequiredService<NavigationManager>().NavigateTo("/social?redditError=not_configured");

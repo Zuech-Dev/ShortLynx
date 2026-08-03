@@ -40,4 +40,16 @@ public interface IAccountService
 
     /// <summary>The user's role in the account, or null if they aren't a member.</summary>
     Task<AccountRole?> GetRoleAsync(Guid accountId, Guid userAccountId, CancellationToken ct = default);
+
+    /// <summary>The account itself (name, privacy/terms URLs), or null if it doesn't exist.</summary>
+    Task<AccountEntity?> GetAccountAsync(Guid accountId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Renames the account and sets its privacy/terms URLs (null/empty clears either). Caller has
+    /// already confirmed the actor may do this (<see cref="AccountAction.ManageAccount"/>) -- this just
+    /// applies it. Throws <see cref="ArgumentException"/> for a blank name or a non-empty URL that
+    /// isn't a valid http(s) address. Returns null if the account doesn't exist.
+    /// </summary>
+    Task<AccountEntity?> UpdateAccountAsync(
+        Guid accountId, string name, string? privacyPolicyUrl, string? termsOfServiceUrl, CancellationToken ct = default);
 }

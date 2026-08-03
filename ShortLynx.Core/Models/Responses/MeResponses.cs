@@ -5,3 +5,6 @@ public sealed record MyApiKeyResponse(Guid Id, string Name, string Prefix, strin
 
 /// <summary>An account the current user belongs to, with their role.</summary>
 public sealed record AccountResponse(Guid Id, string Name, string Role);
+
+/// <summary>The current account's own settings.</summary>
+public sealed record AccountSettingsResponse(Guid Id, string Name, string? PrivacyPolicyUrl, string? TermsOfServiceUrl);

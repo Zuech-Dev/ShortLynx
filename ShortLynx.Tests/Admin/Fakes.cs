@@ -56,6 +56,13 @@ internal sealed class FakeAccountService : IAccountService
 
     public Task<AccountRole?> GetRoleAsync(Guid accountId, Guid userAccountId, CancellationToken ct = default)
         => Task.FromResult(MembershipExists ? Role : (AccountRole?)null);
+
+    public Task<AccountEntity?> GetAccountAsync(Guid accountId, CancellationToken ct = default)
+        => throw new NotSupportedException();
+
+    public Task<AccountEntity?> UpdateAccountAsync(
+        Guid accountId, string name, string? privacyPolicyUrl, string? termsOfServiceUrl, CancellationToken ct = default)
+        => throw new NotSupportedException();
 }
 
 internal sealed class FakeUserAdminService : ShortLynx.Services.Users.IUserAdminService

@@ -141,6 +141,40 @@ public sealed class AccountService(ShortLynxDbContext db, IMagicLinkService magi
         return membership?.Role;
     }
 
+    public async Task<AccountEntity?> GetAccountAsync(Guid accountId, CancellationToken ct = default)
+        => await db.AccountEntities.AsNoTracking().FirstOrDefaultAsync(a => a.Id == accountId, ct);
+
+    public async Task<AccountEntity?> UpdateAccountAsync(
+        Guid accountId, string name, string? privacyPolicyUrl, string? termsOfServiceUrl, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            throw new ArgumentException("Account name is required.", nameof(name));
+
+        var privacy = NormaliseUrl(privacyPolicyUrl, nameof(privacyPolicyUrl));
+        var terms = NormaliseUrl(termsOfServiceUrl, nameof(termsOfServiceUrl));
+
+        var account = await db.AccountEntities.FirstOrDefaultAsync(a => a.Id == accountId, ct);
+        if (account is null) return null;
+
+        account.Name = name.Trim();
+        account.PrivacyPolicyUrl = privacy;
+        account.TermsOfServiceUrl = terms;
+        await db.SaveChangesAsync(ct);
+        return account;
+    }
+
+    // Empty/whitespace clears the field; anything else must be a real absolute http(s) URL -- this is
+    // what a Mode 2 recipient gets sent to read, so a malformed value is worse than none at all.
+    private static string? NormaliseUrl(string? value, string paramName)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var trimmed = value.Trim();
+        if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri)
+            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+            throw new ArgumentException("Must be a valid http:// or https:// URL.", paramName);
+        return trimmed;
+    }
+
     private async Task<UserAccountEntity> GetOrCreateUserAsync(string normalisedEmail, CancellationToken ct)
     {
         var user = await db.UserAccountEntities.FirstOrDefaultAsync(u => u.Email == normalisedEmail, ct);

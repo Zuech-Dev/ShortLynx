@@ -15,3 +15,13 @@ public sealed record InviteMemberRequest([Required, EmailAddress] string Email, 
 
 /// <summary>Change an existing member's role in the current account.</summary>
 public sealed record ChangeMemberRoleRequest([Required] string Role);
+
+/// <summary>
+/// Rename the current account and set the URLs the Mode 2 (user-attributed) disclosure interstitial
+/// links to. PrivacyPolicyUrl/TermsOfServiceUrl are optional -- empty/whitespace clears the field
+/// (interstitial falls back to ShortLynx's own default disclosure); a non-empty value must be a real
+/// http(s) URL, validated in AccountService rather than here so "clear the field" and "malformed URL"
+/// aren't both rejected by a blanket [Url] attribute.
+/// </summary>
+public sealed record UpdateAccountRequest(
+    [Required, MinLength(1)] string Name, string? PrivacyPolicyUrl, string? TermsOfServiceUrl);

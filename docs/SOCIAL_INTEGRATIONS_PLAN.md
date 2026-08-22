@@ -177,9 +177,12 @@ Tiers: **A (open, build first): Bluesky, Mastodon** · **B (official, gated): Th
   [REDDIT_APP_SETUP.md](REDDIT_APP_SETUP.md).
 
 ### Phase 3 — Conversions loop + Substack
-- Outbound: per-account **webhooks**; **Meta CAPI / TikTok Events / GA4 MP** click→conversion (hashed
-  email advanced matching available for user-attributed links — opt-in only, requires explicit disclosure).
-  Webhooks double as the unblocked path to Hootsuite/Buffer/etc. via Zapier/Make — see below.
+- ⬜ **Conversions loop** — scoped out into its own plan:
+  [CONVERSIONS_LOOP_PLAN.md](CONVERSIONS_LOOP_PLAN.md). Turned out to need a real prerequisite (click
+  correlation — no click ID is exposed anywhere today) and splits into two separably-sized pieces:
+  generic per-account webhooks (recommended first — also the unblocked path to Hootsuite/Buffer/etc. via
+  Zapier/Make, see below) and native Meta CAPI/TikTok Events/GA4 MP connectors (optional follow-on, most
+  of what they'd do is already covered by webhooks + an operator's own Zapier setup).
 - Substack: pull publication RSS to auto-create tracked links; embeds. (No write API.)
 
 ### Deliberately not building — aggregators & Hootsuite/Buffer integration

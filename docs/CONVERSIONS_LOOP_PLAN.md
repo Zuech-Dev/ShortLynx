@@ -151,6 +151,13 @@ operator's problem on their own side; this is a reporting pipe, not a fraud-dete
 
 ## 5. Phase D — Native ad-platform connectors (optional, built on B+C)
 
+> Expanded to full implementation detail in
+> [CONVERSION_PLATFORM_CONNECTORS_PLAN.md](CONVERSION_PLATFORM_CONNECTORS_PLAN.md) — including one
+> concrete finding worth acting on independent of the rest of this phase: the redirect pipeline already
+> discards `fbclid`/`gclid`/`ttclid` today, and capturing those would meaningfully improve match quality
+> if this phase ever ships. Meta's Conversions API details there were checked against Meta's current
+> docs; TikTok/GA4 were not and need re-verification before implementation. Summary below.
+
 Only worth doing if Phase B's generic webhook genuinely isn't enough for real operators — each of these
 is a real, separate integration:
 

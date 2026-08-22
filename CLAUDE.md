@@ -111,7 +111,13 @@ de-duplicates by id. Polling strictly forward loses those clicks silently and pe
 ### Current state
 
 Feature-complete against DESIGN.md's core spec, with a substantial test suite in `ShortLynx.Tests`
-(API integration tests via `WebApplicationFactory`, plus service and data tests). DESIGN.md remains
-the authoritative spec for entities, the API surface, and the decisions still pending (Redis
-dependency, data retention policy, one-time-use vs multi-use codes, custom domains).
+(API integration tests via `WebApplicationFactory`, plus service and data tests). DESIGN.md's original
+"Still To Be Decided" list is mostly resolved now (see the struck-through items there and the pointers
+to where each was decided) — Redis, retention, one-time-use codes, and custom domains all shipped.
+DESIGN.md remains the reference for entities and the API surface; treat its still-open items (short
+code length/bit-layout specifics, click-dedup strategy, a Bloom-filter pre-flight check) as the actual
+remaining gaps, not the whole original list.
+
+Beyond this repo, the hosted product also runs a private billing layer and a second (Next.js)
+dashboard — see `ShortLynx.Hosted` (private repo) — that this OSS repo's docs don't cover.
 

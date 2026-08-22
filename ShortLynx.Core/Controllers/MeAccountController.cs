@@ -27,7 +27,8 @@ public class MeAccountController(IAccountService accounts) : SessionControllerBa
         try
         {
             var account = await accounts.UpdateAccountAsync(
-                AccountId, request.Name, request.PrivacyPolicyUrl, request.TermsOfServiceUrl, ct);
+                AccountId, request.Name, request.PrivacyPolicyUrl, request.TermsOfServiceUrl,
+                request.ConfirmsDisclosure, ct);
             return account is null ? NotFound() : Ok(ToResponse(account));
         }
         catch (ArgumentException ex)

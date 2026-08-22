@@ -145,13 +145,24 @@ public sealed class AccountService(ShortLynxDbContext db, IMagicLinkService magi
         => await db.AccountEntities.AsNoTracking().FirstOrDefaultAsync(a => a.Id == accountId, ct);
 
     public async Task<AccountEntity?> UpdateAccountAsync(
-        Guid accountId, string name, string? privacyPolicyUrl, string? termsOfServiceUrl, CancellationToken ct = default)
+        Guid accountId, string name, string? privacyPolicyUrl, string? termsOfServiceUrl,
+        bool confirmsDisclosure, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Account name is required.", nameof(name));
 
         var privacy = NormaliseUrl(privacyPolicyUrl, nameof(privacyPolicyUrl));
         var terms = NormaliseUrl(termsOfServiceUrl, nameof(termsOfServiceUrl));
+
+        // Setting a policy URL is the operator's assertion that it discloses link tracking -- Admin's
+        // Settings page has required an explicit confirmation checkbox for this since
+        // TRACKING_DISCLOSURE_PLAN.md shipped; this endpoint enforces the identical rule so a client
+        // can't silently turn off the recipient-facing disclosure interstitial without confirming they
+        // understand what that does.
+        if (privacy is not null && !confirmsDisclosure)
+            throw new ArgumentException(
+                "Setting a privacy policy URL requires confirming it discloses link tracking.",
+                nameof(confirmsDisclosure));
 
         var account = await db.AccountEntities.FirstOrDefaultAsync(a => a.Id == accountId, ct);
         if (account is null) return null;
@@ -163,15 +174,15 @@ public sealed class AccountService(ShortLynxDbContext db, IMagicLinkService magi
         return account;
     }
 
-    // Empty/whitespace clears the field; anything else must be a real absolute http(s) URL -- this is
-    // what a Mode 2 recipient gets sent to read, so a malformed value is worse than none at all.
+    // Empty/whitespace clears the field; anything else must be a real absolute https:// URL -- matches
+    // Admin's Settings.razor IsHttpsUrl check exactly (this is what a Mode 2 recipient gets sent to
+    // read, so a malformed or downgradeable-to-plain-http value is worse than none at all).
     private static string? NormaliseUrl(string? value, string paramName)
     {
         if (string.IsNullOrWhiteSpace(value)) return null;
         var trimmed = value.Trim();
-        if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri)
-            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
-            throw new ArgumentException("Must be a valid http:// or https:// URL.", paramName);
+        if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps)
+            throw new ArgumentException("Must be a valid https:// URL.", paramName);
         return trimmed;
     }
 

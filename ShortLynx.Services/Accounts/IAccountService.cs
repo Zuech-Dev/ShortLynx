@@ -47,9 +47,14 @@ public interface IAccountService
     /// <summary>
     /// Renames the account and sets its privacy/terms URLs (null/empty clears either). Caller has
     /// already confirmed the actor may do this (<see cref="AccountAction.ManageAccount"/>) -- this just
-    /// applies it. Throws <see cref="ArgumentException"/> for a blank name or a non-empty URL that
-    /// isn't a valid http(s) address. Returns null if the account doesn't exist.
+    /// applies it. <paramref name="confirmsDisclosure"/> must be true whenever <paramref
+    /// name="privacyPolicyUrl"/> is being set to a non-empty value -- matches the confirmation
+    /// Admin's own Settings page has always required before turning off the recipient-facing
+    /// disclosure interstitial. Throws <see cref="ArgumentException"/> for a blank name, a non-empty
+    /// URL that isn't a valid https:// address, or a privacy URL set without confirmation. Returns
+    /// null if the account doesn't exist.
     /// </summary>
     Task<AccountEntity?> UpdateAccountAsync(
-        Guid accountId, string name, string? privacyPolicyUrl, string? termsOfServiceUrl, CancellationToken ct = default);
+        Guid accountId, string name, string? privacyPolicyUrl, string? termsOfServiceUrl,
+        bool confirmsDisclosure, CancellationToken ct = default);
 }

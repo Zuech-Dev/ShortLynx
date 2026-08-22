@@ -155,6 +155,10 @@ Every request signal is reduced to a low-entropy dimension in the writer, and th
 
 ## Still To Be Decided
 
+> **Status note (2026-08-19):** most of this section was decided and shipped over June–July 2026 as the
+> product built out. Resolved items are struck through with a pointer to where the decision landed;
+> unstruck items are the genuinely remaining open questions. See `CLAUDE.md` → "Current state".
+
 ### Schema & Entities
 - [ ] Full EF Core entity model — properties, relationships, indexes, constraints
 - [ ] Whether `links`, `short_links`, and `user_link_codes` are fully separate tables or share a discriminator column
@@ -167,23 +171,43 @@ Every request signal is reduced to a low-entropy dimension in the writer, and th
 - [ ] Exact bit layout if hash-based: which hash function, how many bytes taken, Base62 alphabet definition
 
 ### Operational
-- [ ] Minimum supported .NET version (affects `Guid.CreateVersion7()` availability)
-- [ ] Whether Redis is a required dependency or abstracted behind an `ICacheProvider` interface
-- [ ] Data retention policy defaults for visit events
-- [ ] Whether an interstitial "leaving this site" warning page is supported (opt-in config)
+- ~~[ ] Minimum supported .NET version (affects `Guid.CreateVersion7()` availability)~~ **RESOLVED:
+  .NET 10** — every project targets `net10.0` (see `Directory.Build.props`, `CLAUDE.md`).
+- ~~[ ] Whether Redis is a required dependency or abstracted behind an `ICacheProvider` interface~~
+  **RESOLVED:** not required — hosted on Railway only "when redirect volume warrants it"; no
+  self-managed Redis (MASTER_PLAN.md §6).
+- ~~[ ] Data retention policy defaults for visit events~~ **RESOLVED:** self-hosters set
+  `AnalyticsRetentionDays` directly (null = forever); hosted plan-tier retention windows (30d / 1yr /
+  unlimited) apply only to the hosted SaaS (MASTER_PLAN.md P9; ANALYTICS_METRICS_PLAN.md Phase 5).
+- ~~[ ] Whether an interstitial "leaving this site" warning page is supported (opt-in config)~~
+  **RESOLVED / SHIPPED:** the Mode 2 disclosure interstitial at `ShortLynx.Web/Pages/Disclosure.cshtml`
+  (TRACKING_DISCLOSURE_PLAN.md; cleared 2026-07-19 per MASTER_PLAN.md §7).
 
 ### Mode 2 Specifics
-- [ ] One-time-use vs. multi-use for user-attributed codes — currently multi-use assumed
-- [ ] Whether expired or single-use codes return `404` or `410 Gone`
-- [ ] Click deduplication strategy — should rapid repeated clicks on the same code within a time window count as one visit?
+- ~~[ ] One-time-use vs. multi-use for user-attributed codes — currently multi-use assumed~~
+  **RESOLVED / SHIPPED:** both — an `IsOneTimeUse` flag set per code at provisioning time
+  (`docs/FEATURES_PLAN.md` Track A).
+- ~~[ ] Whether expired or single-use codes return `404` or `410 Gone`~~ **RESOLVED: `404`** (a
+  second hit on a one-time-use code 404s — `docs/FEATURES_PLAN.md` Track A4 manual E2E check).
+- [ ] Click deduplication strategy — should rapid repeated clicks on the same code within a time window count as one visit? *(Distinct-`HashedIp` unique-click counting exists for reporting, but that's a read-time aggregate, not a write-time dedup decision — this item is still genuinely open.)*
 
 ### API & Authentication
-- [ ] Full API surface design — endpoint shapes for link creation, user code batch generation, analytics queries
-- [ ] Authentication model for creation endpoints: API key only, or OAuth2 as well
-- [ ] Whether there is a concept of a "link owner" / admin separate from the attributed user identity
+- ~~[ ] Full API surface design — endpoint shapes for link creation, user code batch generation, analytics queries~~
+  **RESOLVED / SHIPPED:** see `docs/API_AUTH.md`, now the authoritative reference for the API surface.
+- ~~[ ] Authentication model for creation endpoints: API key only, or OAuth2 as well~~ **RESOLVED:**
+  scoped API keys (`links:read`, `links:write`, `analytics:read`, …); no OAuth2 creation-endpoint path
+  was built. Social-connector OAuth (Bluesky/Mastodon/Threads/Reddit) is a separate, unrelated flow.
+- ~~[ ] Whether there is a concept of a "link owner" / admin separate from the attributed user identity~~
+  **RESOLVED:** yes — accounts with roles (Owner/Admin/Member/Viewer) own links; the Mode 2 "user" is
+  the clicker/recipient the code is minted for, distinct from the account that owns the link.
 
 ### Future / Optional Features
-- [ ] Custom domain support
-- [ ] Vanity / custom slug support (namespace collision strategy with auto-generated codes)
-- [ ] Analytics query API — what aggregations and filters are exposed
-- [ ] Bloom filter as pre-flight collision check for high-volume deployments
+- ~~[ ] Custom domain support~~ **RESOLVED / SHIPPED** — DNS-TXT verification flow, host-aware
+  redirect (`docs/FEATURES_PLAN.md` Track B).
+- ~~[ ] Vanity / custom slug support (namespace collision strategy with auto-generated codes)~~
+  **RESOLVED / SHIPPED 2026-07-22** — `/c/<code>` route, anonymous-mode only (`CUSTOM_CODE_PLAN.md`,
+  private repo; gating in `PlanDefinition.cs`).
+- ~~[ ] Analytics query API — what aggregations and filters are exposed~~ **RESOLVED / SHIPPED** —
+  `/me/.../analytics` endpoints; see ANALYTICS_METRICS_PLAN.md phases 1–5 and
+  `docs/SOCIAL_INTEGRATIONS_PLAN.md` Phase 0 for the campaign roll-up variant.
+- [ ] Bloom filter as pre-flight collision check for high-volume deployments *(still genuinely open — no evidence this was built)*

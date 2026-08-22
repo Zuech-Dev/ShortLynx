@@ -20,8 +20,12 @@ public sealed record ChangeMemberRoleRequest([Required] string Role);
 /// Rename the current account and set the URLs the Mode 2 (user-attributed) disclosure interstitial
 /// links to. PrivacyPolicyUrl/TermsOfServiceUrl are optional -- empty/whitespace clears the field
 /// (interstitial falls back to ShortLynx's own default disclosure); a non-empty value must be a real
-/// http(s) URL, validated in AccountService rather than here so "clear the field" and "malformed URL"
-/// aren't both rejected by a blanket [Url] attribute.
+/// https:// URL, validated in AccountService rather than here so "clear the field" and "malformed URL"
+/// aren't both rejected by a blanket [Url] attribute. ConfirmsDisclosure must be true whenever
+/// PrivacyPolicyUrl is being set to a non-empty value -- same requirement Admin's own Settings page
+/// has always enforced before this endpoint existed; setting a policy URL turns off the recipient-facing
+/// disclosure interstitial, so it isn't accepted without an explicit acknowledgement of that.
 /// </summary>
 public sealed record UpdateAccountRequest(
-    [Required, MinLength(1)] string Name, string? PrivacyPolicyUrl, string? TermsOfServiceUrl);
+    [Required, MinLength(1)] string Name, string? PrivacyPolicyUrl, string? TermsOfServiceUrl,
+    bool ConfirmsDisclosure = false);

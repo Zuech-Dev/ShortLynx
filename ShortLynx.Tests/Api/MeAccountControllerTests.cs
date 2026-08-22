@@ -37,12 +37,12 @@ public class MeAccountControllerTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Update_SetsPrivacyAndTermsUrls()
+    public async Task Update_SetsPrivacyAndTermsUrls_WhenConfirmed()
     {
         var (client, _, _) = await _factory.CreateSessionClientAsync();
 
         var resp = await client.PutAsJsonAsync("/me/account", new UpdateAccountRequest(
-            "Acme", "https://acme.example/privacy", "https://acme.example/terms"));
+            "Acme", "https://acme.example/privacy", "https://acme.example/terms", ConfirmsDisclosure: true));
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         var settings = await resp.Content.ReadFromJsonAsync<AccountSettingsResponse>();
@@ -51,12 +51,38 @@ public class MeAccountControllerTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task Update_PrivacyUrlWithoutConfirmation_Returns400()
+    {
+        // Matches Admin's own Settings.razor: a policy URL turns off the recipient-facing disclosure
+        // interstitial, so it's never accepted without an explicit "I confirm this discloses tracking".
+        var (client, _, _) = await _factory.CreateSessionClientAsync();
+
+        var resp = await client.PutAsJsonAsync("/me/account", new UpdateAccountRequest(
+            "Acme", "https://acme.example/privacy", null, ConfirmsDisclosure: false));
+
+        Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Update_PlainHttpPrivacyUrl_Returns400()
+    {
+        // Admin's Settings.razor requires https:// specifically, not just any http(s) scheme.
+        var (client, _, _) = await _factory.CreateSessionClientAsync();
+
+        var resp = await client.PutAsJsonAsync("/me/account", new UpdateAccountRequest(
+            "Acme", "http://acme.example/privacy", null, ConfirmsDisclosure: true));
+
+        Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+    }
+
+    [Fact]
     public async Task Update_BlankPrivacyUrl_ClearsAPreviouslySetValue()
     {
         var (client, _, _) = await _factory.CreateSessionClientAsync();
         await client.PutAsJsonAsync("/me/account",
-            new UpdateAccountRequest("Acme", "https://acme.example/privacy", null));
+            new UpdateAccountRequest("Acme", "https://acme.example/privacy", null, ConfirmsDisclosure: true));
 
+        // Clearing the field back to blank doesn't need confirmation -- only setting a real value does.
         var resp = await client.PutAsJsonAsync("/me/account", new UpdateAccountRequest("Acme", "", null));
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
@@ -70,7 +96,7 @@ public class MeAccountControllerTests : IClassFixture<ApiFactory>
         var (client, _, _) = await _factory.CreateSessionClientAsync();
 
         var resp = await client.PutAsJsonAsync("/me/account",
-            new UpdateAccountRequest("Acme", "not-a-url", null));
+            new UpdateAccountRequest("Acme", "not-a-url", null, ConfirmsDisclosure: true));
 
         Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
     }

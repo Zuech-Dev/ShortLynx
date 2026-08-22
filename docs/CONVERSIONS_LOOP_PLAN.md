@@ -117,10 +117,16 @@ product retains at all.
 
 ## 4. Phase C — Inbound conversion reporting
 
+> Expanded to full implementation detail in
+> [CONVERSION_REPORTING_PLAN.md](CONVERSION_REPORTING_PLAN.md) — including a correction to this
+> section's original sketch: this is **API-key auth** (`POST /conversions`, matching `LinksController`'s
+> pattern), not session auth. The operator's own backend is the caller, server-to-server, and a browser
+> session cookie is the wrong shape for that. A separate `GET /me/conversions` (session-authenticated,
+> read-only) is what the dashboard uses to show what's been received. Summary below.
+
 ### The endpoint
-`POST /me/conversions` (session or API-key authenticated, same dual-auth pattern as the rest of `/me/*`)
-— the **operator's own backend** calls this after a real conversion happens on their site, referencing
-the click ID from Phase A:
+`POST /conversions` — the **operator's own backend** calls this after a real conversion happens on
+their site, referencing the click ID from Phase A:
 
 ```json
 { "clickId": "...", "type": "purchase", "value": 49.00, "currency": "USD",

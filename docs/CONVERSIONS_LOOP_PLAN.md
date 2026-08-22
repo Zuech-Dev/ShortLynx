@@ -76,6 +76,9 @@ derived dimensions. Nothing about this phase re-opens that question.
 
 ## 3. Phase B — Generic outbound webhooks (recommended first real feature)
 
+> Expanded to full implementation detail in [WEBHOOKS_PLAN.md](WEBHOOKS_PLAN.md) — data model, delivery
+> architecture, retry policy, SSRF protection, API surface, and tests. Summary below.
+
 ### Shape
 - `WebhookEntity` (account-scoped): `{ Id, AccountId, Url, Secret (for HMAC signing), EventTypes[],
   IsActive, CreatedAt }`. `EventTypes` lets an operator subscribe to `click` only, `conversion` only, or

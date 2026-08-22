@@ -59,7 +59,9 @@ public class IndexModel : PageModel
         ("Can I self-host ShortLynx?",
          "Yes — it's source-available under the Elastic License 2.0. Self-hosting is free and unrestricted at every tier, on your own infrastructure and database."),
         ("When is the hosted service available?",
-         "The hosted service is coming soon. In the meantime you can run the full product yourself today."),
+         "The hosted service is live and in private beta today — request access and we'll get you in. In the meantime, or instead, you can run the full product yourself for free."),
+        ("Does shortening a link with ShortLynx hurt my destination's SEO?",
+         "No. Every redirect is a standard HTTP 302, which browsers and search engines follow transparently to your destination URL — the short link itself is never indexed in place of it (see robots.txt), and nothing about the shortener interferes with how your destination page ranks."),
     ];
 
     /// <summary>Absolute URL of this page, for the canonical link and OpenGraph/JSON-LD tags.</summary>

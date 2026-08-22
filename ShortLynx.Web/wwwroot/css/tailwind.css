@@ -302,9 +302,6 @@
   .grow {
     flex-grow: 1;
   }
-  .cursor-default {
-    cursor: default;
-  }
   .list-disc {
     list-style-type: disc;
   }
@@ -520,8 +517,8 @@
   .uppercase {
     text-transform: uppercase;
   }
-  .opacity-90 {
-    opacity: 90%;
+  .underline {
+    text-decoration-line: underline;
   }
   .shadow-sm {
     --tw-shadow: 0 1px 3px 0 var(--tw-shadow-color, rgb(0 0 0 / 0.1)), 0 1px 2px -1px var(--tw-shadow-color, rgb(0 0 0 / 0.1));
@@ -541,6 +538,13 @@
     &:hover {
       @media (hover: hover) {
         background-color: var(--color-gray-50);
+      }
+    }
+  }
+  .hover\:text-gray-600 {
+    &:hover {
+      @media (hover: hover) {
+        color: var(--color-gray-600);
       }
     }
   }

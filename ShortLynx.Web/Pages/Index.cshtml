@@ -19,9 +19,13 @@
     <meta property="og:title" content="@ViewData["Title"]"/>
     <meta property="og:description" content="@desc"/>
     <meta property="og:url" content="@canonical"/>
+    <meta property="og:image" content="https://shrtlynx.com/og-image.png"/>
+    <meta property="og:image:width" content="1200"/>
+    <meta property="og:image:height" content="630"/>
     <meta name="twitter:card" content="summary_large_image"/>
     <meta name="twitter:title" content="@ViewData["Title"]"/>
     <meta name="twitter:description" content="@desc"/>
+    <meta name="twitter:image" content="https://shrtlynx.com/og-image.png"/>
 
     <script type="application/ld+json">
     {
@@ -52,10 +56,13 @@
         that tells you which contact clicked, without a CRM. Self-host it free, or let us run it.
     </p>
     <div class="flex flex-wrap gap-3 justify-center mt-8">
-        <span class="btn btn-primary opacity-90 cursor-default" aria-disabled="true">Hosted signup — coming soon</span>
+        <a class="btn btn-primary" href="https://shortlynx.dev/beta" rel="noopener">Get started</a>
         <a class="btn btn-outline" href="https://github.com/Zuech-Dev/ShortLynx" rel="noopener">Self-host it free →</a>
     </div>
-    <p class="text-gray-400 text-sm mt-3">Open-source · Privacy-first · No credit card</p>
+    <p class="text-gray-400 text-sm mt-3">
+        Private beta · No credit card · Self-host free, today ·
+        <a href="https://shortlynx.dev/login" class="underline hover:text-gray-600" rel="noopener">already have an account?</a>
+    </p>
 </section>
 
 <!-- Differentiator -->
@@ -101,7 +108,7 @@
 <!-- Pricing -->
 <section class="py-10 border-t" id="pricing">
     <h2 class="text-2xl font-bold text-center">Simple, usage-based pricing</h2>
-    <p class="text-gray-600 text-center mt-3">Self-host any tier for free, forever. Hosted plans coming soon.</p>
+    <p class="text-gray-600 text-center mt-3">Self-host any tier for free, forever. Hosted plans are in private beta.</p>
     <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-8 max-w-6xl mx-auto">
         @foreach (var t in Model.Tiers)
         {
@@ -118,7 +125,7 @@
                         <li>· @f</li>
                     }
                 </ul>
-                <span class="btn @(t.Featured ? "btn-primary" : "btn-outline") mt-5 opacity-90 cursor-default text-center" aria-disabled="true">Coming soon</span>
+                <a class="btn @(t.Featured ? "btn-primary" : "btn-outline") mt-5 text-center" href="https://shortlynx.dev/beta" rel="noopener">Get started</a>
             </div>
         }
     </div>
@@ -179,15 +186,15 @@
     </div>
 </section>
 
-<!-- Coming soon -->
+<!-- Private beta -->
 <section class="py-12 border-t text-center">
-    <h2 class="text-2xl font-bold">Hosted ShortLynx is coming soon</h2>
+    <h2 class="text-2xl font-bold">Hosted ShortLynx is in private beta</h2>
     <p class="text-gray-600 max-w-xl mx-auto mt-3">
-        We're putting the finishing touches on the hosted service. In the meantime, you can self-host
-        the full product today.
+        Request access and we'll get you in as places open up. Prefer not to wait? Self-host the full
+        product today — every feature, every tier, free.
     </p>
     <div class="flex flex-wrap gap-3 justify-center mt-6">
-        <span class="btn btn-primary opacity-90 cursor-default" aria-disabled="true">Signup coming soon</span>
+        <a class="btn btn-primary" href="https://shortlynx.dev/beta" rel="noopener">Request access</a>
         <a class="btn btn-outline" href="https://github.com/Zuech-Dev/ShortLynx" rel="noopener">Self-host now</a>
     </div>
 </section>

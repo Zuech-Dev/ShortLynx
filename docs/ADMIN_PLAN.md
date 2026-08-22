@@ -1,5 +1,9 @@
 # Plan: Operable Admin Portal
 
+> **Status: SHIPPED.** API key management, link create/manage, and Mode 2 (per-recipient codes) all
+> exist in Admin today. The ✅ DECIDED markers throughout are still accurate as a record of what was
+> decided and why; nothing below is upcoming work.
+
 ## Goal
 Turn the read-only dashboard into a working portal: **create + revoke API keys** and
 **create + manage links**, all tenant-scoped. Mode 2 (per-recipient user codes) is an optional

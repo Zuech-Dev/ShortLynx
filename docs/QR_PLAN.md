@@ -1,5 +1,8 @@
 # QR Code Download — Feature Plan
 
+> **Status: SHIPPED.** `GET /qr/{linkId}` (Admin) and the equivalent frontend download exist, PNG and
+> SVG, with a format picker. This document is the design record, not upcoming work.
+
 Give link owners a QR code for any short link, downloadable as **PNG** (raster, easy to embed/print)
 or **SVG** (scalable) so they can choose per use-case.
 

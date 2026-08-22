@@ -1,15 +1,24 @@
 # Privacy-Respecting Visit Analytics — Feature Plan (reconciled with Phase 0)
 
+> **Status: ✅ SHIPPED — verified against the live code 2026-08-03**, not just marked done. Confirmed
+> directly: `VisitEntity`/`UserVisitEntity` carry no raw `Referrer`/`UserAgent` columns at all, only the
+> derived fields below; `BackgroundVisitWriter.Derive()` only ever assigns the derived values onto the
+> persisted entity, never the raw ones; a privacy signal (DNT/Sec-GPC) nulls every dimension column, not
+> just one; all four enrichment services (`UserAgentParser`, `ReferrerReducer`, `LanguageReducer`,
+> `MaxMindGeoIpResolver`) exist and are wired in — `MaxMindGeoIpResolver` is a real implementation, not
+> the no-op default this doc originally scoped as acceptable to ship without; Admin's `ClicksTable` reads
+> only `ReferrerHost`, no raw referrer anywhere in the markup. The rest of this document is the design
+> rationale and is still accurate — read it as "what we built and why," not "what we're about to build."
+
 Extract genuinely useful analytics from redirect requests **without building a fingerprint of the
 end-user**. The guiding principle already exists in the codebase: `HashIp` (`BackgroundVisitWriter`)
 keeps only the analytic value of the IP under an HMAC (secret pepper + hourly-rotating component) and
 the raw IP never reaches the database. This plan extends that **"derive at the edge, discard the raw"**
 discipline to every other request signal.
 
-> **Status:** this is **Phase 0.5** — it hardens the exact pipeline Phase 0 built. Phase 0 already
-> derives *some* dimensions but still persists the raw signals alongside them; this plan closes that
-> gap. It is independent of the social work and should land **before Social Phase 1** (which only adds
-> more data surface). See [SOCIAL_INTEGRATIONS_PLAN.md](SOCIAL_INTEGRATIONS_PLAN.md).
+~~**Status:** this is **Phase 0.5**~~ — superseded by the banner above; this is now Social Phase 1+'s
+verified prerequisite, already landed, not an upcoming gate. See
+[SOCIAL_INTEGRATIONS_PLAN.md](SOCIAL_INTEGRATIONS_PLAN.md).
 
 ## Where Phase 0 already got us (do not rebuild)
 Phase 0 (shipped) introduced derive-at-ingest for two signals, in `BackgroundVisitWriter.FlushAsync`
@@ -124,11 +133,14 @@ legitimately keeps per-visit rows — consented, tied to a recipient code. Track
 Unblocks the still-open retention policy: keep per-visit detail briefly, then roll up into aggregates
 and drop rows. The derived columns above are the rollup dimensions. Out of scope here beyond noting it.
 
-## Open decision — GeoIP provider
+## ~~Open decision~~ Resolved — GeoIP provider
+**Decided and shipped: MaxMind GeoLite2**, local `.mmdb`, per the recommendation below —
+`MaxMindGeoIpResolver` is a real implementation in the codebase today, not the no-op default this plan
+scoped as acceptable to launch without. Kept for the record:
 - **MaxMind GeoLite2** (local `.mmdb`, no per-request network, needs license key + DB in the image), or
 - a **lookup API** (no bundled DB, adds latency + a third party sees IPs — weaker posture).
 
-Recommendation: **GeoLite2 local DB** (keeps IPs in-process). Ships last; everything else is independent.
+Recommendation was **GeoLite2 local DB** (keeps IPs in-process) — that's what shipped.
 
 ## Tests
 - Parsers: UA → `{Browser,Os,Device,IsBot}` incl. bot detection; referrer → host (`null` on garbage);

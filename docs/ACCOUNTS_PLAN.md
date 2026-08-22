@@ -1,5 +1,9 @@
 # Plan: Accounts, Memberships & Roles (multi-user portals)
 
+> **Status: SHIPPED.** Accounts/Memberships/Roles (Owner/Admin/Member/Viewer), account switching, and
+> invite/role-change/remove all exist and are live in both Admin and the Next.js frontend. This document
+> is the design rationale for how that model was arrived at, not an upcoming plan.
+
 ## Goal
 Let users be **added from the dashboard** with two semantics:
 - **Superuser** adds a user → creates a **new account** (independent context) with that user as its Owner.

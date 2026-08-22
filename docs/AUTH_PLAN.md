@@ -1,5 +1,10 @@
 # Plan: Framework-Agnostic Auth API (bring-your-own-frontend)
 
+> **Status: SHIPPED.** The `/auth/*` session API (magic-link → session → refresh, JWT cookies) is live
+> and is exactly what the private `ShortLynx.Hosted` repo's Next.js frontend authenticates against —
+> the "bring your own frontend" scenario this plan set out to enable is a real, running example now,
+> not a hypothetical. Admin also still works exactly as before, unaffected.
+
 ## Goal
 Make `ShortLynx.Core` a **complete backend** that any frontend framework (Next.js, SvelteKit, native,
 …) can authenticate users against and drive. The Blazor `Admin`/`Web` apps remain the **low-config

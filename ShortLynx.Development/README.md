@@ -1,5 +1,12 @@
 # ShortLynx — Implementation Plan
 
+> **Status: HISTORICAL — all 8 phases below shipped long ago.** This was the original pre-implementation
+> plan for the whole product; every phase it describes (data layer, services, redirect pipeline, link
+> API, Admin UI, Web public site, operations) has been built, extended well past what's written here, and
+> is live in production. Kept for the record of the original design reasoning, not as a guide to current
+> or upcoming work — see `CLAUDE.md` for the actual current architecture, and `docs/*_PLAN.md` for
+> individual features that came after this initial build.
+
 ## Phases
 
 | # | File | Summary |

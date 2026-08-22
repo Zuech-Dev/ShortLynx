@@ -9,10 +9,8 @@ For build/run commands and the Tailwind workflow, see [CLAUDE.md](CLAUDE.md). Fo
 [DEPLOY.md](DEPLOY.md). For the original design rationale, see [DESIGN.md](DESIGN.md) and
 [ShortLynx.Development/](ShortLynx.Development/).
 
-> **CLAUDE.md's architecture table has drifted from reality.** Where the two disagree, this document
-> is the one that was checked against the code. Specifically: entities live in `ShortLynx.Data`, not
-> `ShortLynx.Models` (which is empty); there is no SQLite migrations project; and the default
-> configured provider is SQLite, not PostgreSQL. Fixing that table is a welcome first PR.
+> CLAUDE.md and this document are checked against each other periodically; last verified 2026-08-22.
+> Where the two ever disagree, re-check both against the code rather than trusting either on faith.
 
 ---
 
@@ -47,7 +45,7 @@ Nine projects. The dependency graph is strictly acyclic and deliberately shallow
 | `ShortLynx.Core` | REST API — MVC controllers, API-key + JWT auth | Data, Repository, Services, Data.PostgreSql |
 | `ShortLynx.Admin` | Blazor Server dashboard, magic-link auth | same |
 | `ShortLynx.Web` | Public site + the `/{code}` redirect hot path | same |
-| `ShortLynx.Tests` | All 780 tests, every layer | Admin, Core, Data, Repository, Services |
+| `ShortLynx.Tests` | All 833 tests, every layer | Admin, Core, Data, Repository, Services |
 | `ShortLynx.Models` | **Empty.** Zero files, zero references. | — |
 
 `ShortLynx.Models` is a vestigial scaffold project. It is still `IsPackable`, so an empty NuGet
@@ -233,7 +231,7 @@ Worked example: a new account-scoped resource exposed on the API and the dashboa
 
 ### Testing
 
-780 tests, xUnit, in `ShortLynx.Tests`. Mirror the structure of what you're testing
+833 tests, xUnit, in `ShortLynx.Tests`. Mirror the structure of what you're testing
 (`Services/`, `Api/`, `Repository/`, `Admin/`, `Data/`).
 
 - **Unit** — `TestDatabase.CreateAsync()` gives a shared in-memory SQLite database; `CreateContext()`

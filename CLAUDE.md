@@ -75,7 +75,10 @@ ShortLynx is a self-hosted .NET 10 short-link service with two link modes:
 | `ShortLynx.Web` | Razor Pages public site — serves `/{code}` redirects. Default front end, replaceable, but nothing else serves redirects |
 | `ShortLynx.Tests` | The whole test suite — API integration (`WebApplicationFactory`), services, data |
 
-Database migrations live in separate per-provider projects (PostgreSQL default, SQLite for dev). Provider wiring is isolated to the composition root via an `AddShortLynxDatabase()` extension method.
+Only PostgreSQL has a dedicated migrations project (`ShortLynx.Data.PostgreSql`) — SQLite has none and is
+wired directly via `UseSqlite()`. SQLite, not PostgreSQL, is the default when `Database:Provider` is
+unset (local dev/tests; production sets it to `postgresql`). Provider wiring is isolated to the
+composition root via an `AddShortLynxDatabase()` extension method.
 
 ### Redirect pipeline
 

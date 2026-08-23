@@ -1,0 +1,142 @@
+@page "/blog/email-click-tracking-without-a-crm"
+@model EmailClickTrackingWithoutCrmModel
+@{
+    ViewData["Title"] = "Email Click Tracking Without a CRM";
+    var canonical = $"{Request.Scheme}://{Request.Host}/blog/email-click-tracking-without-a-crm";
+    var desc = "How to see which specific recipient clicked a link in an email you sent — without " +
+               "Outreach, Salesloft, or any CRM. Per-recipient short links, explained.";
+}
+
+@section Head {
+    <meta name="description" content="@desc"/>
+    <meta name="keywords" content="email click tracking, cold email tracking, sales outreach link tracking, per-recipient click attribution, track who clicked my link"/>
+    <link rel="canonical" href="@canonical"/>
+    <meta name="robots" content="index, follow"/>
+
+    <meta property="og:type" content="article"/>
+    <meta property="og:site_name" content="ShortLynx"/>
+    <meta property="og:title" content="@ViewData["Title"]"/>
+    <meta property="og:description" content="@desc"/>
+    <meta property="og:url" content="@canonical"/>
+    <meta property="og:image" content="https://shrtlynx.com/og-image.png"/>
+    <meta name="twitter:card" content="summary_large_image"/>
+    <meta name="twitter:title" content="@ViewData["Title"]"/>
+    <meta name="twitter:description" content="@desc"/>
+    <meta name="twitter:image" content="https://shrtlynx.com/og-image.png"/>
+
+    @Html.Raw($"<script type=\"application/ld+json\">{Model.FaqJsonLd}</script>")
+}
+
+<article class="max-w-2xl mx-auto py-14">
+    <p class="text-gray-400 text-xs">2026-08-22</p>
+    <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight mt-2">Email click tracking without a CRM</h1>
+    <p class="text-lg text-gray-600 mt-4">
+        You send twenty personalized outreach emails, each with a link. Three days later you want
+        one answer: <em>which of the twenty clicked?</em> Not "the link got 3 clicks" — which three
+        people. Here's how to get that answer without buying an enterprise sales platform.
+    </p>
+
+    <div class="prose-content mt-10 space-y-6 text-gray-800">
+        <h2 class="text-xl font-bold">The problem with aggregate click tracking</h2>
+        <p>
+            Paste any link into Bitly, TinyURL, or almost any shortener, and it'll tell you the link
+            was clicked N times, roughly where from, on what kind of device. That's the right answer
+            for a link on a landing page or a social post, where "who" doesn't mean anything — anyone
+            could have clicked it.
+        </p>
+        <p>
+            It's the wrong shape of answer for outreach. If you send the <em>same</em> short link to
+            twenty people, a click count of 3 tells you 3 people clicked <em>something</em> — not
+            which three. To know that, the click has to be attributable to an individual before it
+            happens, not inferred after the fact.
+        </p>
+
+        <h2 class="text-xl font-bold">Why this usually means buying a CRM feature</h2>
+        <p>
+            Tools like Outreach and Salesloft solve this by tying every link to a contact record in
+            their platform — the attribution is a side effect of everything already living inside a
+            CRM. That works, but it means the tracking capability is locked behind adopting the whole
+            platform: importing contacts, running sequences through it, paying per seat. If your
+            workflow is a normal mail client and a spreadsheet, that's a lot of infrastructure to
+            adopt just to answer one question.
+        </p>
+
+        <h2 class="text-xl font-bold">The actual mechanism: one short code per recipient</h2>
+        <p>
+            The technique itself doesn't need a CRM — it needs a short code minted per recipient
+            rather than per link. Instead of one <code>shrtlynx.com/abc123</code> shared by everyone,
+            each recipient gets their own: <code>shrtlynx.com/abc123</code> for Alice,
+            <code>shrtlynx.com/x9k2m1</code> for Bob, and so on, all pointing at the same destination
+            URL. The moment one resolves, you know exactly whose code it was.
+        </p>
+        <p>
+            Two things make this practical instead of tedious:
+        </p>
+        <ul class="list-disc pl-6 space-y-2">
+            <li>
+                <strong>No login required from the recipient.</strong> The attribution comes from
+                which code they clicked, not from who they authenticate as. They never see a sign-in
+                screen — the link just goes to your destination, same as any other short link would.
+            </li>
+            <li>
+                <strong>Codes are provisioned in bulk, not one at a time.</strong> In ShortLynx, you
+                paste a list of recipients (an email, or any label you'll recognize) and get every
+                short URL back at once — the same motion as a mail merge, not twenty separate manual
+                steps.
+            </li>
+        </ul>
+
+        <h2 class="text-xl font-bold">Walkthrough</h2>
+        <ol class="list-decimal pl-6 space-y-2">
+            <li>Create a link, choosing <strong>User-attributed</strong> as the type.</li>
+            <li>
+                Under <strong>Provision codes</strong>, paste one recipient per line — an email
+                address or any label you'll recognize later.
+            </li>
+            <li>Copy each recipient's unique URL into <em>their</em> email — this is the mail-merge step.</li>
+            <li>
+                Send. The link detail page's analytics now show which recipients clicked, and —
+                just as usefully — which didn't, so you know who to follow up with.
+            </li>
+        </ol>
+
+        <h2 class="text-xl font-bold">The consent question, and why it isn't optional here</h2>
+        <p>
+            Tracking who clicked a link you sent someone is a real privacy decision, not a neutral
+            feature — the recipient didn't opt into being tracked just by receiving an email. This is
+            why ShortLynx enforces a disclosure interstitial by default on user-attributed links: if
+            you haven't published a privacy policy that covers link tracking, recipients see a
+            disclosure screen before the redirect completes and can decline to be tracked — the
+            destination still loads either way. Once you've published a policy that covers it, that
+            screen is skipped. The point isn't to make tracking hard; it's to make it impossible to
+            do by accident, silently.
+        </p>
+
+        <h2 class="text-xl font-bold">A more reliable signal than open tracking</h2>
+        <p>
+            Worth saying directly: if your current approach to this is an email open-tracking pixel,
+            per-recipient click links are simply the more reliable of the two. A pixel requires the
+            recipient's mail client to fetch a remote image — and Apple Mail Privacy Protection
+            pre-fetches every image for every message regardless of whether it was actually opened,
+            which has made "open rate" a number that measures something closer to "which provider
+            they use" than genuine engagement. A click requires a deliberate action from the
+            recipient. It's a cleaner question with a cleaner answer.
+        </p>
+    </div>
+
+    <div class="mt-14 pt-8 border-t space-y-5">
+        <h2 class="text-xl font-bold">Frequently asked questions</h2>
+        @foreach (var (q, a) in Model.Faq)
+        {
+            <div>
+                <h3 class="font-semibold">@q</h3>
+                <p class="text-gray-600 text-sm mt-1">@a</p>
+            </div>
+        }
+    </div>
+
+    <div class="mt-14 pt-8 border-t text-center">
+        <a class="btn btn-primary" href="https://shortlynx.dev/beta" rel="noopener">Try it — get started</a>
+        <a class="btn btn-outline ml-2" href="/blog">← Back to the blog</a>
+    </div>
+</article>

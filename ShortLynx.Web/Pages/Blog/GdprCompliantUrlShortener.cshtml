@@ -1,0 +1,140 @@
+@page "/blog/gdpr-compliant-url-shortener"
+@model GdprCompliantUrlShortenerModel
+@{
+    ViewData["Title"] = "What Actually Makes a URL Shortener Privacy-First";
+    var canonical = $"{Request.Scheme}://{Request.Host}/blog/gdpr-compliant-url-shortener";
+    var desc = "Most URL shorteners store the raw IP and full user-agent of every click. Here's " +
+               "what changes technically — not just in a privacy policy — when a shortener is " +
+               "built not to.";
+}
+
+@section Head {
+    <meta name="description" content="@desc"/>
+    <meta name="keywords" content="gdpr url shortener, privacy first link shortener, gdpr compliant link tracking, anonymize ip address click tracking, k-anonymity analytics"/>
+    <link rel="canonical" href="@canonical"/>
+    <meta name="robots" content="index, follow"/>
+
+    <meta property="og:type" content="article"/>
+    <meta property="og:site_name" content="ShortLynx"/>
+    <meta property="og:title" content="@ViewData["Title"]"/>
+    <meta property="og:description" content="@desc"/>
+    <meta property="og:url" content="@canonical"/>
+    <meta property="og:image" content="https://shrtlynx.com/og-image.png"/>
+    <meta name="twitter:card" content="summary_large_image"/>
+    <meta name="twitter:title" content="@ViewData["Title"]"/>
+    <meta name="twitter:description" content="@desc"/>
+    <meta name="twitter:image" content="https://shrtlynx.com/og-image.png"/>
+
+    @Html.Raw($"<script type=\"application/ld+json\">{Model.FaqJsonLd}</script>")
+}
+
+<article class="max-w-2xl mx-auto py-14">
+    <p class="text-gray-400 text-xs">2026-08-22</p>
+    <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight mt-2">What actually makes a URL shortener privacy-first</h1>
+    <p class="text-lg text-gray-600 mt-4">
+        <strong>Not legal advice</strong> — this is an engineering description of what a shortener's
+        redirect pipeline can and can't do to reduce privacy risk. Whether any of it satisfies GDPR,
+        CCPA, or another regime for your specific use case is a question for someone qualified to
+        answer it about your organization, not this page.
+    </p>
+
+    <div class="prose-content mt-10 space-y-6 text-gray-800">
+        <h2 class="text-xl font-bold">What most shorteners actually store</h2>
+        <p>
+            Every click through a shortener carries an IP address and a User-Agent header, because
+            HTTP requires them. The question that matters is what happens to them after the redirect
+            fires. Many shorteners' answer is: they get logged, in full, indefinitely — a raw IP and a
+            raw User-Agent string sitting in a database row, tied to a timestamp and a link. That's
+            not a bug exactly, it's just the default outcome of not deciding to do anything else.
+        </p>
+        <p>
+            A raw IP address is personal data under GDPR — it's specifically named in Recital 30 as
+            an example of an online identifier. A full User-Agent string is often precise enough to
+            narrow down to a small set of individuals when combined with other data. Neither is
+            anonymous just because it looks like a technical artifact rather than a name.
+        </p>
+
+        <h2 class="text-xl font-bold">The design choice: derive, then discard</h2>
+        <p>
+            The alternative isn't "don't collect anything" — an analytics product needs to answer
+            "how many clicks, from where, on what kind of device." The alternative is to compute the
+            low-entropy answer to that question at write time and then discard the high-entropy raw
+            input that produced it, rather than keeping both.
+        </p>
+        <p>
+            Concretely, at redirect time:
+        </p>
+        <ul class="list-disc pl-6 space-y-2">
+            <li>
+                The raw IP is run through HMAC-SHA256 with a secret server-side key, and the current
+                hour is folded into the input before hashing. The stored value is the hash, not the
+                IP — and because the hour is part of the input, the same visitor produces a
+                <em>different</em> hash each hour, which limits how far a stored hash can be used to
+                link someone's activity across time even by someone with access to the hashes
+                themselves. The raw IP is never written to disk.
+            </li>
+            <li>
+                The full User-Agent string is parsed into coarse categories — device class, browser
+                family, OS family — and only the categories are kept. "Mobile · Safari · iOS" is
+                stored; the exact User-Agent string, which can be specific enough to fingerprint a
+                device, is not.
+            </li>
+            <li>
+                The full referring URL is reduced to its host — <code>twitter.com</code>, not the
+                full URL with whatever query parameters or path it carried, some of which can contain
+                session tokens or search terms.
+            </li>
+        </ul>
+        <p>
+            None of the raw values are recoverable afterward, because they were never stored in the
+            first place — this isn't a retention policy that deletes them later, it's that they never
+            exist as a row on disk to begin with.
+        </p>
+
+        <h2 class="text-xl font-bold">Honoring the signal a visitor already sent</h2>
+        <p>
+            Browsers can send Do Not Track or Global Privacy Control headers, and a lot of
+            infrastructure quietly ignores them. When either is present, ShortLynx still counts the
+            click for aggregate volume — a link's total click count stays accurate — but records
+            none of the categorized dimensions above for that click. The signal costs nothing to
+            honor and it's the one direct, unambiguous statement of intent a visitor can send without
+            a cookie banner in the way.
+        </p>
+
+        <h2 class="text-xl font-bold">k-anonymity: the part that protects the report, not just the row</h2>
+        <p>
+            Hashing individual clicks well doesn't automatically make an <em>aggregate report</em>
+            safe. A campaign with 12 total clicks, broken down by country, can still show "1 click
+            from Iceland" — a number small enough to functionally identify a specific person if the
+            audience is known. Every breakdown — in the dashboard, the API, and CSV exports alike —
+            folds any value seen fewer than 10 times into an "Other" bucket instead of showing it
+            directly. The report stays useful; a single row just can't single someone out.
+        </p>
+
+        <h2 class="text-xl font-bold">What this doesn't solve</h2>
+        <p>
+            This whole approach lives entirely in one redirect pipeline. It has nothing to say about
+            how you store recipient email addresses if you're running user-attributed links, what
+            your account data retention looks like, whether you have a lawful basis for the outreach
+            campaign itself, or any of the other genuinely hard parts of actual compliance work.
+            Reducing what a link-tracking tool retains is one input to that picture, not the whole
+            picture — see the disclaimer at the top of this page.
+        </p>
+    </div>
+
+    <div class="mt-14 pt-8 border-t space-y-5">
+        <h2 class="text-xl font-bold">Frequently asked questions</h2>
+        @foreach (var (q, a) in Model.Faq)
+        {
+            <div>
+                <h3 class="font-semibold">@q</h3>
+                <p class="text-gray-600 text-sm mt-1">@a</p>
+            </div>
+        }
+    </div>
+
+    <div class="mt-14 pt-8 border-t text-center">
+        <a class="btn btn-primary" href="https://shortlynx.dev/beta" rel="noopener">Try it — get started</a>
+        <a class="btn btn-outline ml-2" href="/blog">← Back to the blog</a>
+    </div>
+</article>

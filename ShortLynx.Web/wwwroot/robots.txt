@@ -6,6 +6,9 @@ User-agent: *
 Allow: /$
 Allow: /Privacy
 Allow: /DataDeletion
+Allow: /bitly-alternative
+Allow: /tinyurl-alternative
+Allow: /blog
 Disallow: /c/
 Disallow: /disclosure/
 Disallow: /health

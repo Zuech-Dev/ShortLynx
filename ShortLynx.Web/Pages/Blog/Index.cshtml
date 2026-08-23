@@ -1,0 +1,42 @@
+@page "/blog"
+@model IndexModel
+@{
+    ViewData["Title"] = "Blog";
+    var canonical = $"{Request.Scheme}://{Request.Host}/blog";
+    var desc = "Notes on link tracking, privacy-first analytics, and building a self-hosted alternative to Bitly and TinyURL.";
+}
+
+@section Head {
+    <meta name="description" content="@desc"/>
+    <link rel="canonical" href="@canonical"/>
+    <meta name="robots" content="index, follow"/>
+    <meta property="og:type" content="website"/>
+    <meta property="og:site_name" content="ShortLynx"/>
+    <meta property="og:title" content="ShortLynx Blog"/>
+    <meta property="og:description" content="@desc"/>
+    <meta property="og:url" content="@canonical"/>
+    <meta property="og:image" content="https://shrtlynx.com/og-image.png"/>
+    <meta name="twitter:card" content="summary_large_image"/>
+    <meta name="twitter:title" content="ShortLynx Blog"/>
+    <meta name="twitter:description" content="@desc"/>
+    <meta name="twitter:image" content="https://shrtlynx.com/og-image.png"/>
+}
+
+<section class="pt-14 pb-10 max-w-3xl mx-auto">
+    <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight">Blog</h1>
+    <p class="text-gray-600 mt-4">Notes on link tracking, privacy-first analytics, and building a self-hosted alternative to Bitly and TinyURL.</p>
+</section>
+
+<section class="pb-16 max-w-3xl mx-auto space-y-8">
+    @foreach (var post in Model.Posts)
+    {
+        <article class="border-t pt-6">
+            <p class="text-gray-400 text-xs">@post.Date</p>
+            <h2 class="text-xl font-bold mt-1">
+                <a href="@post.Url" class="hover:text-blue-700">@post.Title</a>
+            </h2>
+            <p class="text-gray-600 text-sm mt-2">@post.Excerpt</p>
+            <a href="@post.Url" class="text-blue-700 text-sm font-medium hover:underline mt-2 inline-block">Read more →</a>
+        </article>
+    }
+</section>

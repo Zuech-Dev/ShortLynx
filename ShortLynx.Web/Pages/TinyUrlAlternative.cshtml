@@ -1,0 +1,121 @@
+@page "/tinyurl-alternative"
+@model TinyUrlAlternativeModel
+@{
+    ViewData["Title"] = "TinyURL Alternative — Free Short Links With Real Analytics";
+    var canonical = $"{Request.Scheme}://{Request.Host}/tinyurl-alternative";
+    var desc = "Looking for a TinyURL alternative with more than a click counter? ShortLynx is free " +
+               "to self-host, with real analytics, per-recipient click attribution, and a " +
+               "privacy-first design — no raw IP addresses stored, ever.";
+}
+
+@section Head {
+    <meta name="description" content="@desc"/>
+    <meta name="keywords" content="tinyurl alternative, free url shortener, tinyurl vs shortlynx, self-hosted url shortener, link shortener with analytics, custom short url"/>
+    <link rel="canonical" href="@canonical"/>
+    <meta name="robots" content="index, follow"/>
+
+    <meta property="og:type" content="website"/>
+    <meta property="og:site_name" content="ShortLynx"/>
+    <meta property="og:title" content="@ViewData["Title"]"/>
+    <meta property="og:description" content="@desc"/>
+    <meta property="og:url" content="@canonical"/>
+    <meta property="og:image" content="https://shrtlynx.com/og-image.png"/>
+    <meta property="og:image:width" content="1200"/>
+    <meta property="og:image:height" content="630"/>
+    <meta name="twitter:card" content="summary_large_image"/>
+    <meta name="twitter:title" content="@ViewData["Title"]"/>
+    <meta name="twitter:description" content="@desc"/>
+    <meta name="twitter:image" content="https://shrtlynx.com/og-image.png"/>
+
+    @Html.Raw($"<script type=\"application/ld+json\">{Model.FaqJsonLd}</script>")
+}
+
+<section class="text-center pt-14 pb-10">
+    <p class="text-blue-700 font-semibold tracking-wide uppercase text-sm mb-3">TinyURL alternative</p>
+    <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight max-w-3xl mx-auto">
+        Just as free. A lot more capable.
+    </h1>
+    <p class="text-lg text-gray-600 max-w-2xl mx-auto mt-5">
+        ShortLynx matches TinyURL on price — free — and adds what TinyURL's free tier doesn't:
+        real click analytics, custom domains, and per-recipient attribution. Self-host it, and
+        every tier's limits disappear too.
+    </p>
+    <div class="flex flex-wrap gap-3 justify-center mt-8">
+        <a class="btn btn-primary" href="https://shortlynx.dev/beta" rel="noopener">Get started</a>
+        <a class="btn btn-outline" href="https://github.com/Zuech-Dev/ShortLynx" rel="noopener">Self-host it free →</a>
+    </div>
+</section>
+
+<section class="max-w-3xl mx-auto py-10 border-t">
+    <h2 class="text-2xl font-bold text-center">Where TinyURL's simplicity stops being enough</h2>
+    <p class="text-gray-600 mt-4">
+        TinyURL earned its reputation the honest way: no signup, no friction, a link in seconds.
+        That's genuinely the right tool for a one-off share. It stops being the right tool the
+        moment you want to know more than "did people click" — how many, from where, on what
+        device, and (if you're running outreach) <em>which specific person</em>. That's where a
+        click counter runs out of road and an analytics platform starts.
+    </p>
+</section>
+
+<section class="py-10 border-t">
+    <h2 class="text-2xl font-bold text-center">ShortLynx vs. TinyURL, feature by feature</h2>
+    <div class="overflow-x-auto mt-8 max-w-4xl mx-auto">
+        <table class="w-full text-sm border">
+            <thead>
+                <tr class="bg-gray-50 text-left">
+                    <th class="p-3">&nbsp;</th>
+                    <th class="p-3 font-semibold text-blue-700">ShortLynx</th>
+                    <th class="p-3 font-semibold">TinyURL</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var row in Model.Comparison)
+                {
+                    <tr class="border-t">
+                        <td class="p-3 font-medium">@row.Feature</td>
+                        <td class="p-3 text-blue-700">@row.Us</td>
+                        <td class="p-3 text-gray-600">@row.TinyUrl</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    <p class="text-gray-400 text-xs text-center mt-4">
+        TinyURL figures reflect publicly listed pricing/features at time of writing and may have
+        changed — verify against tinyurl.com before deciding.
+    </p>
+</section>
+
+<section class="py-10 border-t text-center">
+    <h2 class="text-2xl font-bold">Free doesn't have to mean basic</h2>
+    <p class="text-gray-600 max-w-2xl mx-auto mt-3">
+        Self-hosting ShortLynx costs nothing and unlocks every tier's feature set — custom domains,
+        campaigns, social publishing with per-post attribution, the full analytics breakdown, all of
+        it, with no quota. If you'd rather not run a server, the hosted Free tier still gets you
+        real analytics TinyURL's free tier doesn't offer, at the same price: $0.
+    </p>
+</section>
+
+<section class="py-10 border-t max-w-3xl mx-auto">
+    <h2 class="text-2xl font-bold text-center">Frequently asked questions</h2>
+    <div class="mt-8 space-y-5">
+        @foreach (var (q, a) in Model.Faq)
+        {
+            <div>
+                <h3 class="font-semibold">@q</h3>
+                <p class="text-gray-600 text-sm mt-1">@a</p>
+            </div>
+        }
+    </div>
+</section>
+
+<section class="py-12 border-t text-center">
+    <h2 class="text-2xl font-bold">See the rest of ShortLynx</h2>
+    <p class="text-gray-600 max-w-xl mx-auto mt-3">
+        Full feature list, pricing, and a side-by-side with Bitly too.
+    </p>
+    <div class="flex flex-wrap gap-3 justify-center mt-6">
+        <a class="btn btn-primary" href="/">Back to the homepage</a>
+        <a class="btn btn-outline" href="/bitly-alternative">ShortLynx vs. Bitly →</a>
+    </div>
+</section>

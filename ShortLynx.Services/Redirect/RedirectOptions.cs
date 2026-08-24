@@ -19,4 +19,13 @@ public class RedirectOptions
     /// product points its own shrtlynx.com at shortlynx.dev); leave unset otherwise.
     /// </summary>
     public string? NotFoundRedirectUrl { get; set; }
+
+    /// <summary>
+    /// Where to send a visitor hitting the homepage to learn about or buy the product, as opposed to
+    /// a redirect-service visitor following a short link. Null/empty (the default) renders this
+    /// deployment's own Index page — the OSS self-host pitch, unaffected. Set per-deployment (the
+    /// hosted product points its own shrtlynx.com at shortlynx.dev, its actual marketing surface) --
+    /// leave unset for a normal self-hosted instance, which has no separate marketing site to point at.
+    /// </summary>
+    public string? MarketingRedirectUrl { get; set; }
 }

@@ -249,6 +249,13 @@ Dashboard__PublicBaseUrl       = https://<short-domain>      # builds full short
 # defaulted to anything by this project on your behalf — this is the OSS app every self-hoster runs,
 # so a baked-in fallback here would send someone else's visitors to a URL they never chose.
 Redirect__NotFoundRedirectUrl = https://your-site.example
+
+# Optional — unset (the default) renders this app's own Index page at "/", the self-host pitch.
+# The hosted product sets this on its own shrtlynx.com deployment to send homepage visitors to
+# shortlynx.dev, the actual marketing/sales surface (see ShortLynx.Hosted's docs/SEO_PLAN.md §2).
+# 301 (permanent), not a 302 — this is a durable "content moved" relationship, unlike short-code
+# redirects, which stay 302 so they can be re-pointed.
+Redirect__MarketingRedirectUrl = https://your-marketing-site.example
 ```
 
 > Optional `CustomDomain__VerificationHostLabel` / `CustomDomain__TxtValuePrefix` override the TXT record host/value shown to users; defaults (`_shortlynx-verify` / `shortlynx-verify=`) are fine.

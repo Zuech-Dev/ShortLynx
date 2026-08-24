@@ -45,7 +45,7 @@ Nine projects. The dependency graph is strictly acyclic and deliberately shallow
 | `ShortLynx.Core` | REST API — MVC controllers, API-key + JWT auth | Data, Repository, Services, Data.PostgreSql |
 | `ShortLynx.Admin` | Blazor Server dashboard, magic-link auth | same |
 | `ShortLynx.Web` | Public site + the `/{code}` redirect hot path | same |
-| `ShortLynx.Tests` | All 833 tests, every layer | Admin, Core, Data, Repository, Services |
+| `ShortLynx.Tests` | All 836 tests, every layer | Admin, Core, Data, Repository, Services, Web |
 | `ShortLynx.Models` | **Empty.** Zero files, zero references. | — |
 
 `ShortLynx.Models` is a vestigial scaffold project. It is still `IsPackable`, so an empty NuGet
@@ -231,7 +231,7 @@ Worked example: a new account-scoped resource exposed on the API and the dashboa
 
 ### Testing
 
-833 tests, xUnit, in `ShortLynx.Tests`. Mirror the structure of what you're testing
+836 tests, xUnit, in `ShortLynx.Tests`. Mirror the structure of what you're testing
 (`Services/`, `Api/`, `Repository/`, `Admin/`, `Data/`).
 
 - **Unit** — `TestDatabase.CreateAsync()` gives a shared in-memory SQLite database; `CreateContext()`

@@ -1,14 +1,13 @@
 # ShortLynx — https://shrtlynx.com
-# The marketing pages are indexable. Short-code redirect paths are not worth
-# crawling (they 302 straight to third-party destinations), so keep bots on the
-# public content and out of the redirect namespaces.
+# This deployment is the redirect service; the product's marketing/sales content lives at
+# https://shortlynx.dev (Redirect:MarketingRedirectUrl sends "/" there with a 301). Privacy/
+# DataDeletion stay here since they describe what this redirect service itself does with visitor
+# data, not marketing content. Short-code redirect paths are not worth crawling (they 302 straight
+# to third-party destinations), so keep bots out of the redirect namespaces.
 User-agent: *
 Allow: /$
 Allow: /Privacy
 Allow: /DataDeletion
-Allow: /bitly-alternative
-Allow: /tinyurl-alternative
-Allow: /blog
 Disallow: /c/
 Disallow: /disclosure/
 Disallow: /health

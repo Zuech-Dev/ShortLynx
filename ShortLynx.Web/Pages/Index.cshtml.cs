@@ -1,8 +1,11 @@
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.Extensions.Options;
+using ShortLynx.Services.Redirect;
 
 namespace ShortLynx.Web.Pages;
 
-public class IndexModel : PageModel
+public class IndexModel(IOptions<RedirectOptions> redirectOptions) : PageModel
 {
     public sealed record Tier(string Name, string Price, string Period, string[] Points, bool Featured = false);
     public sealed record ComparisonRow(string Feature, string Us, string Bitly, string TinyUrl);
@@ -67,8 +70,13 @@ public class IndexModel : PageModel
     /// <summary>Absolute URL of this page, for the canonical link and OpenGraph/JSON-LD tags.</summary>
     public string Canonical { get; private set; } = "https://shrtlynx.com/";
 
-    public void OnGet()
+    public IActionResult OnGet()
     {
+        var marketingUrl = redirectOptions.Value.MarketingRedirectUrl;
+        if (!string.IsNullOrWhiteSpace(marketingUrl))
+            return RedirectPermanent(marketingUrl);
+
         Canonical = $"{Request.Scheme}://{Request.Host}/";
+        return Page();
     }
 }

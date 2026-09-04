@@ -28,7 +28,7 @@ public class MeAccountController(IAccountService accounts) : SessionControllerBa
         {
             var account = await accounts.UpdateAccountAsync(
                 AccountId, request.Name, request.PrivacyPolicyUrl, request.TermsOfServiceUrl,
-                request.ConfirmsDisclosure, ct);
+                request.ConfirmsDisclosure, request.EnableCityAggregates, ct);
             return account is null ? NotFound() : Ok(ToResponse(account));
         }
         catch (ArgumentException ex)
@@ -38,5 +38,5 @@ public class MeAccountController(IAccountService accounts) : SessionControllerBa
     }
 
     private static AccountSettingsResponse ToResponse(AccountEntity a)
-        => new(a.Id, a.Name, a.PrivacyPolicyUrl, a.TermsOfServiceUrl);
+        => new(a.Id, a.Name, a.PrivacyPolicyUrl, a.TermsOfServiceUrl, a.EnableCityAggregates);
 }

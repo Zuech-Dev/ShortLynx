@@ -18,7 +18,7 @@
     <li>The timestamp of the click.</li>
     <li>
         A one-way <strong>cryptographic hash</strong> of the visitor's IP address (keyed with a secret
-        pepper, rotating hourly). The raw IP address is <strong>never stored</strong>. This hash cannot be
+        pepper, rotating daily). The raw IP address is <strong>never stored</strong>. This hash cannot be
         reversed to recover the original IP and is used only to estimate unique visitors and to filter
         automated traffic.
     </li>
@@ -28,6 +28,12 @@
         system family, primary language, and — where our infrastructure supports it — country. We derive
         these categories once and discard the underlying raw values (the full User-Agent string and the
         full referring URL are never stored).
+    </li>
+    <li>
+        If the operator of this link has opted in, clicks may also be aggregated by city (in addition to
+        country) — never for links created in "user-attributed" mode, and a city is only ever shown once
+        enough distinct visitors from it have clicked to protect anonymity. This is never recorded on an
+        individual click record, only in a separate aggregate count.
     </li>
     <li>
         For links created in "user-attributed" mode (used for outreach and sales tracking), the specific

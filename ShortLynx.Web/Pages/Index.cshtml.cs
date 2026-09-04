@@ -12,10 +12,10 @@ public class IndexModel(IOptions<RedirectOptions> redirectOptions) : PageModel
 
     public (string Title, string Body)[] Privacy { get; } =
     [
-        ("IPs are never stored raw", "Every IP is HMAC-hashed with a secret server key, with the current hour folded in — so the same visitor hashes to a different value each hour. The raw address never touches disk."),
+        ("IPs are never stored raw", "Every IP is HMAC-hashed with a secret server key, with the current day folded in — so the same visitor hashes to a different value each day. The raw address never touches disk."),
         ("DNT & GPC honored", "Do Not Track and Global Privacy Control are respected: the click still counts, every dimension is dropped."),
         ("k-anonymity (k=10)", "Any breakdown value seen fewer than 10 times folds into “Other” — in the dashboard, the API, and exports."),
-        ("No sub-country geography", "Country and timezone only. Never region, city, or coordinates — that's fingerprinting in low-traffic contexts."),
+        ("No sub-country geography by default", "Country and timezone only, on every click record — never coordinates or postal code. City-level stats are available as an opt-in, aggregate-only add-on once you publish your own privacy policy — never on the individual click."),
         ("Aggregate-only exports", "Never a row-per-click list that could deanonymize a small campaign. Exports mirror the dashboard."),
         ("Enforced disclosure", "Send tracked links without a privacy policy and recipients see a disclosure screen — and can opt out."),
     ];
@@ -58,7 +58,7 @@ public class IndexModel(IOptions<RedirectOptions> redirectOptions) : PageModel
         ("What is per-recipient attribution?",
          "A unique short code minted per contact per destination. When someone clicks, you see that specific recipient clicked — ideal for email and sales outreach — without requiring them to log in and without a CRM."),
         ("How is ShortLynx privacy-first?",
-         "IP addresses are never stored raw — each is HMAC-hashed with a secret server-side key, with the current hour folded in so the same visitor hashes differently each hour. Do Not Track and Global Privacy Control are honored, breakdowns use k-anonymity, no sub-country geography is stored, and exports are aggregate-only."),
+         "IP addresses are never stored raw — each is HMAC-hashed with a secret server-side key, with the current day folded in so the same visitor hashes differently each day. Do Not Track and Global Privacy Control are honored, breakdowns use k-anonymity, no sub-country geography is ever stored on an individual click (city is available only as an opt-in aggregate, never on the click record), and exports are aggregate-only."),
         ("Can I self-host ShortLynx?",
          "Yes — it's source-available under the Elastic License 2.0. Self-hosting is free and unrestricted at every tier, on your own infrastructure and database."),
         ("When is the hosted service available?",

@@ -15,6 +15,8 @@ public partial class ShortLynxDbContext(DbContextOptions<ShortLynxDbContext> opt
     public DbSet<AccountEntity> AccountEntities { get; set; }
     public DbSet<ApiKeyEntity> ApiKeyEntities { get; set; }
     public DbSet<CampaignEntity> CampaignEntities { get; set; }
+    public DbSet<CityClickDailyEntity> CityClickDailyEntities { get; set; }
+    public DbSet<CityClickDailyVisitorEntity> CityClickDailyVisitorEntities { get; set; }
     public DbSet<CustomDomainEntity> CustomDomainEntities { get; set; }
     public DbSet<LinkEntity> LinkEntities { get; set; }
     public DbSet<MembershipEntity> MembershipEntities { get; set; }

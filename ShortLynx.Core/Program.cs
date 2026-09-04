@@ -25,7 +25,7 @@ if (!string.IsNullOrWhiteSpace(sentryDsn))
         o.Environment = builder.Environment.EnvironmentName;
         // Explicit, even though it's the SDK default: no request bodies, full headers, or user claims
         // leave the process. Belt-and-suspenders on top of ScrubSensitiveData, matching how VisitSink
-        // treats IP hashing (pepper AND hourly rotation, not just one).
+        // treats IP hashing (pepper AND daily rotation, not just one).
         o.SendDefaultPii = false;
         o.SetBeforeSend((@event, _) => ObservabilityExtensions.ScrubSensitiveData(@event));
     });

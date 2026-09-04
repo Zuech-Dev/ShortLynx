@@ -9,12 +9,17 @@
 > the no-op default this doc originally scoped as acceptable to ship without; Admin's `ClicksTable` reads
 > only `ReferrerHost`, no raw referrer anywhere in the markup. The rest of this document is the design
 > rationale and is still accurate — read it as "what we built and why," not "what we're about to build."
+>
+> **Update 2026-09-04:** the IP-hash rotation moved from hourly to daily (5am Eastern boundary) — see
+> `BackgroundVisitWriter.DailyBucket`. City-level click aggregates also shipped as a separate, opt-in
+> feature; see `docs/CITY_GEO_PLAN.md` in the `ShortLynx.Hosted` repo (now marked shipped) for that
+> design, which amends MASTER_PLAN P1 rather than this document.
 
 Extract genuinely useful analytics from redirect requests **without building a fingerprint of the
 end-user**. The guiding principle already exists in the codebase: `HashIp` (`BackgroundVisitWriter`)
-keeps only the analytic value of the IP under an HMAC (secret pepper + hourly-rotating component) and
-the raw IP never reaches the database. This plan extends that **"derive at the edge, discard the raw"**
-discipline to every other request signal.
+keeps only the analytic value of the IP under an HMAC (secret pepper + daily-rotating component, 5am
+Eastern boundary) and the raw IP never reaches the database. This plan extends that **"derive at the
+edge, discard the raw"** discipline to every other request signal.
 
 ~~**Status:** this is **Phase 0.5**~~ — superseded by the banner above; this is now Social Phase 1+'s
 verified prerequisite, already landed, not an upcoming gate. See
@@ -32,7 +37,7 @@ via the pure `SourceDetector`:
 `VisitEntity` / `UserVisitEntity` today carry `HashedIp`, `ClickedAt`, **`Source`**, **`Device`** —
 **and still persist raw `Referrer` (full URL)** and **raw `UserAgent`**. So we hash the IP diligently
 and then keep the two fields that most undercut it:
-- **Raw User-Agent is a fingerprint.** With the hashed IP + referrer inside one hourly window it can
+- **Raw User-Agent is a fingerprint.** With the hashed IP + referrer inside one rotation day it can
   re-identify an individual. We already derive `Device` from it — we should also take
   *browser / OS / bot* and then **stop storing the raw string**.
 - **Full Referrer leaks private context.** Path + query of the referring URL can carry search terms,

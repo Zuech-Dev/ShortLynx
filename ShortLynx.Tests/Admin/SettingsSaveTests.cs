@@ -5,6 +5,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using ShortLynx.Admin.Components.Pages;
+using ShortLynx.Admin.Services;
 using ShortLynx.Data.Context;
 using ShortLynx.Data.Enums;
 
@@ -27,6 +28,7 @@ public class SettingsSaveTests : BunitContext
         Services.AddScoped<ShortLynxDbContext>(sp =>
             sp.GetRequiredService<IDbContextFactory<ShortLynxDbContext>>().CreateDbContext());
         Services.AddScoped<ShortLynx.Services.Accounts.IAccountService, ShortLynx.Services.Accounts.AccountService>();
+        Services.AddScoped<NavPreferenceService>();
 
         var auth = AddAuthorization();
         auth.SetAuthorized("owner@example.com");
@@ -105,6 +107,49 @@ public class SettingsSaveTests : BunitContext
         cut.Find("[data-testid=privacy-url]").Input("https://evil.example.com/policy");
         cut.Find("[data-testid=privacy-save]").Click(); // bUnit clicks even when disabled
         Assert.Null(SavedUrl());
+    }
+
+    [Fact]
+    public void CityToggle_DisabledUntilPrivacyPolicyIsSet()
+    {
+        Setup(AccountRole.Owner);
+        var cut = Render<Settings>();
+
+        Assert.True(cut.Find("[data-testid=city-toggle]").HasAttribute("disabled"));
+        Assert.NotEmpty(cut.FindAll("[data-testid=city-needs-policy]"));
+    }
+
+    [Fact]
+    public void CityToggle_WithoutPrivacyUrl_ShowsErrorAndDoesNotPersist()
+    {
+        // The checkbox is disabled in the UI, but the handler-level guard is what actually matters —
+        // Blazor Server runs the click handler regardless of the disabled attribute.
+        Setup(AccountRole.Owner);
+        var cut = Render<Settings>();
+
+        cut.Find("[data-testid=city-toggle]").Change(true);
+        cut.Find("[data-testid=city-save]").Click();
+
+        Assert.NotEmpty(cut.FindAll("[data-testid=privacy-error]"));
+        var factory = Services.GetRequiredService<IDbContextFactory<ShortLynxDbContext>>();
+        using var db = factory.CreateDbContext();
+        Assert.False(db.AccountEntities.Single(a => a.Id == _accountId).EnableCityAggregates);
+    }
+
+    [Fact]
+    public void CityToggle_WithPrivacyUrlConfirmed_Persists()
+    {
+        Setup(AccountRole.Owner);
+        var cut = Render<Settings>();
+
+        cut.Find("[data-testid=privacy-url]").Input("https://shrtlynx.com/privacy");
+        cut.Find("[data-testid=privacy-confirm]").Change(true);
+        cut.Find("[data-testid=city-toggle]").Change(true);
+        cut.Find("[data-testid=privacy-save]").Click();
+
+        var factory = Services.GetRequiredService<IDbContextFactory<ShortLynxDbContext>>();
+        using var db = factory.CreateDbContext();
+        Assert.True(db.AccountEntities.Single(a => a.Id == _accountId).EnableCityAggregates);
     }
 
     [Fact]

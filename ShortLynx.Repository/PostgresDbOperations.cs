@@ -82,6 +82,9 @@ public class PostgresDbOperations(ShortLynxDbContext db) : IDbOperations
         await writer.CompleteAsync(ct);
     }
 
+    public Task UpsertCityClicksAsync(IReadOnlyCollection<CityClickItem> items, CancellationToken ct = default)
+        => CityClickUpsert.RunAsync(db, items, ct);
+
     private static async Task WriteNullableTextAsync(NpgsqlBinaryImporter writer, string? value, CancellationToken ct)
     {
         if (value is null) await writer.WriteNullAsync(ct);

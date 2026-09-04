@@ -31,7 +31,7 @@ public sealed record SocialPostResponse(
     long? Replies,
     DateTimeOffset? MetricsUpdatedAt,
     // Clicks traced to THIS post via its own short code — exact, not inferred from a referrer, and
-    // therefore able to separate two posts on the same platform. Unique dedupes within an hour (the IP
-    // hash rotates hourly by design), so compare posts on Clicks rather than reading Unique as reach.
+    // therefore able to separate two posts on the same platform. Unique dedupes within a day (the IP
+    // hash rotates daily by design), so compare posts on Clicks rather than reading Unique as reach.
     long Clicks = 0,
     long UniqueClicks = 0);

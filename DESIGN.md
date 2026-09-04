@@ -90,7 +90,7 @@ GET /{code}
 
 ### Privacy posture — derive at ingest, discard the raw
 Every request signal is reduced to a low-entropy dimension in the writer, and the raw value is **never persisted**:
-- **IP** → keyed HMAC hash (secret pepper + hourly-rotating component); optional country via a GeoIP resolver. Raw IP never stored.
+- **IP** → keyed HMAC hash (secret pepper + daily-rotating component, 5am Eastern boundary); optional country (and, opt-in per account, city — aggregate-only, never on the click record) via a GeoIP resolver. Raw IP never stored.
 - **User-Agent** → `{ Browser, Os, Device }` buckets (`IUserAgentParser`). Raw UA never stored — it is a fingerprint vector.
 - **Referer** → registrable host only (`IReferrerReducer`); path + query dropped (they can carry search terms / tokens).
 - **Accept-Language** → primary subtag; **Sec-Fetch-Site** → navigation type.

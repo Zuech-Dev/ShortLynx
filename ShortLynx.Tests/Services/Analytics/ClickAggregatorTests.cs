@@ -91,6 +91,41 @@ public class ClickAggregatorTests
     }
 
     [Fact]
+    public void Summarize_ZeroAnonymityThreshold_DisablesFolding()
+    {
+        // The AnalyticsOptions.EnforceAnonymity=false path (local dev only): passing 0 must show every
+        // bucket unsuppressed, including a single-click one -- Count is never negative, so nothing
+        // is ever "< 0".
+        var rows =
+            Many(12, i => Row($"f{i}", browser: "Firefox"))
+            .Append(Row("solo", browser: "Opera"))
+            .ToList();
+
+        var b = ClickAggregator.Summarize(rows, anonymityThreshold: 0);
+
+        Assert.Equal(2, b.Browsers.Count);
+        Assert.Contains(new LabelCount("Opera", 1), b.Browsers);
+        Assert.DoesNotContain(b.Browsers, x => x.Label == "Other");
+    }
+
+    [Fact]
+    public void Summarize_CustomAnonymityThreshold_UsesItInsteadOfTheDefaultConstant()
+    {
+        // A threshold of 3 folds a 2-click bucket but keeps a 3-click one -- proves the parameter is
+        // actually driving the fold, not silently falling back to AnonymityThreshold (10).
+        var rows =
+            Many(3, i => Row($"f{i}", browser: "Firefox"))
+            .Concat(Many(2, i => Row($"o{i}", browser: "Opera")))
+            .ToList();
+
+        var b = ClickAggregator.Summarize(rows, anonymityThreshold: 3);
+
+        Assert.Equal(2, b.Browsers.Count);
+        Assert.Equal(new LabelCount("Firefox", 3), b.Browsers[0]);
+        Assert.Equal(new LabelCount("Other", 2), b.Browsers[1]);
+    }
+
+    [Fact]
     public void Summarize_MergesSuppressedSourcesIntoExistingOtherBucket()
     {
         // ClickSource.Other already exists as a real value; suppressed platforms must join it,

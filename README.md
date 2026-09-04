@@ -28,13 +28,17 @@ suites (Outreach, Salesloft, HubSpot). ShortLynx does it self-hosted, for free.
 And it does it **without selling out the clicker.** Privacy isn't a bolt-on here:
 
 - **IPs are never stored raw** — only an HMAC-SHA256 hash keyed with a secret pepper, with the
-  current hour folded into the input, so the stored value rotates every hour (raw IP never touches disk).
+  current day folded into the input (5am Eastern boundary), so the stored value rotates daily (raw
+  IP never touches disk).
 - **Do Not Track / Global Privacy Control are honored** — the click still counts, but every
   dimension is nulled.
 - **k-anonymity (k=10)** — any breakdown value seen fewer than 10 times is folded into
   "Other," in the dashboard, the API, and exports alike.
-- **No sub-country geography** — country + timezone only, never region/city (that's
-  fingerprinting in low-traffic contexts).
+- **No sub-country geography on individual clicks, ever** — country + timezone only on the click
+  record itself (that's fingerprinting in low-traffic contexts). Operators can opt an account into
+  city-level *aggregate* counts (off by default, gated behind having a published privacy policy), but
+  even then a city is never written to an individual click, only to a separate aggregate table, and
+  never at all for user-attributed links.
 - **Exports are aggregate-only** — never a row-per-click list that could deanonymize a small
   campaign.
 - **Enforced disclosure for attributed links** — if you haven't published a privacy policy,

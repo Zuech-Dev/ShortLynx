@@ -11,6 +11,7 @@
 @inject IServiceScopeFactory ScopeFactory
 @inject IOptions<DashboardOptions> DashboardOpts
 @inject IOptions<ShortCodeOptions> ShortCodeOpts
+@inject IOptions<AnalyticsOptions> AnalyticsOpts
 @inject IJSRuntime JS
 @inject NavigationManager Nav
 
@@ -259,7 +260,7 @@ else
         </div>
     }
 
-    <ClickBreakdownCard Breakdown="_breakdown" />
+    <ClickBreakdownCard Breakdown="_breakdown" Cities="_cities" />
         @if (_breakdown is { TotalClicks: > 0 })
         {
             <div class="mb-4 -mt-2">
@@ -376,6 +377,7 @@ else
     List<ClickRow> _clicks = [];
     List<UserCodeRow> _userRows = [];
     ClickBreakdown? _breakdown;
+    IReadOnlyList<CityCount> _cities = [];
 
     // Custom-domain pinning (current-account links only).
     bool _canPin, _pinSaved;
@@ -445,10 +447,14 @@ else
 
         // One definition of this link's clicks, whichever codes they arrived on (LinkVisitQueries).
         var rows = await LinkVisitQueries.LoadLinkRowsAsync(db, _link);
-        _breakdown = ClickAggregator.Summarize(rows);
+        var enforceAnonymity = AnalyticsOpts.Value.EnforceAnonymity;
+        _breakdown = ClickAggregator.Summarize(rows, enforceAnonymity ? ClickAggregator.AnonymityThreshold : 0);
         _clicks = rows
             .Select(v => new ClickRow(v.ClickedAt, v.Source, v.Device, v.ReferrerHost, v.Browser, v.Os, v.Country, v.Language))
             .ToList();
+        _cities = CityAggregator.Summarize(
+            await CityClickQueries.LoadForLinksAsync(db, [_link.Id]),
+            enforceAnonymity ? CityAggregator.AnonymityThreshold : 0);
 
         if (_link.Mode == LinkMode.Anonymous)
         {

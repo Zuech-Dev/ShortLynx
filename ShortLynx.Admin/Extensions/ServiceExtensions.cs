@@ -67,6 +67,7 @@ public static class ServiceExtensions
         services.Configure<ShortCodeOptions>(configuration.GetSection("ShortCode"));
         services.Configure<UrlValidationOptions>(configuration.GetSection("UrlValidation"));
         services.Configure<CustomDomainOptions>(configuration.GetSection("CustomDomain"));
+        services.Configure<ShortLynx.Services.Analytics.AnalyticsOptions>(configuration.GetSection("Analytics"));
 
         services.AddShortLynxEmail(configuration);
         services.AddScoped<IApiKeyService, ApiKeyService>();

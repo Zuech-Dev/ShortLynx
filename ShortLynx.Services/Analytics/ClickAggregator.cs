@@ -33,7 +33,9 @@ public sealed record DeviceCount(string Device, long Count);
 public sealed record LabelCount(string Label, long Count);
 
 /// <summary>Clicks on a single UTC calendar day, for the click-over-time series. <paramref name="UniqueCount"/>
-/// is distinct hashed IPs that day (subject to the same hourly-rotation caveat as the overall unique count).</summary>
+/// is distinct hashed IPs that day (subject to the same daily-rotation caveat as the overall unique count —
+/// the hash's own rotation boundary is 5am Eastern, not UTC midnight, so it doesn't line up exactly with
+/// this UTC-day bucketing at the edges).</summary>
 public sealed record DailyClicks(DateOnly Date, long Count, long UniqueCount);
 
 /// <summary>Clicks that landed in one UTC hour-of-day bucket (0–23), across all days.</summary>
@@ -68,10 +70,11 @@ public sealed record ClickBreakdown(
     long BotClicks,
     long HumanClicks,
     long HumanUniqueClicks,
-    // Repeat-click signal. IMPORTANT: the IP hash rotates hourly by design, so a "unique" is really a
-    // distinct clicker *within one clock hour*. These therefore measure repeat clicking in a short
-    // burst (double-taps, re-opening a post, prefetch) — NOT whether someone came back the next day,
-    // which the hashing deliberately makes unknowable. Surfaces must say "within an hour" or they lie.
+    // Repeat-click signal. IMPORTANT: the IP hash rotates daily (5am Eastern boundary) by design, so a
+    // "unique" is really a distinct clicker *within one rotation day*. These therefore measure repeat
+    // clicking within that window (double-taps, re-opening a post, prefetch, same-day return visits) —
+    // NOT whether someone came back a week later, which the hashing deliberately makes unknowable.
+    // Surfaces must say "within a day" or they lie.
     long RepeatClicks = 0,
     double ClicksPerUnique = 0,
     // How many uniques clicked exactly once, exactly twice, or three-plus times.
@@ -84,7 +87,8 @@ public sealed record ClickBreakdown(
 /// breakdowns. Pure and in-memory: callers project visits (across one link or a whole campaign) into
 /// <see cref="VisitRow"/>s first, so the same reduction serves the Core API and the Admin dashboard and
 /// stays provider-agnostic (no DB date functions). <c>UniqueClicks</c> is distinct hashed IPs — note the
-/// hash rotates hourly by design, so it dedupes within the hour rather than counting lifetime uniques.
+/// hash rotates daily (5am Eastern boundary) by design, so it dedupes within the rotation day rather
+/// than counting lifetime uniques.
 /// </summary>
 public static class ClickAggregator
 {
@@ -95,17 +99,22 @@ public static class ClickAggregator
 
     private const string OtherLabel = "Other";
 
-    public static ClickBreakdown Summarize(IReadOnlyCollection<VisitRow> rows)
+    /// <param name="rows">The visits to summarize.</param>
+    /// <param name="anonymityThreshold">Overrides <see cref="AnonymityThreshold"/> — pass 0 to disable
+    /// suppression entirely. Exists for <see cref="AnalyticsOptions.EnforceAnonymity"/>'s local-dev
+    /// escape hatch; every real caller should pass the real threshold, not skip the parameter and
+    /// assume a safe default, so the choice is visible at each call site.</param>
+    public static ClickBreakdown Summarize(IReadOnlyCollection<VisitRow> rows, int anonymityThreshold = AnonymityThreshold)
     {
         var sources = Fold(rows
                 .GroupBy(r => r.Source)
-                .Select(g => (Label: g.Key.ToString(), Count: g.LongCount())))
+                .Select(g => (Label: g.Key.ToString(), Count: g.LongCount())), anonymityThreshold)
             .Select(x => new SourceCount(x.Label, x.Count))
             .ToList();
 
         var devices = Fold(rows
                 .GroupBy(r => r.Device)
-                .Select(g => (Label: g.Key.ToString(), Count: g.LongCount())))
+                .Select(g => (Label: g.Key.ToString(), Count: g.LongCount())), anonymityThreshold)
             .Select(x => new DeviceCount(x.Label, x.Count))
             .ToList();
 
@@ -131,8 +140,8 @@ public static class ClickAggregator
         var humanRows = rows.Where(r => r.Device != DeviceType.Bot).ToList();
 
         // Repeat clicking, measured over human rows only — a bot hammering a link would otherwise
-        // dominate the ratio and make it read as engagement. Bounded to one hour by the rotating hash
-        // (see the ClickBreakdown remarks); callers must label it as such.
+        // dominate the ratio and make it read as engagement. Bounded to one rotation day by the
+        // rotating hash (see the ClickBreakdown remarks); callers must label it as such.
         var clicksPerHumanIp = humanRows
             .GroupBy(r => r.HashedIp)
             .Select(g => g.LongCount())
@@ -147,14 +156,14 @@ public static class ClickAggregator
             Sources: sources,
             Devices: devices,
             Timeline: timeline,
-            Browsers: Tally(rows, r => r.Browser),
-            OperatingSystems: Tally(rows, r => r.Os),
-            Languages: Tally(rows, r => r.Language),
-            Countries: Tally(rows, r => r.Country),
-            NavigationTypes: Tally(rows, r => r.NavigationType),
-            UtmSources: Tally(rows, r => r.UtmSource),
-            UtmMediums: Tally(rows, r => r.UtmMedium),
-            UtmCampaigns: Tally(rows, r => r.UtmCampaign),
+            Browsers: Tally(rows, r => r.Browser, anonymityThreshold),
+            OperatingSystems: Tally(rows, r => r.Os, anonymityThreshold),
+            Languages: Tally(rows, r => r.Language, anonymityThreshold),
+            Countries: Tally(rows, r => r.Country, anonymityThreshold),
+            NavigationTypes: Tally(rows, r => r.NavigationType, anonymityThreshold),
+            UtmSources: Tally(rows, r => r.UtmSource, anonymityThreshold),
+            UtmMediums: Tally(rows, r => r.UtmMedium, anonymityThreshold),
+            UtmCampaigns: Tally(rows, r => r.UtmCampaign, anonymityThreshold),
             HourlyDistribution: hourly,
             LocalHourlyDistribution: localHourly,
             BotClicks: rows.Count - humanRows.Count,
@@ -191,19 +200,21 @@ public static class ClickAggregator
 
     // Tallies a nullable string dimension, dropping nulls/blanks (e.g. unknown or privacy-suppressed),
     // busiest first, k-anonymised. Empty when nothing is known — callers hide the section in that case.
-    private static List<LabelCount> Tally(IReadOnlyCollection<VisitRow> rows, Func<VisitRow, string?> select)
+    private static List<LabelCount> Tally(IReadOnlyCollection<VisitRow> rows, Func<VisitRow, string?> select, int anonymityThreshold)
         => Fold(rows
                 .Select(select)
                 .Where(v => !string.IsNullOrEmpty(v))
                 .GroupBy(v => v!)
-                .Select(g => (Label: g.Key, Count: g.LongCount())))
+                .Select(g => (Label: g.Key, Count: g.LongCount())), anonymityThreshold)
             .Select(x => new LabelCount(x.Label, x.Count))
             .ToList();
 
     // k-anonymity fold: values below the threshold merge into a single "Other" bucket (joining an
     // existing "Other" if the dimension already produced one, e.g. ClickSource.Other). Ordered busiest
     // first with "Other" always last, so the suppressed remainder never masquerades as a real value.
-    private static List<(string Label, long Count)> Fold(IEnumerable<(string Label, long Count)> items)
+    // anonymityThreshold <= 0 disables suppression entirely (Count is never negative, so nothing folds)
+    // -- the local-dev escape hatch; see AnalyticsOptions.EnforceAnonymity.
+    private static List<(string Label, long Count)> Fold(IEnumerable<(string Label, long Count)> items, int anonymityThreshold)
     {
         var list = items.ToList();
         var kept = new List<(string Label, long Count)>();
@@ -211,7 +222,7 @@ public static class ClickAggregator
 
         foreach (var item in list)
         {
-            if (item.Label == OtherLabel || item.Count < AnonymityThreshold)
+            if (item.Label == OtherLabel || item.Count < anonymityThreshold)
                 other += item.Count;
             else
                 kept.Add(item);

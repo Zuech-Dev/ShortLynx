@@ -24,4 +24,7 @@ public class EfCoreDbOperations(ShortLynxDbContext db) : IDbOperations
         db.Set<UserVisitEntity>().AddRange(visits);
         await db.SaveChangesAsync(ct);
     }
+
+    public Task UpsertCityClicksAsync(IReadOnlyCollection<CityClickItem> items, CancellationToken ct = default)
+        => CityClickUpsert.RunAsync(db, items, ct);
 }

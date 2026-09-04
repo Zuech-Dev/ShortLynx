@@ -122,12 +122,42 @@ else
             </div>
         </div>
     </div>
+
+    <div class="card mb-4" data-testid="city-analytics">
+        <div class="card-body">
+            <h5 class="card-title">City-Level Analytics</h5>
+            <p class="text-gray-500 text-sm mb-3">
+                Off by default. When on, clicks are aggregated by city (in addition to the existing
+                country breakdown) — never stored on an individual click record, and a city is only ever
+                shown once at least @ShortLynx.Services.Analytics.CityAggregator.AnonymityThreshold
+                distinct visitors have clicked, so a single person can't reveal one on their own.
+                Never enabled for user-attributed (Mode 2) links, regardless of this setting.
+            </p>
+
+            @if (!_hasPolicy)
+            {
+                <p class="text-amber-700 text-sm mb-3" data-testid="city-needs-policy">
+                    Requires a privacy policy URL (above) that covers this — finer geography isn't
+                    switched on without a disclosed policy to back it.
+                </p>
+            }
+
+            <label class="inline-flex items-start gap-2 text-sm">
+                <input type="checkbox" class="mt-0.5" @bind="_enableCityAggregates" disabled="@(!_hasPolicy)" data-testid="city-toggle"/>
+                <span>Enable city-level click aggregates for this account.</span>
+            </label>
+
+            <div class="mt-3">
+                <button class="btn btn-primary" @onclick="SaveAsync" disabled="@(!_canManageAccount)" data-testid="city-save">Save</button>
+            </div>
+        </div>
+    </div>
 }
 
 @code {
     [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
 
-    bool _loaded, _saved, _confirmed, _hasPolicy, _canManageAccount;
+    bool _loaded, _saved, _confirmed, _hasPolicy, _canManageAccount, _enableCityAggregates;
     string? _privacyUrl, _termsUrl, _error;
     Guid _accountId;
 
@@ -147,6 +177,7 @@ else
         _termsUrl = account.TermsOfServiceUrl;
         _hasPolicy = !string.IsNullOrWhiteSpace(_privacyUrl);
         _confirmed = _hasPolicy; // an already-saved URL was confirmed when it was saved
+        _enableCityAggregates = account.EnableCityAggregates;
         _loaded = true;
     }
 
@@ -164,11 +195,14 @@ else
         if (terms is not null && !IsHttpsUrl(terms)) { _error = "Terms of service must be an https:// URL."; return; }
         // The confirmation is the operator's assertion of disclosure — the URL is not accepted without it.
         if (privacy is not null && !_confirmed) { _error = "Please confirm your policy discloses link tracking."; return; }
+        // Same reasoning, independently enforced -- CITY_GEO_PLAN.md §6.3.
+        if (_enableCityAggregates && privacy is null) { _error = "City-level analytics requires a privacy policy URL."; return; }
 
         await using var db = await DbFactory.CreateDbContextAsync();
         var account = await db.AccountEntities.FirstAsync(a => a.Id == _accountId);
         account.PrivacyPolicyUrl = privacy;
         account.TermsOfServiceUrl = terms;
+        account.EnableCityAggregates = _enableCityAggregates;
         await db.SaveChangesAsync();
 
         _hasPolicy = privacy is not null;

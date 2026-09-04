@@ -33,7 +33,7 @@ ShortLynx is designed to protect both operators and the people clicking their li
   effect immediately rather than at token expiry.
 - **Transport** — CSRF double-submit protection for cookie sessions; HSTS and forwarded-header
   handling behind the edge proxy.
-- **Clicker privacy** — IPs stored only as HMAC hashes (secret pepper keys the HMAC, current hour folded in, so the stored value rotates hourly); DNT/GPC honored;
-  k-anonymity (k=10) on all breakdowns; aggregate-only exports.
+- **Clicker privacy** — IPs stored only as HMAC hashes (secret pepper keys the HMAC, current day folded in at a 5am Eastern boundary, so the stored value rotates daily); DNT/GPC honored;
+  k-anonymity (k=10 on standard breakdowns, k=6 unique visitors on the opt-in city-aggregate dimension) on all breakdowns; aggregate-only exports.
 
 If you find a gap in any of the above, we want to hear about it.

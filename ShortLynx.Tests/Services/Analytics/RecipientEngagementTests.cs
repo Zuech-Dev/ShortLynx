@@ -54,7 +54,7 @@ public class RecipientEngagementTests
     public void Compute_RepeatEngagement_CountsReturningRecipients()
     {
         // Mode 2 repeat clicks are EXACT and unbounded in time — a recipient code identifies the
-        // person, so no IP hash (and therefore no hourly dedup window) is involved. A recipient
+        // person, so no IP hash (and therefore no daily dedup window) is involved. A recipient
         // returning to the link repeatedly is the engagement signal this measures.
         var s = RecipientEngagement.Compute(
         [

@@ -40,6 +40,7 @@ public static class ServiceExtensions
         services.Configure<UrlValidationOptions>(configuration.GetSection("UrlValidation"));
         services.Configure<MagicLinkOptions>(configuration.GetSection("MagicLink"));
         services.Configure<VisitSinkOptions>(configuration.GetSection("VisitSink"));
+        services.Configure<ShortLynx.Services.Analytics.AnalyticsOptions>(configuration.GetSection("Analytics"));
         services.Configure<SmtpEmailOptions>(configuration.GetSection("Email"));
         services.Configure<CustomDomainOptions>(configuration.GetSection("CustomDomain"));
 

@@ -153,10 +153,10 @@ range, platform, device, and referrer host, and **sort** any column. Great for q
 Reddit traffic come mostly on mobile?"
 
 > **What "Unique clicks" means.** It counts distinct **hashed** IP addresses, and that hash **rotates
-> every hour** on purpose (a privacy measure). So it's best read as *"distinct clickers per hour,
-> summed"* — it removes rapid repeat clicks (double-taps, link-preview prefetching) within an hour, not
-> lifetime-unique visitors. It's a great relative signal ("Tuesday's post got ~2× the reach of Monday's")
-> rather than a precise headcount.
+> daily** (a privacy measure, at a 5am Eastern boundary) on purpose. So it's best read as *"distinct
+> clickers per day, summed"* — it removes rapid repeat clicks (double-taps, link-preview prefetching)
+> within a day, not lifetime-unique visitors. It's a great relative signal ("Tuesday's post got ~2× the
+> reach of Monday's") rather than a precise headcount.
 
 ### Reach vs. clicks
 ShortLynx measures **clicks**, not how many people *saw* the link. True click-through rate (impressions ÷
@@ -209,7 +209,7 @@ curl https://api.shrtlynx.com/links/{id}/analytics \
 ```jsonc
 {
   "totalClicks": 1240,
-  "uniqueClicks": 847,          // distinct hashed IPs (hash rotates hourly — see §6)
+  "uniqueClicks": 847,          // distinct hashed IPs (hash rotates daily — see §6)
   "firstClickAt": "…", "lastClickAt": "…",
   "sources":  [ { "source": "Twitter",  "count": 612 }, … ],
   "devices":  [ { "device": "Mobile",   "count": 901 }, … ],

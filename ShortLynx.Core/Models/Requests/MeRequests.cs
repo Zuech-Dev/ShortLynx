@@ -28,4 +28,8 @@ public sealed record ChangeMemberRoleRequest([Required] string Role);
 /// </summary>
 public sealed record UpdateAccountRequest(
     [Required, MinLength(1)] string Name, string? PrivacyPolicyUrl, string? TermsOfServiceUrl,
-    bool ConfirmsDisclosure = false);
+    bool ConfirmsDisclosure = false,
+    // Full-replace like every other field here: a client must resend the account's current value on
+    // every update, not just when changing it. Requires PrivacyPolicyUrl to be set (enforced in
+    // AccountService) -- see CITY_GEO_PLAN.md §6.3.
+    bool EnableCityAggregates = false);

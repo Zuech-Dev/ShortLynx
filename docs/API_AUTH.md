@@ -111,6 +111,7 @@ Enforcement details that matter to API clients:
 |---|---|
 | `GET /me` | Current user + account + role |
 | `GET /me/accounts` | Accounts you belong to (for an account switcher) |
+| `GET /me/account` · `PUT` `{ name, privacyPolicyUrl?, termsOfServiceUrl?, confirmsDisclosure?, enableCityAggregates? }` | View / update account-level settings. `confirmsDisclosure` must be `true` whenever `privacyPolicyUrl` is set to a non-empty value. `enableCityAggregates` must be `false`/omitted unless `privacyPolicyUrl` (the *resulting* value, so setting both in one request works) is set — see the analytics payload's `cities` field below. Both flags are full-replace: resend the current value on every update, not just when changing it. `ManageAccount` only (Owner). |
 | `GET /me/members` | Members of the current account |
 | `POST /me/members` `{ email, role }` | Invite a member (you may grant only roles below your own) |
 | `PUT /me/members/{userId}` `{ role }` | Change a member's role (you must outrank them) |
@@ -147,14 +148,22 @@ breakdowns derived from data already captured at click time — **no clicker ide
   "codes": [ { "code": "…", "userId": null, "clickCount": 1240 } ],
   "sources":  [ { "source": "Twitter",  "count": 612 }, … ],   // platform from referrer
   "devices":  [ { "device": "Mobile",   "count": 901 }, … ],   // coarse class from user-agent
-  "timeline": [ { "date": "2026-06-20", "count": 130 }, … ]    // clicks per UTC day
+  "timeline": [ { "date": "2026-06-20", "count": 130 }, … ],   // clicks per UTC day
+  "cities":   []                                               // see below
 }
 ```
 
-`uniqueClicks` counts distinct hashed IPs. The IP hash **rotates hourly by design** (a privacy measure
-that limits cross-time linkage), so this is "distinct clickers per hour, summed" — it dedupes rapid
-repeat clicks within an hour, not lifetime unique visitors. `sources`/`devices` are low-cardinality
-buckets (`ClickSource`/`DeviceType`), not raw referrer or user-agent strings.
+`uniqueClicks` counts distinct hashed IPs. The IP hash **rotates daily by design** (5am Eastern
+boundary — a privacy measure that limits cross-time linkage), so this is "distinct clickers per day,
+summed" — it dedupes rapid repeat clicks within a day, not lifetime unique visitors. `sources`/`devices`
+are low-cardinality buckets (`ClickSource`/`DeviceType`), not raw referrer or user-agent strings.
+
+`cities` is empty unless the account has opted into city-level aggregates (off by default; requires a
+privacy policy URL to be set first — see `PUT /me/account` below). When populated, each entry is
+`{ "city": "…", "country": "…", "count": N }` — a city only ever appears once at least 6 distinct
+visitors have clicked (not 6 clicks; a single repeat clicker can't reveal one on their own), and never
+at all for user-attributed links. Suppressed cities fold into one `{ "city": "Other", "country": null }`
+entry, same convention as every other breakdown here.
 
 `GET /me/campaigns/{id}/analytics` returns the same `sources`/`devices`/`timeline` aggregated across
 **every link in the campaign** (both anonymous and user-attributed), plus a `links[]` array of per-link

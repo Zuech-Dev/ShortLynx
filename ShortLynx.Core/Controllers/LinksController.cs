@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using ShortLynx.Services.Analytics;
 using ShortLynx.Core.Auth;
 using ShortLynx.Core.Models.Requests;
@@ -18,8 +19,11 @@ namespace ShortLynx.Core.Controllers;
 [ApiController]
 [Route("links")]
 [Authorize(AuthenticationSchemes = ApiKeyAuthHandler.SchemeName)]
-public class LinksController(ILinkService linkService, ShortLynxDbContext db) : ControllerBase
+public class LinksController(ILinkService linkService, ShortLynxDbContext db, IOptions<AnalyticsOptions> analyticsOptions) : ControllerBase
 {
+    private int AnonymityThreshold => analyticsOptions.Value.EnforceAnonymity ? ClickAggregator.AnonymityThreshold : 0;
+    private int CityAnonymityThreshold => analyticsOptions.Value.EnforceAnonymity ? CityAggregator.AnonymityThreshold : 0;
+
     private ApiKeyEntity CurrentKey => (ApiKeyEntity)HttpContext.Items["ApiKey"]!;
 
     // POST /links
@@ -222,12 +226,13 @@ public class LinksController(ILinkService linkService, ShortLynxDbContext db) : 
             rows = visits.Select(v => new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt)).ToList();
         }
 
-        var b = ClickAggregator.Summarize(rows);
+        var b = ClickAggregator.Summarize(rows, AnonymityThreshold);
+        var cities = CityAggregator.Summarize(await CityClickQueries.LoadForLinksAsync(db, [id], ct), CityAnonymityThreshold);
         return Ok(new LinkAnalyticsResponse(
             id, link.OriginalUrl, link.Mode.ToString(),
             b.TotalClicks, b.UniqueClicks, b.HumanClicks, b.HumanUniqueClicks, b.BotClicks,
             b.FirstClickAt, b.LastClickAt,
-            codeStats, b.Sources, b.Devices, b.Timeline, b.HourlyDistribution));
+            codeStats, b.Sources, b.Devices, b.Timeline, b.HourlyDistribution, cities));
     }
 
     private static LinkResponse ToLinkResponse(LinkEntity link, string shortCode, bool isCustom) =>

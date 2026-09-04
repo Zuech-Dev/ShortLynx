@@ -1,11 +1,13 @@
 namespace ShortLynx.Services.Analytics;
 
-/// <summary>What GeoIP resolution is allowed to yield (MASTER_PLAN P1): country (ISO-3166 alpha-2)
-/// and IANA timezone only. The GeoLite2-City database also resolves region, city, and coordinates —
-/// those are deliberately discarded before anything touches the write path, because sub-country
-/// location combined with device/browser/language approaches a fingerprint in low-traffic contexts.
-/// Timezone alone still enables "what local hour do people click" analysis.</summary>
-public sealed record GeoLocation(string? Country = null, string? TimeZone = null)
+/// <summary>What GeoIP resolution is allowed to yield (MASTER_PLAN P1, amended by CITY_GEO_PLAN.md):
+/// country (ISO-3166 alpha-2), IANA timezone, and — opt-in per account
+/// (<c>AccountEntity.EnableCityAggregates</c>) — city. Coordinates and postal/zip code are never
+/// resolved anywhere in this codebase: P1's amendment covers city specifically, considered and
+/// reasoned through; it is not a green light for finer granularity later without the same process.
+/// <see cref="City"/> never reaches <c>VisitEntity</c> or <c>UserVisitEntity</c> — see
+/// <c>CityClickDailyEntity</c> for where it's actually allowed to land.</summary>
+public sealed record GeoLocation(string? Country = null, string? TimeZone = null, string? City = null)
 {
     public static readonly GeoLocation Empty = new();
 }
@@ -17,11 +19,15 @@ public sealed record GeoLocation(string? Country = null, string? TimeZone = null
 /// </summary>
 public interface IGeoIpResolver
 {
-    GeoLocation Resolve(string rawIp);
+    /// <param name="includeCity">Pass true only for an event belonging to an account with
+    /// <c>EnableCityAggregates</c> on — the resolver has no account context of its own, so every
+    /// caller must decide explicitly. Defaults false: the country+timezone-only call sites (the
+    /// VisitEntity/UserVisitEntity write path) never need to change to keep today's behavior.</param>
+    GeoLocation Resolve(string rawIp, bool includeCity = false);
 }
 
-/// <summary>No-op default: no GeoIP database configured, so country and timezone are left unset.</summary>
+/// <summary>No-op default: no GeoIP database configured, so country/timezone/city are all left unset.</summary>
 public sealed class NullGeoIpResolver : IGeoIpResolver
 {
-    public GeoLocation Resolve(string rawIp) => GeoLocation.Empty;
+    public GeoLocation Resolve(string rawIp, bool includeCity = false) => GeoLocation.Empty;
 }

@@ -146,7 +146,7 @@ public sealed class AccountService(ShortLynxDbContext db, IMagicLinkService magi
 
     public async Task<AccountEntity?> UpdateAccountAsync(
         Guid accountId, string name, string? privacyPolicyUrl, string? termsOfServiceUrl,
-        bool confirmsDisclosure, CancellationToken ct = default)
+        bool confirmsDisclosure, bool enableCityAggregates, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Account name is required.", nameof(name));
@@ -164,12 +164,22 @@ public sealed class AccountService(ShortLynxDbContext db, IMagicLinkService magi
                 "Setting a privacy policy URL requires confirming it discloses link tracking.",
                 nameof(confirmsDisclosure));
 
+        // City-level click aggregates (CITY_GEO_PLAN.md §6.3): enabling finer geography without a
+        // disclosed policy covering it is a transparency gap, so this is enforced here rather than left
+        // to documentation. Checked against `privacy` (this update's resulting value), not the
+        // account's current one -- setting both fields in the same request is meant to work.
+        if (enableCityAggregates && privacy is null)
+            throw new ArgumentException(
+                "Enabling city-level analytics requires a privacy policy URL.",
+                nameof(enableCityAggregates));
+
         var account = await db.AccountEntities.FirstOrDefaultAsync(a => a.Id == accountId, ct);
         if (account is null) return null;
 
         account.Name = name.Trim();
         account.PrivacyPolicyUrl = privacy;
         account.TermsOfServiceUrl = terms;
+        account.EnableCityAggregates = enableCityAggregates;
         await db.SaveChangesAsync(ct);
         return account;
     }

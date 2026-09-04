@@ -1,14 +1,16 @@
 using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using ShortLynx.Data.Context;
 using ShortLynx.Data.Operations;
 using ShortLynx.Services.Visits;
+using ShortLynx.Tests.Infrastructure;
 
 namespace ShortLynx.Tests.Services.Visits;
 
 public class BackgroundVisitWriterTests
 {
-    private static (InMemoryVisitEventSink Sink, FakeDbOperations Db, BackgroundVisitWriter Writer)
+    private static async Task<(InMemoryVisitEventSink Sink, FakeDbOperations Db, BackgroundVisitWriter Writer, TestDatabase TestDb)>
         MakeWriter(int drainMs = 20, int batchSize = 100)
     {
         var opts = Options.Create(new VisitSinkOptions
@@ -19,9 +21,16 @@ public class BackgroundVisitWriterTests
         });
         var db = new FakeDbOperations();
 
-        // BackgroundVisitWriter uses IServiceScopeFactory to resolve IDbOperations per flush.
+        // The writer now also resolves a ShortLynxDbContext per flush (city-aggregate eligibility —
+        // see ResolveCityEligibilityAsync), even though these tests never seed an account with
+        // EnableCityAggregates on. An empty-but-real test database, not a missing registration, keeps
+        // that resolution a real (zero-row) query instead of a DI failure that silently stalls the
+        // writer -- exactly what broke here the first time this was wired in.
+        var testDb = await TestDatabase.CreateAsync();
+
         var services = new ServiceCollection();
         services.AddSingleton<IDbOperations>(db);
+        services.AddScoped(_ => testDb.CreateContext());
         var scopeFactory = services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
 
         var sink = new InMemoryVisitEventSink(opts);
@@ -30,7 +39,7 @@ public class BackgroundVisitWriterTests
             new ShortLynx.Services.Analytics.ReferrerReducer(),
             new ShortLynx.Services.Analytics.LanguageReducer(),
             new StubGeoIpResolver());
-        return (sink, db, writer);
+        return (sink, db, writer, testDb);
     }
 
     // Wait for the background writer to flush the expected rows instead of guessing a fixed delay,
@@ -70,7 +79,8 @@ public class BackgroundVisitWriterTests
     [Fact]
     public async Task Writer_RoutesMode1Events_To_BulkInsertVisits()
     {
-        var (sink, db, writer) = MakeWriter(drainMs: 20);
+        var (sink, db, writer, testDb) = await MakeWriter(drainMs: 20);
+        await using var _ = testDb;
         using var cts = new CancellationTokenSource();
 
         await writer.StartAsync(cts.Token);
@@ -85,7 +95,8 @@ public class BackgroundVisitWriterTests
     [Fact]
     public async Task Writer_RoutesMode2Events_To_BulkInsertUserVisits()
     {
-        var (sink, db, writer) = MakeWriter(drainMs: 20);
+        var (sink, db, writer, testDb) = await MakeWriter(drainMs: 20);
+        await using var _ = testDb;
         using var cts = new CancellationTokenSource();
 
         await writer.StartAsync(cts.Token);
@@ -100,7 +111,8 @@ public class BackgroundVisitWriterTests
     [Fact]
     public async Task Writer_HandlesMixedModeEvents()
     {
-        var (sink, db, writer) = MakeWriter(drainMs: 20);
+        var (sink, db, writer, testDb) = await MakeWriter(drainMs: 20);
+        await using var _ = testDb;
         using var cts = new CancellationTokenSource();
 
         await writer.StartAsync(cts.Token);
@@ -118,7 +130,8 @@ public class BackgroundVisitWriterTests
     public async Task Writer_HashesIp_DoesNotStoreRawIp()
     {
         const string rawIp = "203.0.113.42";
-        var (sink, db, writer) = MakeWriter(drainMs: 20);
+        var (sink, db, writer, testDb) = await MakeWriter(drainMs: 20);
+        await using var _ = testDb;
         using var cts = new CancellationTokenSource();
 
         await writer.StartAsync(cts.Token);
@@ -132,10 +145,11 @@ public class BackgroundVisitWriterTests
     }
 
     [Fact]
-    public async Task Writer_SameIpSameHour_ProducesSameHash()
+    public async Task Writer_SameIpSameRotationDay_ProducesSameHash()
     {
         const string rawIp = "203.0.113.1";
-        var (sink, db, writer) = MakeWriter(drainMs: 20);
+        var (sink, db, writer, testDb) = await MakeWriter(drainMs: 20);
+        await using var _ = testDb;
         using var cts = new CancellationTokenSource();
 
         await writer.StartAsync(cts.Token);
@@ -150,7 +164,8 @@ public class BackgroundVisitWriterTests
     [Fact]
     public async Task Writer_DifferentIps_ProduceDifferentHashes()
     {
-        var (sink, db, writer) = MakeWriter(drainMs: 20);
+        var (sink, db, writer, testDb) = await MakeWriter(drainMs: 20);
+        await using var _ = testDb;
         using var cts = new CancellationTokenSource();
 
         await writer.StartAsync(cts.Token);
@@ -165,7 +180,8 @@ public class BackgroundVisitWriterTests
     [Fact]
     public async Task Writer_DerivesDimensions_AndDoesNotPersistRawSignals()
     {
-        var (sink, db, writer) = MakeWriter(drainMs: 20);
+        var (sink, db, writer, testDb) = await MakeWriter(drainMs: 20);
+        await using var _ = testDb;
         using var cts = new CancellationTokenSource();
 
         var evt = new VisitEvent(
@@ -205,7 +221,8 @@ public class BackgroundVisitWriterTests
     [Fact]
     public async Task Writer_PrivacySignal_CountsClick_ButSuppressesDimensions()
     {
-        var (sink, db, writer) = MakeWriter(drainMs: 20);
+        var (sink, db, writer, testDb) = await MakeWriter(drainMs: 20);
+        await using var _ = testDb;
         using var cts = new CancellationTokenSource();
 
         var evt = new VisitEvent(
@@ -243,7 +260,8 @@ public class BackgroundVisitWriterTests
     [Fact]
     public async Task Writer_RespectsConfiguredBatchSize()
     {
-        var (sink, db, writer) = MakeWriter(drainMs: 20, batchSize: 2);
+        var (sink, db, writer, testDb) = await MakeWriter(drainMs: 20, batchSize: 2);
+        await using var _ = testDb;
         using var cts = new CancellationTokenSource();
 
         await writer.StartAsync(cts.Token);
@@ -252,6 +270,71 @@ public class BackgroundVisitWriterTests
         await cts.CancelAsync();
 
         Assert.Equal(5, db.InsertedVisits.Count);
+    }
+
+    [Fact]
+    public async Task Writer_CityEligibleAccount_UpsertsCityClicks()
+    {
+        var (sink, db, writer, testDb) = await MakeWriter(drainMs: 20);
+        await using var _ = testDb;
+        using var cts = new CancellationTokenSource();
+
+        // Seed one account with EnableCityAggregates on, one link, one short code -- the minimum
+        // graph ResolveCityEligibilityAsync needs to say yes.
+        Guid shortCodeId;
+        await using (var seed = testDb.CreateContext())
+        {
+            var accountId = Guid.CreateVersion7();
+            var linkId = Guid.CreateVersion7();
+            shortCodeId = Guid.CreateVersion7();
+            seed.AccountEntities.Add(new ShortLynx.Data.Entities.AccountEntity
+            {
+                Id = accountId, Name = "Acme", CreatedAt = DateTimeOffset.UtcNow, IsActive = true,
+                PrivacyPolicyUrl = "https://acme.example/privacy", EnableCityAggregates = true,
+            });
+            seed.LinkEntities.Add(new ShortLynx.Data.Entities.LinkEntity
+            {
+                Id = linkId, AccountId = accountId, OriginalUrl = "https://acme.example",
+                CreatedAt = DateTimeOffset.UtcNow, IsActive = true,
+                Mode = ShortLynx.Data.Enums.LinkMode.Anonymous,
+            });
+            seed.ShortCodeEntities.Add(new ShortLynx.Data.Entities.ShortCodeEntity
+            {
+                Id = shortCodeId, LinkId = linkId, Code = "abc123",
+                CreatedAt = DateTimeOffset.UtcNow, IsActive = true,
+            });
+            await seed.SaveChangesAsync();
+        }
+
+        var evt = new VisitEvent(
+            ShortCodeId: shortCodeId, UserLinkCodeId: null, UserId: null, SocialPostCodeId: null,
+            RawIp: "1.2.3.4", Referrer: null, UserAgent: "test-agent", ClickedAt: DateTimeOffset.UtcNow);
+
+        await writer.StartAsync(cts.Token);
+        await sink.EnqueueAsync(evt);
+        await WaitUntilAsync(() => db.VisitCount >= 1);
+        await cts.CancelAsync();
+
+        var item = Assert.Single(db.UpsertedCityClicks);
+        Assert.Equal("Chicago", item.City); // StubGeoIpResolver's city answer when includeCity is true
+        Assert.Equal("US", item.Country);
+    }
+
+    [Fact]
+    public async Task Writer_IneligibleAccount_NeverUpsertsCityClicks()
+    {
+        // The default for every account -- EnableCityAggregates unset -- must produce zero city rows,
+        // even though the stub resolver would happily hand back a city if asked.
+        var (sink, db, writer, testDb) = await MakeWriter(drainMs: 20);
+        await using var _ = testDb;
+        using var cts = new CancellationTokenSource();
+
+        await writer.StartAsync(cts.Token);
+        await sink.EnqueueAsync(Mode1Event()); // ShortCodeId points at nothing seeded in the test DB
+        await WaitUntilAsync(() => db.VisitCount >= 1);
+        await cts.CancelAsync();
+
+        Assert.Empty(db.UpsertedCityClicks);
     }
 
     [Fact]
@@ -280,10 +363,47 @@ public class BackgroundVisitWriterTests
         Assert.NotEqual(h1, h2);
     }
 
-    // Fixed geo answer so tests can assert the writer stores exactly country + timezone and no more.
+    [Fact]
+    public void HashIp_SameIpSameRotationDay_DifferentUtcHours_ProducesSameHash()
+    {
+        // 6am and 11pm Eastern on the same calendar day are hours apart in UTC terms, but both fall in
+        // the same 5am-anchored rotation day -- this is the whole point of moving off hourly rotation.
+        // January is unambiguously EST (UTC-5) everywhere in the US -- no DST-transition-date math needed.
+        var morning = new DateTimeOffset(2026, 1, 15, 11, 0, 0, TimeSpan.Zero); // 6am EST
+        var night = new DateTimeOffset(2026, 1, 16, 3, 0, 0, TimeSpan.Zero);    // 10pm EST same rotation day
+
+        var h1 = BackgroundVisitWriter.HashIp("203.0.113.9", "pepper", morning);
+        var h2 = BackgroundVisitWriter.HashIp("203.0.113.9", "pepper", night);
+        Assert.Equal(h1, h2);
+    }
+
+    [Fact]
+    public void HashIp_AcrossThe5amEasternBoundary_ProducesDifferentHash()
+    {
+        var before5am = new DateTimeOffset(2026, 1, 15, 9, 59, 0, TimeSpan.Zero); // 4:59am EST
+        var after5am = new DateTimeOffset(2026, 1, 15, 10, 1, 0, TimeSpan.Zero);  // 5:01am EST
+
+        var h1 = BackgroundVisitWriter.HashIp("203.0.113.9", "pepper", before5am);
+        var h2 = BackgroundVisitWriter.HashIp("203.0.113.9", "pepper", after5am);
+        Assert.NotEqual(h1, h2);
+    }
+
+    [Theory]
+    [InlineData(2026, 1, 15, 9, 59, "20260114")]  // just before 5am EST (winter, UTC-5) -> previous day's bucket
+    [InlineData(2026, 1, 15, 10, 1, "20260115")]  // just after 5am EST
+    [InlineData(2026, 7, 15, 8, 59, "20260714")]  // just before 5am EDT (summer, UTC-4) -> previous day's bucket
+    [InlineData(2026, 7, 15, 9, 1, "20260715")]   // just after 5am EDT
+    public void DailyBucket_HandlesBothDstOffsets(int y, int m, int d, int h, int min, string expected)
+    {
+        var utc = new DateTimeOffset(y, m, d, h, min, 0, TimeSpan.Zero);
+        Assert.Equal(expected, BackgroundVisitWriter.DailyBucket(utc));
+    }
+
+    // Fixed geo answer so tests can assert the writer stores exactly country + timezone and no more --
+    // and, when includeCity is true, a fixed city so the city-aggregation path is exercisable too.
     private sealed class StubGeoIpResolver : ShortLynx.Services.Analytics.IGeoIpResolver
     {
-        public ShortLynx.Services.Analytics.GeoLocation Resolve(string rawIp)
-            => new("US", "America/Chicago");
+        public ShortLynx.Services.Analytics.GeoLocation Resolve(string rawIp, bool includeCity = false)
+            => new("US", "America/Chicago", includeCity ? "Chicago" : null);
     }
 }

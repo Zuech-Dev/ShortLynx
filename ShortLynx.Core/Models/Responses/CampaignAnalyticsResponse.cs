@@ -39,4 +39,6 @@ public sealed record CampaignAnalyticsResponse(
     int RecipientsClicked,
     double? MedianTimeToFirstClickMinutes,
     double? P90TimeToFirstClickMinutes,
-    IReadOnlyList<CampaignLinkClicks> Links);
+    IReadOnlyList<CampaignLinkClicks> Links,
+    // Empty unless the account has EnableCityAggregates on — see LinkAnalyticsResponse.Cities.
+    IReadOnlyList<CityCount> Cities);

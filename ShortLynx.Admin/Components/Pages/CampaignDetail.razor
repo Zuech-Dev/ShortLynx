@@ -1,10 +1,12 @@
 @page "/campaigns/{Id:guid}"
 @attribute [Authorize]
 @using Microsoft.Extensions.DependencyInjection
+@using Microsoft.Extensions.Options
 @using ShortLynx.Services.Analytics
 @using ShortLynx.Services.Campaigns
 @inject IServiceScopeFactory ScopeFactory
 @inject IDbContextFactory<ShortLynxDbContext> DbFactory
+@inject IOptions<AnalyticsOptions> AnalyticsOpts
 
 <PageTitle>Campaign — ShortLynx Admin</PageTitle>
 
@@ -52,7 +54,7 @@ else
         </div>
     }
 
-    <ClickBreakdownCard Breakdown="_breakdown" Title="Campaign clicks" />
+    <ClickBreakdownCard Breakdown="_breakdown" Cities="_cities" Title="Campaign clicks" />
 
     @if (_breakdown is { TotalClicks: > 0 })
     {
@@ -97,6 +99,7 @@ else
     Guid _uid, _accountId;
     string _name = string.Empty;
     ClickBreakdown? _breakdown;
+    IReadOnlyList<CityCount> _cities = [];
     RecipientEngagementStats? _engagement;
     List<LinkRow> _links = [];
 
@@ -140,7 +143,12 @@ else
         // Every click across the campaign's links, tagged by link — see LinkVisitQueries for the rule.
         var tagged = await LinkVisitQueries.LoadRowsByLinkAsync(db, linkIds);
 
-        _breakdown = ClickAggregator.Summarize(tagged.Select(x => x.Row).ToList());
+        var enforceAnonymity = AnalyticsOpts.Value.EnforceAnonymity;
+        _breakdown = ClickAggregator.Summarize(tagged.Select(x => x.Row).ToList(),
+            enforceAnonymity ? ClickAggregator.AnonymityThreshold : 0);
+        _cities = CityAggregator.Summarize(
+            await CityClickQueries.LoadForLinksAsync(db, linkIds),
+            enforceAnonymity ? CityAggregator.AnonymityThreshold : 0);
 
         // Mode 2 recipient engagement: join each provisioned code to its earliest visit.
         var engagementCodes = await db.UserLinkCodeEntities

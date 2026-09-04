@@ -22,8 +22,12 @@ namespace ShortLynx.Core.Controllers;
 public class MeLinksController(
     ILinkService linkService, ShortLynxDbContext db,
     IQrCodeService qr, IOptions<LinkUrlOptions> linkOptions,
-    IOptions<ShortCodeOptions> shortCodeOptions) : SessionControllerBase
+    IOptions<ShortCodeOptions> shortCodeOptions,
+    IOptions<AnalyticsOptions> analyticsOptions) : SessionControllerBase
 {
+    private int AnonymityThreshold => analyticsOptions.Value.EnforceAnonymity ? ClickAggregator.AnonymityThreshold : 0;
+    private int CityAnonymityThreshold => analyticsOptions.Value.EnforceAnonymity ? CityAggregator.AnonymityThreshold : 0;
+
     // GET /me/links
     [HttpGet]
     public async Task<IActionResult> List([FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default)
@@ -155,12 +159,13 @@ public class MeLinksController(
             .Select(c => new CodeClickStats(c.Code, c.UserId, c.Clicks, c.Recipient))
             .ToList();
 
-        var b = ClickAggregator.Summarize(rows);
+        var b = ClickAggregator.Summarize(rows, AnonymityThreshold);
+        var cities = CityAggregator.Summarize(await CityClickQueries.LoadForLinksAsync(db, [id], ct), CityAnonymityThreshold);
         return Ok(new LinkAnalyticsResponse(
             id, link.OriginalUrl, link.Mode.ToString(),
             b.TotalClicks, b.UniqueClicks, b.HumanClicks, b.HumanUniqueClicks, b.BotClicks,
             b.FirstClickAt, b.LastClickAt,
-            codeStats, b.Sources, b.Devices, b.Timeline, b.HourlyDistribution));
+            codeStats, b.Sources, b.Devices, b.Timeline, b.HourlyDistribution, cities));
     }
 
     // GET /me/links/{id}/analytics/export — the same aggregate breakdown as /analytics, as CSV.
@@ -193,7 +198,7 @@ public class MeLinksController(
                 .ToList();
         }
 
-        var csv = ClickBreakdownCsv.Format(ClickAggregator.Summarize(rows));
+        var csv = ClickBreakdownCsv.Format(ClickAggregator.Summarize(rows, AnonymityThreshold));
         return File(System.Text.Encoding.UTF8.GetBytes(csv), "text/csv", $"link-{id}-analytics.csv");
     }
 

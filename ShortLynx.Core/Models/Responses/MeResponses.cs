@@ -7,4 +7,4 @@ public sealed record MyApiKeyResponse(Guid Id, string Name, string Prefix, strin
 public sealed record AccountResponse(Guid Id, string Name, string Role);
 
 /// <summary>The current account's own settings.</summary>
-public sealed record AccountSettingsResponse(Guid Id, string Name, string? PrivacyPolicyUrl, string? TermsOfServiceUrl);
+public sealed record AccountSettingsResponse(Guid Id, string Name, string? PrivacyPolicyUrl, string? TermsOfServiceUrl, bool EnableCityAggregates);

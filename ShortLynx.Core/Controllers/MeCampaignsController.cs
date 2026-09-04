@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using ShortLynx.Core.Auth;
 using ShortLynx.Core.Models.Requests;
 using ShortLynx.Core.Models.Responses;
@@ -12,8 +13,12 @@ using ShortLynx.Services.Campaigns;
 namespace ShortLynx.Core.Controllers;
 
 [Route("me/campaigns")]
-public class MeCampaignsController(ICampaignService campaigns, ShortLynxDbContext db) : SessionControllerBase
+public class MeCampaignsController(
+    ICampaignService campaigns, ShortLynxDbContext db, IOptions<AnalyticsOptions> analyticsOptions) : SessionControllerBase
 {
+    private int AnonymityThreshold => analyticsOptions.Value.EnforceAnonymity ? ClickAggregator.AnonymityThreshold : 0;
+    private int CityAnonymityThreshold => analyticsOptions.Value.EnforceAnonymity ? CityAggregator.AnonymityThreshold : 0;
+
     // GET /me/campaigns
     [HttpGet]
     public async Task<IActionResult> List(CancellationToken ct)
@@ -100,7 +105,9 @@ public class MeCampaignsController(ICampaignService campaigns, ShortLynxDbContex
             .OrderByDescending(l => l.TotalClicks)
             .ToList();
 
-        var b = ClickAggregator.Summarize(tagged.Select(x => x.Row).ToList());
+        var b = ClickAggregator.Summarize(tagged.Select(x => x.Row).ToList(), AnonymityThreshold);
+        var cities = CityAggregator.Summarize(
+            await CityClickQueries.LoadForLinksAsync(db, links.Select(l => l.Id).ToList(), ct), CityAnonymityThreshold);
         var engagement = await RecipientEngagementAsync(links.Select(l => l.Id).ToList(), ct);
         return Ok(new CampaignAnalyticsResponse(
             campaign.Id, campaign.Name, links.Count,
@@ -109,7 +116,7 @@ public class MeCampaignsController(ICampaignService campaigns, ShortLynxDbContex
             b.Sources, b.Devices, b.Timeline, b.HourlyDistribution,
             engagement.RecipientsTotal, engagement.RecipientsClicked,
             engagement.MedianTimeToFirstClickMinutes, engagement.P90TimeToFirstClickMinutes,
-            perLink));
+            perLink, cities));
     }
 
     // GET /me/campaigns/{id}/analytics/export — the campaign-wide aggregate breakdown as CSV.
@@ -126,7 +133,7 @@ public class MeCampaignsController(ICampaignService campaigns, ShortLynxDbContex
             .ToListAsync(ct);
         var tagged = await GatherVisitsAsync(linkIds, ct);
 
-        var csv = ClickBreakdownCsv.Format(ClickAggregator.Summarize(tagged.Select(x => x.Row).ToList()));
+        var csv = ClickBreakdownCsv.Format(ClickAggregator.Summarize(tagged.Select(x => x.Row).ToList(), AnonymityThreshold));
         return File(System.Text.Encoding.UTF8.GetBytes(csv), "text/csv", $"campaign-{id}-analytics.csv");
     }
 

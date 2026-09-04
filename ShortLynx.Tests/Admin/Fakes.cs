@@ -62,7 +62,7 @@ internal sealed class FakeAccountService : IAccountService
 
     public Task<AccountEntity?> UpdateAccountAsync(
         Guid accountId, string name, string? privacyPolicyUrl, string? termsOfServiceUrl,
-        bool confirmsDisclosure, CancellationToken ct = default)
+        bool confirmsDisclosure, bool enableCityAggregates, CancellationToken ct = default)
         => throw new NotSupportedException();
 }
 

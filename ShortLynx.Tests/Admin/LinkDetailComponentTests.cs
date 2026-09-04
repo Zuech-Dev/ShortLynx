@@ -272,7 +272,7 @@ public class LinkDetailComponentTests : BunitContext
     }
 
     [Fact]
-    public void RepeatClicks_ShownWithTheWithinAnHourCaveat()
+    public void RepeatClicks_ShownWithTheWithinARotationDayCaveat()
     {
         // The seeded visits have ip1 clicking twice, so there's exactly one repeat click.
         var linkId = SeedAnonymousLinkWithVisits();
@@ -281,8 +281,8 @@ public class LinkDetailComponentTests : BunitContext
 
         var repeat = cut.Find("[data-testid=repeat-clicks]").TextContent;
         // The caveat is non-negotiable: without it the number reads as "came back later", which the
-        // hourly-rotating hash makes unknowable.
-        Assert.Contains("within a single hour", repeat);
+        // daily-rotating hash makes unknowable.
+        Assert.Contains("within a single rotation day", repeat);
         Assert.Contains("clicked once", repeat);
     }
 

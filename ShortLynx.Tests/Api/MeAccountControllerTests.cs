@@ -51,6 +51,54 @@ public class MeAccountControllerTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task Update_EnableCityAggregates_WithoutPrivacyPolicyUrl_Returns400()
+    {
+        // CITY_GEO_PLAN.md §6.3: city-level analytics can't be switched on for an account that hasn't
+        // disclosed link tracking at all -- the same transparency reasoning as the disclosure-
+        // confirmation gate, checked independently of it.
+        var (client, _, _) = await _factory.CreateSessionClientAsync();
+
+        var resp = await client.PutAsJsonAsync("/me/account", new UpdateAccountRequest(
+            "Acme", null, null, EnableCityAggregates: true));
+
+        Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Update_EnableCityAggregates_WithPrivacyPolicyUrlInSameRequest_Succeeds()
+    {
+        // Setting the URL and turning the toggle on in one request must work -- gating against the
+        // *resulting* value, not the account's value before this update.
+        var (client, _, _) = await _factory.CreateSessionClientAsync();
+
+        var resp = await client.PutAsJsonAsync("/me/account", new UpdateAccountRequest(
+            "Acme", "https://acme.example/privacy", null,
+            ConfirmsDisclosure: true, EnableCityAggregates: true));
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        var settings = await resp.Content.ReadFromJsonAsync<AccountSettingsResponse>();
+        Assert.True(settings!.EnableCityAggregates);
+    }
+
+    [Fact]
+    public async Task Update_OmittingEnableCityAggregates_ClearsAPreviouslySetValue()
+    {
+        // Full-replace semantics, same as every other field on this endpoint: a client must resend the
+        // current value to keep it, matching how PrivacyPolicyUrl already behaves.
+        var (client, _, _) = await _factory.CreateSessionClientAsync();
+        await client.PutAsJsonAsync("/me/account", new UpdateAccountRequest(
+            "Acme", "https://acme.example/privacy", null,
+            ConfirmsDisclosure: true, EnableCityAggregates: true));
+
+        var resp = await client.PutAsJsonAsync("/me/account", new UpdateAccountRequest(
+            "Acme", "https://acme.example/privacy", null, ConfirmsDisclosure: true));
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        var settings = await resp.Content.ReadFromJsonAsync<AccountSettingsResponse>();
+        Assert.False(settings!.EnableCityAggregates);
+    }
+
+    [Fact]
     public async Task Update_PrivacyUrlWithoutConfirmation_Returns400()
     {
         // Matches Admin's own Settings.razor: a policy URL turns off the recipient-facing disclosure

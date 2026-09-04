@@ -23,7 +23,7 @@ public class UserSessionServiceTests
         public Task<IReadOnlyList<MemberView>> ListMembersAsync(Guid a, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<AccountRole?> GetRoleAsync(Guid a, Guid u, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<AccountEntity?> GetAccountAsync(Guid a, CancellationToken ct = default) => throw new NotSupportedException();
-        public Task<AccountEntity?> UpdateAccountAsync(Guid a, string n, string? p, string? t, bool c, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<AccountEntity?> UpdateAccountAsync(Guid a, string n, string? p, string? t, bool c, bool e, CancellationToken ct = default) => throw new NotSupportedException();
     }
 
     private static readonly JwtOptions Opts = new() { SigningKey = new string('k', 40), AccessTokenMinutes = 15, RefreshTokenDays = 30 };

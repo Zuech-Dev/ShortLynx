@@ -1,59 +1,105 @@
-<div class="top-row flex items-center pl-3 navbar-dark">
-    <div class="w-full">
-        <a class="navbar-brand" href="">ShortLynx</a>
+@implements IDisposable
+@inject NavigationManager Nav
+
+@* Below `lg`, links collapse behind this button; the panel that reveals opens below it, full-width. *@
+@if (Style == NavStyle.Hamburger)
+{
+    <div class="px-4 lg:hidden">
+        <button type="button" class="inline-flex items-center justify-center h-11 w-11 rounded-md text-gray-300 hover:bg-white/10"
+                aria-expanded="@(_navOpen ? "true" : "false")" aria-controls="primary-nav" aria-label="Toggle navigation menu"
+                @onclick="() => _navOpen = !_navOpen">
+            @if (_navOpen)
+            {
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            }
+            else
+            {
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                </svg>
+            }
+        </button>
     </div>
-</div>
+}
 
-<input type="checkbox" title="Navigation menu" class="navbar-toggler"/>
+<nav id="primary-nav" class="@NavClass" aria-label="Primary" @onkeydown="HandleKeyDown">
+    @foreach (var item in Items)
+    {
+        @if (item.Policy is not null)
+        {
+            <AuthorizeView Policy="@item.Policy">
+                <Authorized>
+                    <NavLink href="@item.Href" Match="@(item.Match ? NavLinkMatch.All : NavLinkMatch.Prefix)"
+                             class="@ItemClass" ActiveClass="@ActiveClass" @key="item.Href">
+                        @item.Label
+                    </NavLink>
+                </Authorized>
+            </AuthorizeView>
+        }
+        else
+        {
+            <NavLink href="@item.Href" Match="@(item.Match ? NavLinkMatch.All : NavLinkMatch.Prefix)"
+                     class="@ItemClass" ActiveClass="@ActiveClass" @key="item.Href">
+                @item.Label
+            </NavLink>
+        }
+    }
+</nav>
 
-<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
-    <nav class="flex flex-col">
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                <span class="bi bi-speedometer2-nav-menu" aria-hidden="true"></span> Dashboard
-            </NavLink>
-        </div>
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="links">
-                <span class="bi bi-link-45deg-nav-menu" aria-hidden="true"></span> Links
-            </NavLink>
-        </div>
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="api-keys">
-                <span class="bi bi-key-nav-menu" aria-hidden="true"></span> API Keys
-            </NavLink>
-        </div>
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="campaigns">
-                <span class="bi bi-megaphone-nav-menu" aria-hidden="true"></span> Campaigns
-            </NavLink>
-        </div>
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="social">
-                <span class="bi bi-people-nav-menu" aria-hidden="true"></span> Social
-            </NavLink>
-        </div>
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="domains">
-                <span class="bi bi-globe-nav-menu" aria-hidden="true"></span> Domains
-            </NavLink>
-        </div>
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="members">
-                <span class="bi bi-people-nav-menu" aria-hidden="true"></span> Members
-            </NavLink>
-        </div>
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="settings">
-                <span class="bi bi-gear-nav-menu" aria-hidden="true"></span> Settings
-            </NavLink>
-        </div>
-        <AuthorizeView Policy="@AdminClaims.SuperAdminPolicy">
-            <div class="nav-item px-3">
-                <NavLink class="nav-link" href="users">
-                    <span class="bi bi-people-nav-menu" aria-hidden="true"></span> Users
-                </NavLink>
-            </div>
-        </AuthorizeView>
-    </nav>
-</div>
+@code {
+    [Parameter] public NavStyle Style { get; set; }
+
+    private const string ActiveClass = "bg-white/15 text-white";
+    private bool _navOpen;
+
+    private readonly record struct NavItem(string Href, string Label, bool Match = false, string? Policy = null);
+
+    private static readonly NavItem[] Items =
+    [
+        new("", "Dashboard", Match: true),
+        new("links", "Links"),
+        new("api-keys", "API Keys"),
+        new("campaigns", "Campaigns"),
+        new("social", "Social"),
+        new("domains", "Domains"),
+        new("members", "Members"),
+        new("settings", "Settings"),
+        new("users", "Users", Policy: AdminClaims.SuperAdminPolicy),
+    ];
+
+    private string NavClass => Style switch
+    {
+        NavStyle.Hamburger =>
+            $"{(_navOpen ? "flex" : "hidden")} lg:flex flex-col lg:flex-row lg:items-center gap-1 lg:gap-1 px-4 lg:px-4 pb-3 lg:pb-2",
+        NavStyle.HorizontalScroll =>
+            "flex flex-nowrap items-center gap-2 overflow-x-auto snap-x snap-mandatory scroll-fade px-4 pb-2",
+        _ => "flex flex-col lg:flex-row",
+    };
+
+    private string ItemClass => Style switch
+    {
+        NavStyle.Hamburger =>
+            "block lg:inline-flex px-4 py-3 lg:px-3 lg:py-2 rounded-md text-sm font-medium text-gray-300 hover:bg-white/10 hover:text-white",
+        NavStyle.HorizontalScroll =>
+            "inline-flex shrink-0 snap-start whitespace-nowrap px-3 py-2 rounded-md text-sm font-medium text-gray-300 hover:bg-white/10 hover:text-white",
+        _ => "",
+    };
+
+    private void HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape" && _navOpen) _navOpen = false;
+    }
+
+    protected override void OnInitialized() => Nav.LocationChanged += OnLocationChanged;
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        if (!_navOpen) return;
+        _navOpen = false;
+        InvokeAsync(StateHasChanged); // LocationChanged fires off the renderer's sync context
+    }
+
+    public void Dispose() => Nav.LocationChanged -= OnLocationChanged;
+}

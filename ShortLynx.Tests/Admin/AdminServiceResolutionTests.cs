@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using ShortLynx.Admin.Services;
 using ShortLynx.Services.Accounts;
 using ShortLynx.Services.Campaigns;
 using ShortLynx.Services.Domains;
@@ -28,6 +29,7 @@ public class AdminServiceResolutionTests : IClassFixture<AdminFactory>
     // can't hold two implementations); the endpoints resolve them per-platform out of the connector set.
     [InlineData(typeof(ShortLynx.Services.Social.ThreadsConnector))]
     [InlineData(typeof(ShortLynx.Services.Social.RedditConnector))]
+    [InlineData(typeof(NavPreferenceService))]
     public void PageService_IsRegistered(Type serviceType)
     {
         using var scope = _factory.Services.CreateScope();

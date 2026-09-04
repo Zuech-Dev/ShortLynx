@@ -8,6 +8,7 @@ using Microsoft.Extensions.Options;
 using ShortLynx.Admin.Components;
 using ShortLynx.Admin.Extensions;
 using ShortLynx.Admin.Options;
+using ShortLynx.Admin.Services;
 using ShortLynx.Data.Context;
 using ShortLynx.Data.Enums;
 using ShortLynx.Repository;
@@ -78,6 +79,11 @@ builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
 builder.Services.AddRazorPages();
+
+// The signed-in user's choice of nav bar style (hamburger vs. horizontal scroll) — a per-browser
+// UI preference read from/written to localStorage, not persisted to the database. Scoped so it
+// matches one circuit's lifetime.
+builder.Services.AddScoped<NavPreferenceService>();
 
 builder.Services.AddShortLynxDatabase(builder.Configuration);
 builder.Services.AddShortLynxServices(builder.Configuration);

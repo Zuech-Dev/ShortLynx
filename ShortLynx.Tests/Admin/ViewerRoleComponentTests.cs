@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using ShortLynx.Admin.Components.Pages;
 using ShortLynx.Admin.Options;
+using ShortLynx.Admin.Services;
 using ShortLynx.Data.Context;
 using ShortLynx.Data.Entities;
 using ShortLynx.Data.Enums;
@@ -68,6 +69,7 @@ public class ViewerRoleComponentTests : BunitContext
         Services.AddScoped<ILinkService>(_ => _links);
         Services.AddScoped<ISocialConnectionService>(_ => _social);
         Services.AddScoped<ICampaignService, CampaignService>();
+        Services.AddScoped<NavPreferenceService>();
         Services.AddSingleton<IOptions<CustomDomainOptions>>(Options.Create(new CustomDomainOptions()));
         Services.AddSingleton<IOptions<DashboardOptions>>(Options.Create(new DashboardOptions()));
 

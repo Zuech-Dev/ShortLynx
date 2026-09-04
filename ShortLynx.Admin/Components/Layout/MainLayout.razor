@@ -1,25 +1,30 @@
 @inherits LayoutComponentBase
+@implements IDisposable
+@inject NavPreferenceService Prefs
 
-<div class="page">
-    <div class="sidebar">
-        <NavMenu/>
-    </div>
-
-    <main>
-        <div class="top-row px-4 flex justify-end items-center gap-3">
+<div class="min-h-screen flex flex-col">
+    <header class="navbar-dark text-white">
+        <div class="px-4 min-h-14 flex items-center justify-between gap-3">
+            <a href="" class="text-xl font-semibold shrink-0">ShortLynx</a>
             <AuthorizeView>
                 <Authorized>
-                    <AccountSwitcher/>
-                    <span class="text-gray-500 text-sm">@context.User.Identity?.Name</span>
-                    <form method="post" action="/auth/logout">
-                        <AntiforgeryToken/>
-                        <button type="submit" class="btn btn-outline">Sign out</button>
-                    </form>
+                    <div class="flex items-center gap-2 lg:gap-3 min-w-0">
+                        <AccountSwitcher/>
+                        <span class="text-gray-300 text-sm max-w-[8rem] truncate sm:max-w-[12rem] lg:max-w-[16rem]">@context.User.Identity?.Name</span>
+                        <form method="post" action="/auth/logout">
+                            <AntiforgeryToken/>
+                            <button type="submit" class="btn btn-outline text-white border-white/30 hover:bg-white/10">Sign out</button>
+                        </form>
+                    </div>
                 </Authorized>
             </AuthorizeView>
         </div>
 
-        <article class="content px-4">
+        <NavMenu Style="@Prefs.Style"/>
+    </header>
+
+    <main class="flex-1">
+        <article class="content px-4 py-4">
             @Body
         </article>
     </main>
@@ -30,3 +35,18 @@
     <a href="." class="reload">Reload</a>
     <span class="dismiss">🗙</span>
 </div>
+
+@code {
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            Prefs.Changed += OnPrefsChanged;
+            await Prefs.LoadAsync();
+        }
+    }
+
+    private void OnPrefsChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Prefs.Changed -= OnPrefsChanged;
+}

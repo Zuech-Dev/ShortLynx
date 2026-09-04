@@ -1,10 +1,33 @@
 @page "/settings"
 @attribute [Authorize]
 @inject IDbContextFactory<ShortLynxDbContext> DbFactory
+@inject NavPreferenceService Prefs
 
 <PageTitle>Settings — ShortLynx Admin</PageTitle>
 
 <h1 class="text-2xl font-bold mb-3">Settings</h1>
+
+<div class="card mb-4" data-testid="nav-style">
+    <div class="card-body">
+        <h5 class="card-title">Navigation Style</h5>
+        <p class="text-gray-500 text-sm mb-3">
+            Choose how the dashboard's navigation bar behaves. This is saved to this browser only —
+            it isn't shared with other people on your account or synced to your other devices.
+        </p>
+        <div class="flex flex-wrap gap-2" role="radiogroup" aria-label="Navigation style">
+            <button type="button" class="btn @(Prefs.Style == NavStyle.Hamburger ? "btn-primary" : "btn-outline")"
+                    aria-pressed="@(Prefs.Style == NavStyle.Hamburger ? "true" : "false")"
+                    data-testid="nav-style-hamburger" @onclick="() => Prefs.SetAsync(NavStyle.Hamburger)">
+                Hamburger menu
+            </button>
+            <button type="button" class="btn @(Prefs.Style == NavStyle.HorizontalScroll ? "btn-primary" : "btn-outline")"
+                    aria-pressed="@(Prefs.Style == NavStyle.HorizontalScroll ? "true" : "false")"
+                    data-testid="nav-style-scroll" @onclick="() => Prefs.SetAsync(NavStyle.HorizontalScroll)">
+                Horizontal scroll
+            </button>
+        </div>
+    </div>
+</div>
 
 @if (!_loaded)
 {

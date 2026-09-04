@@ -11,7 +11,7 @@
     <form method="post" action="/auth/switch" class="flex items-center gap-2" data-testid="account-switcher">
         <AntiforgeryToken/>
         <input type="hidden" name="returnUrl" value="@_returnUrl"/>
-        <select name="accountId" class="field-input py-1 text-sm" data-testid="account-select"
+        <select name="accountId" class="field-input py-1 text-sm max-w-[8rem] lg:max-w-none" data-testid="account-select"
                 onchange="this.form.submit()">
             @foreach (var a in _accounts)
             {
@@ -20,7 +20,9 @@
                 </option>
             }
         </select>
-        <button type="submit" class="btn btn-outline text-sm" data-testid="account-switch-btn">Switch</button>
+        @* The select already auto-submits on change — this button is only a no-JS fallback, so it's
+           safe to reclaim the space for it below `lg` where the header is already tight. *@
+        <button type="submit" class="btn btn-outline text-sm hidden lg:inline-flex" data-testid="account-switch-btn">Switch</button>
     </form>
 }
 

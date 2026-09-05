@@ -147,6 +147,18 @@ public class MeLinksController(
         return ok ? NoContent() : BadRequest(new { error = "Campaign not found or not in this account." });
     }
 
+    // PUT /me/links/{id}/folder — file/unfile the link into one of the account's folders.
+    [HttpPut("{id:guid}/folder")]
+    [RequireAccountAction(AccountAction.ManageResources)]
+    public async Task<IActionResult> SetFolder(Guid id, [FromBody] SetLinkFolderRequest request, CancellationToken ct)
+    {
+        if (!await db.LinkEntities.AnyAsync(l => l.Id == id && l.AccountId == AccountId, ct))
+            return NotFound();
+
+        var ok = await linkService.SetLinkFolderAsync(id, request.FolderId, AccountId, ct);
+        return ok ? NoContent() : BadRequest(new { error = "Folder not found or not in this account." });
+    }
+
     // GET /me/links/{id}/analytics
     [HttpGet("{id:guid}/analytics")]
     public async Task<IActionResult> Analytics(Guid id, CancellationToken ct)
@@ -338,7 +350,7 @@ public class MeLinksController(
 
     private static LinkResponse ToLinkResponse(LinkEntity link, string shortCode, bool isCustom)
         => new(link.Id, link.OriginalUrl, link.Mode.ToString(), shortCode, link.CreatedAt, link.ExpiresAt,
-               link.CampaignId, isCustom, link.CustomDomainId);
+               link.CampaignId, isCustom, link.CustomDomainId, link.FolderId);
 
     // Null means neither field was usably supplied — the caller returns 400.
     private static IReadOnlyCollection<CodeRecipient>? ResolveRecipients(CreateUserCodesRequest request)

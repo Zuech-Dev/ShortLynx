@@ -25,4 +25,7 @@ public sealed record LinkResponse(
     // The verified custom domain this link is pinned to, or null when it resolves on any host. Same
     // "PUT sets it, nothing could read it back" gap CampaignId above was added to fix — a domain-pin
     // control has no way to show which domain (if any) is already selected without this.
-    Guid? CustomDomainId = null);
+    Guid? CustomDomainId = null,
+    // The folder this link is filed under, or null when unfiled. Same "PUT sets it, nothing could read
+    // it back" gap as CampaignId/CustomDomainId.
+    Guid? FolderId = null);

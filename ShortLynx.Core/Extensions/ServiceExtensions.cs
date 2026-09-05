@@ -7,6 +7,7 @@ using ShortLynx.Services.Accounts;
 using ShortLynx.Services.ApiKeys;
 using ShortLynx.Services.Auth;
 using ShortLynx.Services.Campaigns;
+using ShortLynx.Services.Folders;
 using ShortLynx.Services.Domains;
 using ShortLynx.Services.Entitlements;
 using ShortLynx.Services.Email;
@@ -87,6 +88,7 @@ public static class ServiceExtensions
         services.AddHostedService<ShortLynx.Services.Social.SocialMetricsBackgroundService>();
         services.AddScoped<ILinkService, LinkService>();
         services.AddScoped<ICampaignService, CampaignService>();
+        services.AddScoped<IFolderService, FolderService>();
         services.AddScoped<IMagicLinkService, MagicLinkService>();
         services.AddScoped<ICustomDomainService, CustomDomainService>();
         services.AddSingleton<IDnsResolver, DnsClientResolver>();

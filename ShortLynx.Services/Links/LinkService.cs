@@ -216,6 +216,25 @@ public sealed class LinkService(
         return true;
     }
 
+    public async Task<bool> SetLinkFolderAsync(
+        Guid linkId, Guid? folderId, Guid accountId, CancellationToken ct = default)
+    {
+        var link = await db.LinkEntities
+            .FirstOrDefaultAsync(l => l.Id == linkId && l.AccountId == accountId, ct);
+        if (link is null) return false;
+
+        if (folderId is { } fid)
+        {
+            var ownsFolder = await db.FolderEntities.AnyAsync(
+                f => f.Id == fid && f.AccountId == accountId, ct);
+            if (!ownsFolder) return false;
+        }
+
+        link.FolderId = folderId;
+        await db.SaveChangesAsync(ct);
+        return true;
+    }
+
     public Task<IReadOnlyList<UserLinkCodeEntity>> CreateUserLinkCodesAsync(
         Guid linkId, IEnumerable<Guid> userIds, CancellationToken ct = default)
         => CreateUserLinkCodesAsync(

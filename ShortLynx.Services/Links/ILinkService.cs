@@ -58,4 +58,10 @@ public interface ILinkService
     /// Returns false if the link isn't the account's, or the campaign isn't the account's.
     /// </summary>
     Task<bool> SetLinkCampaignAsync(Guid linkId, Guid? campaignId, Guid accountId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Files (or, with null, unfiles) an account's link into one of the account's folders.
+    /// Returns false if the link isn't the account's, or the folder isn't the account's.
+    /// </summary>
+    Task<bool> SetLinkFolderAsync(Guid linkId, Guid? folderId, Guid accountId, CancellationToken ct = default);
 }

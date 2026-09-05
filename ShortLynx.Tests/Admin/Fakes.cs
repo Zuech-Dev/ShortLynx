@@ -251,6 +251,14 @@ internal sealed class FakeLinkService : ILinkService
 
     public readonly List<(Guid LinkId, Guid? CampaignId, Guid AccountId)> CampaignSet = [];
 
+    public Task<bool> SetLinkFolderAsync(Guid linkId, Guid? folderId, Guid accountId, CancellationToken ct = default)
+    {
+        FolderSet.Add((linkId, folderId, accountId));
+        return Task.FromResult(true);
+    }
+
+    public readonly List<(Guid LinkId, Guid? FolderId, Guid AccountId)> FolderSet = [];
+
     public Task<IReadOnlyList<UserLinkCodeEntity>> CreateUserLinkCodesAsync(
         Guid linkId, IReadOnlyCollection<CodeRecipient> recipients, bool isOneTimeUse, CancellationToken ct = default)
     {

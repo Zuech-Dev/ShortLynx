@@ -192,51 +192,14 @@ public class LinksController(
 
         if (link is null) return NotFound();
 
-        List<CodeClickStats> codeStats;
-        List<VisitRow> rows;
-
-        if (link.Mode == LinkMode.Anonymous)
-        {
-            var sc = await db.ShortCodeEntities
-                .Where(x => x.LinkId == id)
-                .FirstOrDefaultAsync(ct);
-
-            if (sc is null)
-            {
-                codeStats = [];
-                rows = [];
-            }
-            else
-            {
-                rows = (await db.VisitEntities
-                        .Where(v => v.ShortCodeId == sc.Id)
-                        .Select(v => new { v.HashedIp, v.Source, v.Device, v.ClickedAt })
-                        .ToListAsync(ct))
-                    .Select(v => new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt))
-                    .ToList();
-                codeStats = [new CodeClickStats(sc.Code, null, rows.Count)];
-            }
-        }
-        else
-        {
-            var codes = await db.UserLinkCodeEntities
-                .Where(c => c.LinkId == id)
-                .ToListAsync(ct);
-
-            var codeIds = codes.Select(c => c.Id).ToList();
-            var visits = await db.UserVisitEntities
-                .Where(v => codeIds.Contains(v.UserLinkCodeId))
-                .Select(v => new { v.UserLinkCodeId, v.HashedIp, v.Source, v.Device, v.ClickedAt })
-                .ToListAsync(ct);
-
-            var countByCode = visits
-                .GroupBy(v => v.UserLinkCodeId)
-                .ToDictionary(g => g.Key, g => g.LongCount());
-            codeStats = codes
-                .Select(c => new CodeClickStats(c.Code, c.UserId, countByCode.GetValueOrDefault(c.Id, 0), c.Recipient))
-                .ToList();
-            rows = visits.Select(v => new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt)).ToList();
-        }
+        // Shared canonical query layer (also used by MeLinksController.Analytics) -- this used to
+        // reimplement a narrower version by hand (HashedIp/Source/Device/ClickedAt only), which meant
+        // this endpoint's Browser/OS/language/country/UTM breakdowns would always come back empty
+        // rather than actually reflecting Browser/OS/etc.
+        var rows = await LinkVisitQueries.LoadLinkRowsAsync(db, link, ct);
+        var codeStats = (await LinkVisitQueries.LoadCodeCountsAsync(db, link, ct))
+            .Select(c => new CodeClickStats(c.Code, c.UserId, c.Clicks, c.Recipient))
+            .ToList();
 
         var b = ClickAggregator.Summarize(rows, AnonymityThreshold);
         var cities = CityAggregator.Summarize(await CityClickQueries.LoadForLinksAsync(db, [id], ct), CityAnonymityThreshold);
@@ -244,7 +207,9 @@ public class LinksController(
             id, link.OriginalUrl, link.Mode.ToString(),
             b.TotalClicks, b.UniqueClicks, b.HumanClicks, b.HumanUniqueClicks, b.BotClicks,
             b.FirstClickAt, b.LastClickAt,
-            codeStats, b.Sources, b.Devices, b.Timeline, b.HourlyDistribution, cities));
+            codeStats, b.Sources, b.Devices, b.Timeline, b.HourlyDistribution, cities,
+            b.Browsers, b.OperatingSystems, b.Languages, b.Countries, b.NavigationTypes,
+            b.UtmSources, b.UtmMediums, b.UtmCampaigns));
     }
 
     private static LinkResponse ToLinkResponse(LinkEntity link, string shortCode, bool isCustom) =>

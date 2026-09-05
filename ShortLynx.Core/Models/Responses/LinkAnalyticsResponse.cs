@@ -37,4 +37,15 @@ public sealed record LinkAnalyticsResponse(
     // Empty unless the account has EnableCityAggregates on (opt-in, off by default) — see
     // CityAggregator. k-anonymised on unique visitors, not raw clicks, at a lower threshold than every
     // other dimension here because it's the most re-identifying one.
-    IReadOnlyList<CityCount> Cities);
+    IReadOnlyList<CityCount> Cities,
+    // The same breakdowns ClickAggregator already computes and the Admin dashboard already shows —
+    // appended here so API/Next.js consumers aren't stuck with a strictly smaller slice than Admin.
+    // Each list only counts clicks where that dimension is known and k-anonymised, same as Sources/Devices.
+    IReadOnlyList<LabelCount> Browsers,
+    IReadOnlyList<LabelCount> OperatingSystems,
+    IReadOnlyList<LabelCount> Languages,
+    IReadOnlyList<LabelCount> Countries,
+    IReadOnlyList<LabelCount> NavigationTypes,
+    IReadOnlyList<LabelCount> UtmSources,
+    IReadOnlyList<LabelCount> UtmMediums,
+    IReadOnlyList<LabelCount> UtmCampaigns);

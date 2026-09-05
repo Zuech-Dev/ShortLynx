@@ -1,8 +1,12 @@
 using System.Net;
 using System.Net.Http.Json;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using ShortLynx.Core.Models.Requests;
 using ShortLynx.Core.Models.Responses;
+using ShortLynx.Data.Context;
+using ShortLynx.Data.Entities;
+using ShortLynx.Data.Enums;
 using ShortLynx.Services.ApiKeys;
 
 namespace ShortLynx.Tests.Api;
@@ -231,6 +235,42 @@ public class LinksControllerTests : IClassFixture<ApiFactory>
         Assert.Null(body.LastClickAt);
         Assert.Single(body.Codes); // one ShortCode
         Assert.Equal(0, body.Codes[0].ClickCount);
+    }
+
+    [Fact]
+    public async Task GetAnalytics_ReportsBrowserAndUtmBreakdowns()
+    {
+        // Regression: this endpoint used to hand-roll a narrower VisitRow projection (HashedIp/Source/
+        // Device/ClickedAt only), so Browser/OS/UTM would always come back empty even once the response
+        // carried the fields. Now shares LinkVisitQueries with the session-scoped endpoint.
+        var (client, _) = await CreateAuthenticatedClientAsync();
+        var link = await (await client.PostAsJsonAsync("/links", new CreateLinkRequest("https://example.com")))
+            .Content.ReadFromJsonAsync<LinkResponse>();
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ShortLynxDbContext>();
+            var shortCodeId = await db.ShortCodeEntities
+                .Where(s => s.LinkId == link!.Id).Select(s => s.Id).FirstAsync();
+            db.VisitEntities.AddRange(Enumerable.Range(0, 10).Select(i => new VisitEntity
+            {
+                Id = Guid.CreateVersion7(),
+                ShortCodeId = shortCodeId,
+                HashedIp = $"ip{i}",
+                Source = ClickSource.Twitter,
+                Device = DeviceType.Mobile,
+                Browser = "Firefox",
+                UtmSource = "api-created",
+                ClickedAt = DateTimeOffset.UtcNow,
+            }));
+            await db.SaveChangesAsync();
+        }
+
+        var body = await (await client.GetAsync($"/links/{link!.Id}/analytics"))
+            .Content.ReadFromJsonAsync<LinkAnalyticsResponse>();
+
+        Assert.Equal(10, body!.Browsers.Single(b => b.Label == "Firefox").Count);
+        Assert.Equal(10, body.UtmSources.Single(u => u.Label == "api-created").Count);
     }
 
     [Fact]

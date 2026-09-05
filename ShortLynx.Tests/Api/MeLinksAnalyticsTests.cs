@@ -115,6 +115,54 @@ public class MeLinksAnalyticsTests : IClassFixture<ApiFactory>
         Assert.DoesNotContain("ip0", csv);
     }
 
+    [Fact]
+    public async Task Analytics_ReportsBrowserOsAndUtmBreakdowns()
+    {
+        // Closes the Admin-vs-API asymmetry: ClickAggregator already computed these dimensions, but
+        // LinkAnalyticsResponse never carried them until this pass.
+        var (client, _, _) = await _factory.CreateSessionClientAsync();
+        var link = await (await client.PostAsJsonAsync("/me/links", new CreateMyLinkRequest("https://example.com")))
+            .Content.ReadFromJsonAsync<LinkResponse>();
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ShortLynxDbContext>();
+            var shortCodeId = await db.ShortCodeEntities
+                .Where(s => s.LinkId == link!.Id).Select(s => s.Id).FirstAsync();
+
+            db.VisitEntities.AddRange(Enumerable.Range(0, 10).Select(i => new VisitEntity
+            {
+                Id = Guid.CreateVersion7(),
+                ShortCodeId = shortCodeId,
+                HashedIp = $"ip{i}",
+                Source = ClickSource.Twitter,
+                Device = DeviceType.Mobile,
+                Browser = "Chrome",
+                Os = "Windows",
+                Language = "en",
+                Country = "US",
+                NavigationType = "navigate",
+                UtmSource = "newsletter",
+                UtmMedium = "email",
+                UtmCampaign = "spring",
+                ClickedAt = Day1,
+            }));
+            await db.SaveChangesAsync();
+        }
+
+        var body = await (await client.GetAsync($"/me/links/{link!.Id}/analytics"))
+            .Content.ReadFromJsonAsync<LinkAnalyticsResponse>();
+
+        Assert.Equal(10, body!.Browsers.Single(b => b.Label == "Chrome").Count);
+        Assert.Equal(10, body.OperatingSystems.Single(o => o.Label == "Windows").Count);
+        Assert.Equal(10, body.Languages.Single(l => l.Label == "en").Count);
+        Assert.Equal(10, body.Countries.Single(c => c.Label == "US").Count);
+        Assert.Equal(10, body.NavigationTypes.Single(n => n.Label == "navigate").Count);
+        Assert.Equal(10, body.UtmSources.Single(u => u.Label == "newsletter").Count);
+        Assert.Equal(10, body.UtmMediums.Single(u => u.Label == "email").Count);
+        Assert.Equal(10, body.UtmCampaigns.Single(u => u.Label == "spring").Count);
+    }
+
     private static VisitEntity Visit(Guid shortCodeId, string ip, ClickSource source, DeviceType device, DateTimeOffset at)
         => new()
         {

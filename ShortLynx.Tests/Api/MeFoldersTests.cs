@@ -1,7 +1,12 @@
 using System.Net;
 using System.Net.Http.Json;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using ShortLynx.Core.Models.Requests;
 using ShortLynx.Core.Models.Responses;
+using ShortLynx.Data.Context;
+using ShortLynx.Data.Entities;
+using ShortLynx.Data.Enums;
 
 namespace ShortLynx.Tests.Api;
 
@@ -149,5 +154,50 @@ public class MeFoldersTests : IClassFixture<ApiFactory>
         await client.PutAsJsonAsync($"/me/links/{link.Id}/folder", new SetLinkFolderRequest(null));
         var cleared = await (await client.GetAsync($"/me/links/{link.Id}")).Content.ReadFromJsonAsync<LinkResponse>();
         Assert.Null(cleared!.FolderId);
+    }
+
+    [Fact]
+    public async Task Analytics_RollsUpClicksAcrossLinksInTheFolder()
+    {
+        var (client, _, _) = await _factory.CreateSessionClientAsync();
+        var folder = await (await client.PostAsJsonAsync("/me/folders", new CreateFolderRequest("Client X")))
+            .Content.ReadFromJsonAsync<FolderResponse>();
+
+        var linkA = await (await client.PostAsJsonAsync("/me/links", new CreateMyLinkRequest("https://example.com/a")))
+            .Content.ReadFromJsonAsync<LinkResponse>();
+        await client.PutAsJsonAsync($"/me/links/{linkA!.Id}/folder", new SetLinkFolderRequest(folder!.Id));
+        var linkB = await (await client.PostAsJsonAsync("/me/links", new CreateMyLinkRequest("https://example.com/b")))
+            .Content.ReadFromJsonAsync<LinkResponse>();
+        await client.PutAsJsonAsync($"/me/links/{linkB!.Id}/folder", new SetLinkFolderRequest(folder.Id));
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ShortLynxDbContext>();
+            var scA = await db.ShortCodeEntities.Where(s => s.LinkId == linkA.Id).Select(s => s.Id).FirstAsync();
+            var scB = await db.ShortCodeEntities.Where(s => s.LinkId == linkB.Id).Select(s => s.Id).FirstAsync();
+            db.VisitEntities.AddRange(
+                new VisitEntity { Id = Guid.CreateVersion7(), ShortCodeId = scA, HashedIp = "ip1", Source = ClickSource.Direct, Device = DeviceType.Desktop, ClickedAt = DateTimeOffset.UtcNow },
+                new VisitEntity { Id = Guid.CreateVersion7(), ShortCodeId = scB, HashedIp = "ip2", Source = ClickSource.Direct, Device = DeviceType.Desktop, ClickedAt = DateTimeOffset.UtcNow });
+            await db.SaveChangesAsync();
+        }
+
+        var body = await (await client.GetAsync($"/me/folders/{folder.Id}/analytics"))
+            .Content.ReadFromJsonAsync<FolderAnalyticsResponse>();
+
+        Assert.Equal(2, body!.LinkCount);
+        Assert.Equal(2, body.TotalClicks);
+        Assert.Equal(2, body.Links.Count);
+    }
+
+    [Fact]
+    public async Task Analytics_ForeignFolder_Returns404()
+    {
+        var (clientA, _, _) = await _factory.CreateSessionClientAsync();
+        var (clientB, _, _) = await _factory.CreateSessionClientAsync();
+        var folder = await (await clientA.PostAsJsonAsync("/me/folders", new CreateFolderRequest("A")))
+            .Content.ReadFromJsonAsync<FolderResponse>();
+
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await clientB.GetAsync($"/me/folders/{folder!.Id}/analytics")).StatusCode);
     }
 }

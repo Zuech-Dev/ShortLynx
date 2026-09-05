@@ -1,7 +1,12 @@
 using System.Net;
 using System.Net.Http.Json;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using ShortLynx.Core.Models.Requests;
 using ShortLynx.Core.Models.Responses;
+using ShortLynx.Data.Context;
+using ShortLynx.Data.Entities;
+using ShortLynx.Data.Enums;
 
 namespace ShortLynx.Tests.Api;
 
@@ -214,5 +219,56 @@ public class MeTagsTests : IClassFixture<ApiFactory>
         var byFolder = await (await client.GetAsync($"/me/links?folderId={folder.Id}")).Content.ReadFromJsonAsync<List<LinkResponse>>();
         Assert.Single(byFolder!, l => l.Id == filed.Id);
         Assert.DoesNotContain(byFolder!, l => l.Id == neither!.Id);
+    }
+
+    // ── Analytics rollup ────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Analytics_FanOut_LinkWithTwoTags_CountsTowardBoth()
+    {
+        var (client, _, _) = await _factory.CreateSessionClientAsync();
+        var tagUrgent = await (await client.PostAsJsonAsync("/me/tags", new CreateTagRequest("urgent")))
+            .Content.ReadFromJsonAsync<TagResponse>();
+        var tagQ3 = await (await client.PostAsJsonAsync("/me/tags", new CreateTagRequest("q3")))
+            .Content.ReadFromJsonAsync<TagResponse>();
+
+        // One link carries BOTH tags -- its clicks should roll up into each tag's analytics
+        // independently, unlike Folder's single-parent join.
+        var link = await (await client.PostAsJsonAsync("/me/links", new CreateMyLinkRequest("https://example.com/both")))
+            .Content.ReadFromJsonAsync<LinkResponse>();
+        await client.PutAsJsonAsync($"/me/links/{link!.Id}/tags", new SetLinkTagsRequest([tagUrgent!.Id, tagQ3!.Id]));
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ShortLynxDbContext>();
+            var sc = await db.ShortCodeEntities.Where(s => s.LinkId == link.Id).Select(s => s.Id).FirstAsync();
+            db.VisitEntities.AddRange(Enumerable.Range(0, 3).Select(i => new VisitEntity
+            {
+                Id = Guid.CreateVersion7(), ShortCodeId = sc, HashedIp = $"ip{i}",
+                Source = ClickSource.Direct, Device = DeviceType.Desktop, ClickedAt = DateTimeOffset.UtcNow,
+            }));
+            await db.SaveChangesAsync();
+        }
+
+        var urgentBody = await (await client.GetAsync($"/me/tags/{tagUrgent.Id}/analytics"))
+            .Content.ReadFromJsonAsync<TagAnalyticsResponse>();
+        var q3Body = await (await client.GetAsync($"/me/tags/{tagQ3.Id}/analytics"))
+            .Content.ReadFromJsonAsync<TagAnalyticsResponse>();
+
+        Assert.Equal(3, urgentBody!.TotalClicks);
+        Assert.Equal(3, q3Body!.TotalClicks);
+        Assert.Single(urgentBody.Links);
+        Assert.Single(q3Body.Links);
+    }
+
+    [Fact]
+    public async Task Analytics_ForeignTag_Returns404()
+    {
+        var (clientA, _, _) = await _factory.CreateSessionClientAsync();
+        var (clientB, _, _) = await _factory.CreateSessionClientAsync();
+        var tag = await (await clientA.PostAsJsonAsync("/me/tags", new CreateTagRequest("a")))
+            .Content.ReadFromJsonAsync<TagResponse>();
+
+        Assert.Equal(HttpStatusCode.NotFound, (await clientB.GetAsync($"/me/tags/{tag!.Id}/analytics")).StatusCode);
     }
 }

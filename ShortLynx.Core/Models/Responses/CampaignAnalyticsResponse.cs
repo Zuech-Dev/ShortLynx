@@ -41,4 +41,13 @@ public sealed record CampaignAnalyticsResponse(
     double? P90TimeToFirstClickMinutes,
     IReadOnlyList<CampaignLinkClicks> Links,
     // Empty unless the account has EnableCityAggregates on — see LinkAnalyticsResponse.Cities.
-    IReadOnlyList<CityCount> Cities);
+    IReadOnlyList<CityCount> Cities,
+    // Same breakdown-parity fields as LinkAnalyticsResponse — see there for the rationale.
+    IReadOnlyList<LabelCount> Browsers,
+    IReadOnlyList<LabelCount> OperatingSystems,
+    IReadOnlyList<LabelCount> Languages,
+    IReadOnlyList<LabelCount> Countries,
+    IReadOnlyList<LabelCount> NavigationTypes,
+    IReadOnlyList<LabelCount> UtmSources,
+    IReadOnlyList<LabelCount> UtmMediums,
+    IReadOnlyList<LabelCount> UtmCampaigns);

@@ -205,6 +205,20 @@ Assigning to a non-existent account returns `404`. A deactivated user can't sign
 unexpired magic-link token; re-enable with `PUT {id} { "isActive": true }`. The same operations are
 available in the Admin dashboard's **Users** page (super-admin only).
 
+### `/admin/accounts` — editing any account, cross-tenant
+
+Also super-admin-only. Exists so an operator can populate an account picker for the flows above and
+fix an account's own settings during support/troubleshooting, without impersonating that account's
+Owner. Same validation as the Owner-gated `PUT /me/account` (§3) — a non-empty `privacyPolicyUrl`
+must be `https://` and requires `confirmsDisclosure: true`; `enableCityAggregates: true` requires the
+account to have a (resulting) `privacyPolicyUrl` set.
+
+| Method & path | Purpose |
+|---|---|
+| `GET /admin/accounts` | List every account, `{ id, name }` only — a picker source, not a settings view |
+| `GET /admin/accounts/{id}` | Full settings: `{ id, name, privacyPolicyUrl, termsOfServiceUrl, enableCityAggregates }` |
+| `PUT /admin/accounts/{id}` `{ name, privacyPolicyUrl?, termsOfServiceUrl?, confirmsDisclosure?, enableCityAggregates? }` | Update any account's settings |
+
 ---
 
 ## 5. Config the operator must set (Core)

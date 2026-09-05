@@ -15,12 +15,13 @@ using ShortLynx.Services.Entitlements;
 using ShortLynx.Services.Links;
 using ShortLynx.Services.ShortCodes;
 using ShortLynx.Services.Qr;
+using ShortLynx.Services.Tags;
 
 namespace ShortLynx.Core.Controllers;
 
 [Route("me/links")]
 public class MeLinksController(
-    ILinkService linkService, ShortLynxDbContext db,
+    ILinkService linkService, ITagService tagService, ShortLynxDbContext db,
     IQrCodeService qr, IOptions<LinkUrlOptions> linkOptions,
     IOptions<ShortCodeOptions> shortCodeOptions,
     IOptions<AnalyticsOptions> analyticsOptions) : SessionControllerBase
@@ -28,15 +29,37 @@ public class MeLinksController(
     private int AnonymityThreshold => analyticsOptions.Value.EnforceAnonymity ? ClickAggregator.AnonymityThreshold : 0;
     private int CityAnonymityThreshold => analyticsOptions.Value.EnforceAnonymity ? CityAggregator.AnonymityThreshold : 0;
 
-    // GET /me/links
+    // GET /me/links — search matches Nickname, the destination URL, or a tag name (case-insensitive
+    // substring); tagId/folderId are exact-match filters. All three apply before pagination.
     [HttpGet]
-    public async Task<IActionResult> List([FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default)
+    public async Task<IActionResult> List(
+        [FromQuery] int page = 1, [FromQuery] int pageSize = 20,
+        [FromQuery] string? search = null, [FromQuery] Guid? tagId = null, [FromQuery] Guid? folderId = null,
+        CancellationToken ct = default)
     {
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 100);
 
-        var links = await db.LinkEntities
-            .Where(l => l.AccountId == AccountId)
+        var query = db.LinkEntities.Where(l => l.AccountId == AccountId);
+
+        if (folderId is { } fid)
+            query = query.Where(l => l.FolderId == fid);
+
+        if (tagId is { } tid)
+            query = query.Where(l => db.LinkTagEntities.Any(lt => lt.LinkId == l.Id && lt.TagId == tid));
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            // .ToLower() on both sides, not just a case-sensitive Contains, so this behaves the same on
+            // SQLite (dev/tests, case-insensitive LIKE by default) and Postgres (case-sensitive LIKE).
+            var term = search.Trim().ToLower();
+            query = query.Where(l =>
+                (l.Nickname != null && l.Nickname.ToLower().Contains(term)) ||
+                l.OriginalUrl.ToLower().Contains(term) ||
+                db.LinkTagEntities.Any(lt => lt.LinkId == l.Id && lt.Tag.Name.ToLower().Contains(term)));
+        }
+
+        var links = await query
             .OrderByDescending(l => l.Id)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
@@ -157,6 +180,28 @@ public class MeLinksController(
 
         var ok = await linkService.SetLinkFolderAsync(id, request.FolderId, AccountId, ct);
         return ok ? NoContent() : BadRequest(new { error = "Folder not found or not in this account." });
+    }
+
+    // PUT /me/links/{id}/tags — full-replace the link's tags.
+    [HttpPut("{id:guid}/tags")]
+    [RequireAccountAction(AccountAction.ManageResources)]
+    public async Task<IActionResult> SetTags(Guid id, [FromBody] SetLinkTagsRequest request, CancellationToken ct)
+    {
+        var ok = await tagService.SetLinkTagsAsync(id, request.TagIds, AccountId, ct);
+        return ok ? NoContent() : BadRequest(new { error = "Link not found, or one of the tags isn't in this account." });
+    }
+
+    // PUT /me/links/{id}/nickname — set or clear the link's display nickname.
+    [HttpPut("{id:guid}/nickname")]
+    [RequireAccountAction(AccountAction.ManageResources)]
+    public async Task<IActionResult> SetNickname(Guid id, [FromBody] SetLinkNicknameRequest request, CancellationToken ct)
+    {
+        var link = await db.LinkEntities.FirstOrDefaultAsync(l => l.Id == id && l.AccountId == AccountId, ct);
+        if (link is null) return NotFound();
+
+        link.Nickname = string.IsNullOrWhiteSpace(request.Nickname) ? null : request.Nickname.Trim();
+        await db.SaveChangesAsync(ct);
+        return NoContent();
     }
 
     // GET /me/links/{id}/analytics
@@ -350,7 +395,7 @@ public class MeLinksController(
 
     private static LinkResponse ToLinkResponse(LinkEntity link, string shortCode, bool isCustom)
         => new(link.Id, link.OriginalUrl, link.Mode.ToString(), shortCode, link.CreatedAt, link.ExpiresAt,
-               link.CampaignId, isCustom, link.CustomDomainId, link.FolderId);
+               link.CampaignId, isCustom, link.CustomDomainId, link.FolderId, link.Nickname);
 
     // Null means neither field was usably supplied — the caller returns 400.
     private static IReadOnlyCollection<CodeRecipient>? ResolveRecipients(CreateUserCodesRequest request)

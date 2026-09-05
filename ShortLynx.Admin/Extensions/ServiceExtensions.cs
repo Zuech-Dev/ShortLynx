@@ -11,6 +11,7 @@ using ShortLynx.Services.ApiKeys;
 using ShortLynx.Services.Auth;
 using ShortLynx.Services.Campaigns;
 using ShortLynx.Services.Folders;
+using ShortLynx.Services.Tags;
 using ShortLynx.Services.Domains;
 using ShortLynx.Services.Entitlements;
 using ShortLynx.Services.Email;
@@ -81,6 +82,7 @@ public static class ServiceExtensions
         services.AddScoped<ILinkService, LinkService>();
         services.AddScoped<ICampaignService, CampaignService>();
         services.AddScoped<IFolderService, FolderService>();
+        services.AddScoped<ITagService, TagService>();
 
         // Shared DataProtection ring (DB-persisted, same application name as Core) so tokens the
         // dashboard protects are decryptable by Core for publishing. Side benefit: Admin auth cookies

@@ -13,13 +13,16 @@ using ShortLynx.Services.ApiKeys;
 using ShortLynx.Services.Entitlements;
 using ShortLynx.Services.Links;
 using ShortLynx.Services.ShortCodes;
+using ShortLynx.Services.Tags;
 
 namespace ShortLynx.Core.Controllers;
 
 [ApiController]
 [Route("links")]
 [Authorize(AuthenticationSchemes = ApiKeyAuthHandler.SchemeName)]
-public class LinksController(ILinkService linkService, ShortLynxDbContext db, IOptions<AnalyticsOptions> analyticsOptions) : ControllerBase
+public class LinksController(
+    ILinkService linkService, ITagService tagService, ShortLynxDbContext db,
+    IOptions<AnalyticsOptions> analyticsOptions) : ControllerBase
 {
     private int AnonymityThreshold => analyticsOptions.Value.EnforceAnonymity ? ClickAggregator.AnonymityThreshold : 0;
     private int CityAnonymityThreshold => analyticsOptions.Value.EnforceAnonymity ? CityAggregator.AnonymityThreshold : 0;
@@ -33,9 +36,18 @@ public class LinksController(ILinkService linkService, ShortLynxDbContext db, IO
         [FromBody] CreateLinkRequest request,
         CancellationToken ct)
     {
+        if (request.TagIds is { Length: > 0 } &&
+            !CurrentKey.Scopes.Split(',', StringSplitOptions.RemoveEmptyEntries).Contains(Scopes.TagsWrite, StringComparer.Ordinal))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden,
+                new { error = $"This API key lacks the '{Scopes.TagsWrite}' scope." });
+        }
+
         try
         {
             var result = await linkService.CreateAnonymousLinkAsync(request.Url, CurrentKey, request.CustomCode, ct);
+            if (request.TagIds is { Length: > 0 } tagIds)
+                await tagService.SetLinkTagsAsync(result.Link.Id, tagIds, CurrentKey.AccountId, ct);
             var response = ToLinkResponse(result.Link, result.ShortCode.Code, result.ShortCode.IsCustom);
             return CreatedAtAction(nameof(GetLink), new { id = result.Link.Id }, response);
         }
@@ -237,7 +249,7 @@ public class LinksController(ILinkService linkService, ShortLynxDbContext db, IO
 
     private static LinkResponse ToLinkResponse(LinkEntity link, string shortCode, bool isCustom) =>
         new(link.Id, link.OriginalUrl, link.Mode.ToString(), shortCode, link.CreatedAt, link.ExpiresAt,
-            link.CampaignId, isCustom, link.CustomDomainId, link.FolderId);
+            link.CampaignId, isCustom, link.CustomDomainId, link.FolderId, link.Nickname);
 
     // Null means neither field was usably supplied — the caller returns 400.
     private static IReadOnlyCollection<CodeRecipient>? ResolveRecipients(CreateUserCodesRequest request)

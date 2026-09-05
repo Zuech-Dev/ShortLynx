@@ -28,4 +28,6 @@ public sealed record LinkResponse(
     Guid? CustomDomainId = null,
     // The folder this link is filed under, or null when unfiled. Same "PUT sets it, nothing could read
     // it back" gap as CampaignId/CustomDomainId.
-    Guid? FolderId = null);
+    Guid? FolderId = null,
+    // Optional display name, distinct from Url and ShortCode. Set via PUT /me/links/{id}/nickname.
+    string? Nickname = null);

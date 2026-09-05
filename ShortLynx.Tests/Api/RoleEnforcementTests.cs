@@ -43,6 +43,8 @@ public class RoleEnforcementTests : IClassFixture<ApiFactory>
     [InlineData("/me/domains")]
     [InlineData("/me/campaigns")]
     [InlineData("/me/api-keys")]
+    [InlineData("/me/folders")]
+    [InlineData("/me/tags")]
     public async Task Viewer_CannotCreateResources(string path)
     {
         var (client, _, _) = await _factory.CreateSessionClientAsync(AccountRole.Viewer);

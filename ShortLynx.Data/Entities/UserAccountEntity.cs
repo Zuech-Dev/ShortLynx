@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations.Schema;
+using ShortLynx.Data.Enums;
 
 namespace ShortLynx.Data.Entities;
 
@@ -16,6 +17,12 @@ public class UserAccountEntity
     /// Admin:SuperAdminEmails allowlist at sign-in time; tenants without it see only their own data.
     /// </summary>
     public bool IsAdmin { get; set; }
+
+    /// <summary>
+    /// The user's preferred nav layout in the Next.js hosted dashboard. Not read by ShortLynx.Admin,
+    /// which keeps its own separate, browser-local preference instead.
+    /// </summary>
+    public NavStyle NavStyle { get; set; }
 
     public virtual ICollection<MagicLinkTokenEntity> MagicLinkTokens { get; set; } = [];
     public virtual ICollection<CustomDomainEntity> CustomDomains { get; set; } = [];

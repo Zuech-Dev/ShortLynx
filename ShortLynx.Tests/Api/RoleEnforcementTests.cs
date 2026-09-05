@@ -87,6 +87,25 @@ public class RoleEnforcementTests : IClassFixture<ApiFactory>
             r => Assert.Equal(HttpStatusCode.Forbidden, r.StatusCode));
     }
 
+    // ── /me/preferences: deliberately unscoped by account role ────────────────
+    // Not an account-permission gap: this endpoint isn't account-scoped at all (keyed on
+    // CurrentUserId, not AccountId), so ManageResources doesn't apply. A Viewer setting their own nav
+    // style is exactly as valid as an Owner doing it. Documented here, not left to a happy-path-only
+    // test elsewhere, so a missing [RequireAccountAction] on MePreferencesController reads as
+    // intentional rather than an oversight a future reviewer has to re-derive.
+
+    [Fact]
+    public async Task Viewer_CanReadAndWriteOwnNavPreference()
+    {
+        var (client, _, _) = await _factory.CreateSessionClientAsync(AccountRole.Viewer);
+
+        var get = await client.GetAsync("/me/preferences");
+        var put = await client.PutAsJsonAsync("/me/preferences", new UpdatePreferencesRequest("HorizontalScroll"));
+
+        Assert.Equal(HttpStatusCode.OK, get.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, put.StatusCode);
+    }
+
     // ── Member: writes allowed (the gate must not over-block) ─────────────────
 
     [Fact]

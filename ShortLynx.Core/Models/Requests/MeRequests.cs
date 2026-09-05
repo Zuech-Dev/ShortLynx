@@ -33,3 +33,6 @@ public sealed record UpdateAccountRequest(
     // every update, not just when changing it. Requires PrivacyPolicyUrl to be set (enforced in
     // AccountService) -- see CITY_GEO_PLAN.md §6.3.
     bool EnableCityAggregates = false);
+
+/// <summary>Sets the current user's nav style preference ("Hamburger" or "HorizontalScroll").</summary>
+public sealed record UpdatePreferencesRequest([Required] string NavStyle);

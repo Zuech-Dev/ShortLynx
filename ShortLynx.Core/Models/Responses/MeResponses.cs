@@ -8,3 +8,6 @@ public sealed record AccountResponse(Guid Id, string Name, string Role);
 
 /// <summary>The current account's own settings.</summary>
 public sealed record AccountSettingsResponse(Guid Id, string Name, string? PrivacyPolicyUrl, string? TermsOfServiceUrl, bool EnableCityAggregates);
+
+/// <summary>The current user's own preferences, not scoped to any account. NavStyle is "Hamburger" or "HorizontalScroll".</summary>
+public sealed record UserPreferencesResponse(string NavStyle);

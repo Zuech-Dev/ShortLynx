@@ -1,5 +1,8 @@
 @page "/settings"
 @attribute [Authorize]
+@* Alias needed: ShortLynx.Data.Enums now also defines a NavStyle (unrelated, DB-backed, used by the
+   Next.js hosted dashboard) -- both namespaces are in scope here via _Imports.razor. *@
+@using NavStyle = ShortLynx.Admin.Services.NavStyle
 @inject IDbContextFactory<ShortLynxDbContext> DbFactory
 @inject NavPreferenceService Prefs
 

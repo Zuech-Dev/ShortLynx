@@ -134,6 +134,7 @@ public partial class ShortLynxDbContext
                     entity.HasIndex(e => e.Email).IsUnique();
                     entity.Property(e => e.Id).ValueGeneratedNever();
                     entity.Property(e => e.Email).IsRequired().HasMaxLength(254);
+                    entity.Property(e => e.NavStyle).HasConversion<int>();
                 }
             )
            .Entity<MagicLinkTokenEntity>(entity =>

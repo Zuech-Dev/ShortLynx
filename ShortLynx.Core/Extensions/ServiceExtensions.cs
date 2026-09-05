@@ -93,6 +93,7 @@ public static class ServiceExtensions
         services.AddHostedService<DomainReverificationService>();
         services.AddScoped<IAccountService, AccountService>();
         services.AddScoped<IUserAdminService, UserAdminService>();
+        services.AddScoped<IUserPreferencesService, UserPreferencesService>();
         services.AddSingleton<IQrCodeService, QrCodeService>();
         services.Configure<LinkUrlOptions>(configuration.GetSection("Links"));
         services.Configure<LiveStreamOptions>(configuration.GetSection("LiveStream"));

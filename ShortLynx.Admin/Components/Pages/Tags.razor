@@ -1,0 +1,210 @@
+@page "/tags"
+@attribute [Authorize]
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.Extensions.DependencyInjection
+@using ShortLynx.Services.Tags
+@inject IServiceScopeFactory ScopeFactory
+@inject IDbContextFactory<ShortLynxDbContext> DbFactory
+
+<PageTitle>Tags — ShortLynx Admin</PageTitle>
+
+<div class="flex justify-between items-center mb-3">
+    <h1 class="text-2xl font-bold">Tags</h1>
+    @if (_canWrite)
+    {
+        <button class="btn btn-primary" data-testid="new-tag" @onclick="() => _showAdd = !_showAdd">
+            @(_showAdd ? "Cancel" : "+ New tag")
+        </button>
+    }
+</div>
+
+<p class="text-gray-500 text-sm mb-3 max-w-[640px]">
+    Labels for grouping, filtering, and searching links — a link can carry any number of tags. Assign
+    tags to a link from its detail page.
+</p>
+
+@if (_showAdd)
+{
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5 class="card-title">New tag</h5>
+            <EditForm Model="_form" OnValidSubmit="Create">
+                <DataAnnotationsValidator/>
+                <div class="mb-2">
+                    <label class="field-label">Name</label>
+                    <InputText class="field-input" @bind-Value="_form.Name" data-testid="name-input"/>
+                    <ValidationMessage For="() => _form.Name"/>
+                </div>
+                @if (_addError is not null)
+                {
+                    <div class="text-red-600 text-sm mb-2" data-testid="add-error">@_addError</div>
+                }
+                <button type="submit" class="btn btn-primary" data-testid="add-submit">Create tag</button>
+            </EditForm>
+        </div>
+    </div>
+}
+
+@if (!_loaded)
+{
+    <p class="text-gray-500">Loading…</p>
+}
+else if (_tags.Count == 0)
+{
+    <p class="text-gray-500" data-testid="empty">No tags yet.</p>
+}
+else
+{
+    <table class="data-table" data-testid="tag-table">
+        <thead>
+        <tr><th>Name</th><th class="text-right">Links</th><th></th></tr>
+        </thead>
+        <tbody>
+        @foreach (var t in _tags)
+        {
+            <tr data-testid="tag-row">
+                <td>
+                    @if (_editingId == t.Id)
+                    {
+                        <EditForm Model="_edit" OnValidSubmit="SaveEdit">
+                            <DataAnnotationsValidator/>
+                            <InputText class="field-input" @bind-Value="_edit.Name" data-testid="edit-name-input"/>
+                            <ValidationMessage For="() => _edit.Name"/>
+                        </EditForm>
+                    }
+                    else
+                    {
+                        @t.Name
+                    }
+                </td>
+                <td class="text-right">@t.LinkCount</td>
+                <td class="text-right">
+                    @if (_editingId == t.Id)
+                    {
+                        <button class="btn btn-primary" data-testid="edit-save" @onclick="SaveEdit">Save</button>
+                        <button class="btn btn-outline" @onclick="() => _editingId = null">Cancel</button>
+                    }
+                    else if (_canWrite)
+                    {
+                        <button class="btn btn-outline" data-testid="edit-btn" @onclick="() => BeginEdit(t)">Edit</button>
+                        <button class="btn btn-outline-danger" data-testid="remove-btn" disabled="@_busy" @onclick="() => Remove(t.Id)">Delete</button>
+                    }
+                </td>
+            </tr>
+            @if (_editError is not null && _editingId == t.Id)
+            {
+                <tr><td colspan="3" class="text-red-600 text-sm" data-testid="edit-error">@_editError</td></tr>
+            }
+        }
+        </tbody>
+    </table>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    bool _loaded, _resolved, _showAdd, _busy, _canWrite;
+    Guid _accountId;
+    Guid? _editingId;
+    List<TagRow> _tags = [];
+    readonly TagForm _form = new();
+    readonly TagForm _edit = new();
+    string? _addError, _editError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var principal = (await AuthState).User;
+        await using (var db = await DbFactory.CreateDbContextAsync())
+        {
+            var ctx = await AccountRoleContext.ResolveAsync(db, principal);
+            if (ctx is null) { _loaded = true; return; }
+            (_accountId, _canWrite) = (ctx.AccountId, ctx.CanManageResources);
+        }
+        _resolved = true;
+        await LoadAsync();
+    }
+
+    async Task LoadAsync()
+    {
+        if (!_resolved) return;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var counts = await db.LinkTagEntities
+            .Join(db.LinkEntities, lt => lt.LinkId, l => l.Id, (lt, l) => new { lt.TagId, l.AccountId })
+            .Where(x => x.AccountId == _accountId)
+            .GroupBy(x => x.TagId)
+            .Select(g => new { g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.Key, x => x.Count);
+
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        var svc = scope.ServiceProvider.GetRequiredService<ITagService>();
+        var list = await svc.ListAsync(_accountId);
+        _tags = list.Select(t => new TagRow(t.Id, t.Name, counts.GetValueOrDefault(t.Id, 0))).ToList();
+        _loaded = true;
+    }
+
+    async Task Create()
+    {
+        if (!_resolved || !_canWrite) return;
+        _addError = null;
+        try
+        {
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var svc = scope.ServiceProvider.GetRequiredService<ITagService>();
+            await svc.CreateAsync(_accountId, _form.ToInput());
+            _form.Reset();
+            _showAdd = false;
+            await LoadAsync();
+        }
+        catch (ArgumentException ex) { _addError = ex.Message; }
+        catch (InvalidOperationException ex) { _addError = ex.Message; }
+    }
+
+    void BeginEdit(TagRow t)
+    {
+        if (!_canWrite) return;
+        _editError = null;
+        _editingId = t.Id;
+        _edit.Name = t.Name;
+    }
+
+    async Task SaveEdit()
+    {
+        if (!_canWrite || _editingId is not { } id) return;
+        try
+        {
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var svc = scope.ServiceProvider.GetRequiredService<ITagService>();
+            await svc.UpdateAsync(id, _accountId, _edit.ToInput());
+            _editingId = null;
+            await LoadAsync();
+        }
+        catch (ArgumentException ex) { _editError = ex.Message; }
+        catch (InvalidOperationException ex) { _editError = ex.Message; }
+    }
+
+    async Task Remove(Guid id)
+    {
+        if (!_canWrite) return;
+        _busy = true;
+        try
+        {
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var svc = scope.ServiceProvider.GetRequiredService<ITagService>();
+            await svc.DeleteAsync(id, _accountId);
+            await LoadAsync();
+        }
+        finally { _busy = false; }
+    }
+
+    sealed class TagForm
+    {
+        [Required(ErrorMessage = "Name is required.")]
+        public string? Name { get; set; }
+
+        public TagInput ToInput() => new(Name ?? string.Empty);
+
+        public void Reset() => Name = null;
+    }
+
+    sealed record TagRow(Guid Id, string Name, int LinkCount);
+}

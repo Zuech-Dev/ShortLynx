@@ -4,6 +4,8 @@
 @using Microsoft.Extensions.Options
 @using ShortLynx.Services.Analytics
 @using ShortLynx.Services.Campaigns
+@using ShortLynx.Services.Folders
+@using ShortLynx.Services.Tags
 @using ShortLynx.Services.Links
 @using ShortLynx.Services.Social
 @using ShortLynx.Services.ShortCodes
@@ -38,6 +40,32 @@ else
             <dl class="grid grid-cols-1 sm:grid-cols-[8rem_1fr] gap-x-4 gap-y-2 mb-0">
                 <dt class="font-medium text-gray-500">URL</dt>
                 <dd><a class="text-blue-700 hover:underline" href="@_link!.OriginalUrl" target="_blank" rel="noopener">@_link.OriginalUrl</a></dd>
+
+                <dt class="font-medium text-gray-500">Nickname</dt>
+                <dd>
+                    @if (_canPin && _nicknameEditing)
+                    {
+                        <span class="inline-flex items-center gap-2">
+                            <input class="field-input" @bind="_nicknameDraft" data-testid="nickname-input"/>
+                            <button class="btn btn-primary" data-testid="nickname-save" @onclick="SaveNickname">Save</button>
+                            <button class="btn btn-outline" @onclick="() => _nicknameEditing = false">Cancel</button>
+                        </span>
+                    }
+                    else
+                    {
+                        <span class="inline-flex items-center gap-2">
+                            <span>@(_link.Nickname ?? "—")</span>
+                            @if (_canPin && _canWrite)
+                            {
+                                <button class="btn btn-outline" data-testid="nickname-edit" @onclick="BeginEditNickname">Edit</button>
+                            }
+                            @if (_nicknameSaved)
+                            {
+                                <span class="text-green-600 text-sm" data-testid="nickname-saved">Saved.</span>
+                            }
+                        </span>
+                    }
+                </dd>
 
                 <dt class="font-medium text-gray-500">Short URL</dt>
                 <dd>
@@ -139,6 +167,61 @@ else
                 @if (_campaignSaved)
                 {
                     <div class="text-green-600 text-sm mt-1" data-testid="campaign-saved">Saved.</div>
+                }
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title">Folder</h5>
+                <p class="text-gray-500 text-sm">File this link into a folder — pure organization, no UTM template or redirect-time effect.</p>
+                <div class="flex gap-2 items-center max-w-[520px]">
+                    <select class="field-input" @bind="_selectedFolderKey" data-testid="folder-select">
+                        <option value="">No folder</option>
+                        @foreach (var f in _folderOptions)
+                        {
+                            <option value="@f.Id">@f.Name</option>
+                        }
+                    </select>
+                    <button class="btn btn-primary" data-testid="folder-save" disabled="@(!_canWrite)" @onclick="SaveFolder">Save</button>
+                </div>
+                @if (_folderOptions.Count == 0)
+                {
+                    <div class="text-sm text-gray-500 mt-1">No folders yet — create one under <a class="text-blue-700 hover:underline" href="/folders">Folders</a>.</div>
+                }
+                @if (_folderSaved)
+                {
+                    <div class="text-green-600 text-sm mt-1" data-testid="folder-saved">Saved.</div>
+                }
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title">Tags</h5>
+                <p class="text-gray-500 text-sm">Label this link for grouping, filtering, and search — a link can carry any number of tags.</p>
+                @if (_tagOptions.Count == 0)
+                {
+                    <div class="text-sm text-gray-500">No tags yet — create one under <a class="text-blue-700 hover:underline" href="/tags">Tags</a>.</div>
+                }
+                else
+                {
+                    <div class="flex flex-wrap gap-2 mb-2" data-testid="tag-checkboxes">
+                        @foreach (var t in _tagOptions)
+                        {
+                            <label class="inline-flex items-center gap-1 text-sm badge badge-gray">
+                                <input type="checkbox" checked="@_selectedTagIds.Contains(t.Id)"
+                                       disabled="@(!_canWrite)" data-testid="tag-checkbox"
+                                       @onchange="e => ToggleTag(t.Id, (bool)e.Value!)"/>
+                                @t.Name
+                            </label>
+                        }
+                    </div>
+                    <button class="btn btn-primary" data-testid="tags-save" disabled="@(!_canWrite)" @onclick="SaveTags">Save</button>
+                }
+                @if (_tagsSaved)
+                {
+                    <div class="text-green-600 text-sm mt-1" data-testid="tags-saved">Saved.</div>
                 }
             </div>
         </div>
@@ -390,6 +473,20 @@ else
     List<CampaignOption> _campaignOptions = [];
     string _selectedCampaignKey = string.Empty;
 
+    // Folder assignment (current-account links only) — same shape as Campaign, no UTM template.
+    bool _folderSaved;
+    List<FolderOption> _folderOptions = [];
+    string _selectedFolderKey = string.Empty;
+
+    // Tag assignment — full-replace multi-select (current-account links only).
+    bool _tagsSaved;
+    List<TagOption> _tagOptions = [];
+    readonly HashSet<Guid> _selectedTagIds = [];
+
+    // Nickname editing (current-account links only).
+    bool _nicknameEditing, _nicknameSaved;
+    string _nicknameDraft = string.Empty;
+
     // Social publishing (anonymous links in the current account).
     bool _busyPublishing;
     bool _busyMetrics;
@@ -496,6 +593,26 @@ else
                 .ToListAsync();
             _selectedCampaignKey = _link.CampaignId?.ToString() ?? string.Empty;
 
+            _folderOptions = await db.FolderEntities
+                .Where(f => f.AccountId == _accountId)
+                .OrderBy(f => f.Name)
+                .Select(f => new FolderOption(f.Id, f.Name))
+                .ToListAsync();
+            _selectedFolderKey = _link.FolderId?.ToString() ?? string.Empty;
+
+            _tagOptions = await db.TagEntities
+                .Where(t => t.AccountId == _accountId)
+                .OrderBy(t => t.Name)
+                .Select(t => new TagOption(t.Id, t.Name))
+                .ToListAsync();
+            _selectedTagIds.Clear();
+            _selectedTagIds.UnionWith(await db.LinkTagEntities
+                .Where(lt => lt.LinkId == Id)
+                .Select(lt => lt.TagId)
+                .ToListAsync());
+
+            _nicknameDraft = _link.Nickname ?? string.Empty;
+
             if (_link.Mode == LinkMode.Anonymous)
             {
                 _socialConnections = await db.SocialConnectionEntities
@@ -589,6 +706,69 @@ else
     }
 
     sealed record CampaignOption(Guid Id, string Name);
+
+    async Task SaveFolder()
+    {
+        if (!_canWrite || !_canPin) return;
+        _folderSaved = false;
+        Guid? folderId = Guid.TryParse(_selectedFolderKey, out var id) ? id : null;
+
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        var svc = scope.ServiceProvider.GetRequiredService<ILinkService>();
+        if (await svc.SetLinkFolderAsync(Id, folderId, _accountId))
+        {
+            _folderSaved = true;
+            await LoadAsync();
+        }
+    }
+
+    sealed record FolderOption(Guid Id, string Name);
+
+    void ToggleTag(Guid tagId, bool isChecked)
+    {
+        if (!_canWrite) return;
+        if (isChecked) _selectedTagIds.Add(tagId);
+        else _selectedTagIds.Remove(tagId);
+    }
+
+    async Task SaveTags()
+    {
+        if (!_canWrite) return;
+        _tagsSaved = false;
+
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        var svc = scope.ServiceProvider.GetRequiredService<ITagService>();
+        if (await svc.SetLinkTagsAsync(Id, _selectedTagIds, _accountId))
+        {
+            _tagsSaved = true;
+            await LoadAsync();
+        }
+    }
+
+    sealed record TagOption(Guid Id, string Name);
+
+    void BeginEditNickname()
+    {
+        if (!_canWrite) return;
+        _nicknameDraft = _link?.Nickname ?? string.Empty;
+        _nicknameEditing = true;
+    }
+
+    async Task SaveNickname()
+    {
+        if (!_canWrite || !_canPin) return;
+        _nicknameSaved = false;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var link = await db.LinkEntities.FirstOrDefaultAsync(l => l.Id == Id && l.AccountId == _accountId);
+        if (link is null) return;
+
+        link.Nickname = string.IsNullOrWhiteSpace(_nicknameDraft) ? null : _nicknameDraft.Trim();
+        await db.SaveChangesAsync();
+        _nicknameEditing = false;
+        _nicknameSaved = true;
+        await LoadAsync();
+    }
 
     async Task SavePin()
     {

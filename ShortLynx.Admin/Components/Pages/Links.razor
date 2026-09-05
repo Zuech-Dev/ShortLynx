@@ -113,6 +113,40 @@
     </div>
 }
 
+<div class="flex flex-wrap gap-2 items-end mb-3" data-testid="filter-bar">
+    <div class="min-w-[220px]">
+        <label class="field-label">Search</label>
+        <input class="field-input" placeholder="Nickname, URL, or tag name" data-testid="search-input"
+               value="@_search" @oninput="OnSearchInput"/>
+    </div>
+    @if (_filterTags.Count > 0)
+    {
+        <div>
+            <label class="field-label">Tag</label>
+            <select class="field-input" @bind="_filterTagKey" @bind:after="LoadAsync" data-testid="filter-tag">
+                <option value="">All tags</option>
+                @foreach (var t in _filterTags)
+                {
+                    <option value="@t.Id">@t.Name</option>
+                }
+            </select>
+        </div>
+    }
+    @if (_filterFolders.Count > 0)
+    {
+        <div>
+            <label class="field-label">Folder</label>
+            <select class="field-input" @bind="_filterFolderKey" @bind:after="LoadAsync" data-testid="filter-folder">
+                <option value="">All folders</option>
+                @foreach (var f in _filterFolders)
+                {
+                    <option value="@f.Id">@f.Name</option>
+                }
+            </select>
+        </div>
+    }
+</div>
+
 @if (!_loaded)
 {
     <p class="text-gray-500">Loading…</p>
@@ -141,7 +175,17 @@ else
             {
                 <tr>
                     <td><code>@r.ShortCode</code></td>
-                    <td class="truncate max-w-[280px]" title="@r.Url">@r.Url</td>
+                    <td class="truncate max-w-[280px]" title="@r.Url">
+                        @if (!string.IsNullOrEmpty(r.Nickname))
+                        {
+                            <span class="font-medium">@r.Nickname</span>
+                            <span class="text-gray-400 text-xs block">@r.Url</span>
+                        }
+                        else
+                        {
+                            @r.Url
+                        }
+                    </td>
                     <td class="text-gray-500 text-sm">@r.ApiKeyName</td>
                     <td><span class="badge @(r.Mode == "Anonymous" ? "badge-gray" : "badge-blue")">@r.Mode</span></td>
                     <td class="text-right">@r.Clicks</td>
@@ -174,6 +218,31 @@ else
 
     bool _canWrite;
 
+    // Search/filter (applied before pagination).
+    string _search = string.Empty;
+    string _filterTagKey = string.Empty;
+    string _filterFolderKey = string.Empty;
+    List<FilterOption> _filterTags = [];
+    List<FilterOption> _filterFolders = [];
+    CancellationTokenSource? _searchDebounce;
+
+    async Task OnSearchInput(ChangeEventArgs e)
+    {
+        _search = e.Value?.ToString() ?? string.Empty;
+        _searchDebounce?.Cancel();
+        var cts = new CancellationTokenSource();
+        _searchDebounce = cts;
+        try
+        {
+            await Task.Delay(300, cts.Token);
+            if (cts.IsCancellationRequested) return;
+            _page = 1;
+            await LoadAsync();
+            StateHasChanged();
+        }
+        catch (TaskCanceledException) { /* superseded by a newer keystroke */ }
+    }
+
     protected override async Task OnInitializedAsync()
     {
         var principal = (await AuthState).User;
@@ -186,6 +255,16 @@ else
                 .Where(c => c.AccountId == _accountId)
                 .OrderBy(c => c.Name)
                 .Select(c => new CampaignOption(c.Id, c.Name))
+                .ToListAsync();
+            _filterTags = await db.TagEntities
+                .Where(t => t.AccountId == _accountId)
+                .OrderBy(t => t.Name)
+                .Select(t => new FilterOption(t.Id, t.Name))
+                .ToListAsync();
+            _filterFolders = await db.FolderEntities
+                .Where(f => f.AccountId == _accountId)
+                .OrderBy(f => f.Name)
+                .Select(f => new FilterOption(f.Id, f.Name))
                 .ToListAsync();
         }
 
@@ -209,9 +288,26 @@ else
         _loaded = false;
         await using var db = await DbFactory.CreateDbContextAsync();
 
-        var links = await db.LinkEntities
+        var query = db.LinkEntities
             .Include(l => l.ApiKey)
-            .Where(l => l.AccountId == _accountId)
+            .Where(l => l.AccountId == _accountId);
+
+        if (Guid.TryParse(_filterFolderKey, out var fid))
+            query = query.Where(l => l.FolderId == fid);
+
+        if (Guid.TryParse(_filterTagKey, out var tid))
+            query = query.Where(l => db.LinkTagEntities.Any(lt => lt.LinkId == l.Id && lt.TagId == tid));
+
+        if (!string.IsNullOrWhiteSpace(_search))
+        {
+            var term = _search.Trim().ToLower();
+            query = query.Where(l =>
+                (l.Nickname != null && l.Nickname.ToLower().Contains(term)) ||
+                l.OriginalUrl.ToLower().Contains(term) ||
+                db.LinkTagEntities.Any(lt => lt.LinkId == l.Id && lt.Tag.Name.ToLower().Contains(term)));
+        }
+
+        var links = await query
             .OrderByDescending(l => l.Id)
             .Skip((_page - 1) * PageSize)
             .Take(PageSize)
@@ -229,7 +325,7 @@ else
         var clickMap = await LinkVisitQueries.CountByLinkAsync(db, linkIds);
 
         _rows = links.Select(l =>
-            new LinkRow(l.Id, l.OriginalUrl, l.Mode.ToString(),
+            new LinkRow(l.Id, l.OriginalUrl, l.Nickname, l.Mode.ToString(),
                 codeMap.GetValueOrDefault(l.Id, string.Empty), l.ApiKey?.Name ?? "Dashboard",
                 l.CreatedAt, (int)clickMap.GetValueOrDefault(l.Id, 0))).ToList();
 
@@ -356,7 +452,7 @@ else
         _newShortUrl = null;
     }
 
-    sealed record LinkRow(Guid Id, string Url, string Mode, string ShortCode,
+    sealed record LinkRow(Guid Id, string Url, string? Nickname, string Mode, string ShortCode,
         string ApiKeyName, DateTimeOffset CreatedAt, int Clicks);
 
     sealed class CreateLinkForm
@@ -373,4 +469,5 @@ else
     }
 
     sealed record CampaignOption(Guid Id, string Name);
+    sealed record FilterOption(Guid Id, string Name);
 }

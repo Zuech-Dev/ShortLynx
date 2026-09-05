@@ -1,0 +1,149 @@
+@page "/folders/{Id:guid}"
+@attribute [Authorize]
+@using Microsoft.Extensions.DependencyInjection
+@using ShortLynx.Services.Analytics
+@using ShortLynx.Services.Folders
+@inject IServiceScopeFactory ScopeFactory
+@inject IDbContextFactory<ShortLynxDbContext> DbFactory
+
+<PageTitle>Folder — ShortLynx Admin</PageTitle>
+
+@if (_notFound)
+{
+    <p class="text-red-600">Folder not found.</p>
+    <a href="/folders" class="btn btn-outline">← Back to Folders</a>
+}
+else if (!_loaded)
+{
+    <p class="text-gray-500">Loading…</p>
+}
+else
+{
+    <div class="flex items-center gap-2 mb-3">
+        <a href="/folders" class="btn btn-outline">← Back</a>
+        @if (_editing)
+        {
+            <input class="field-input" @bind="_editName" data-testid="rename-input"/>
+            <button class="btn btn-primary" data-testid="rename-save" @onclick="SaveName">Save</button>
+            <button class="btn btn-outline" @onclick="() => _editing = false">Cancel</button>
+        }
+        else
+        {
+            <h1 class="text-xl font-bold">@_name</h1>
+            @if (_canWrite)
+            {
+                <button class="btn btn-outline" data-testid="rename-btn" @onclick="BeginRename">Rename</button>
+            }
+        }
+        <span class="badge badge-gray">@_links.Count link@(_links.Count == 1 ? "" : "s")</span>
+    </div>
+
+    @if (_links.Count == 0)
+    {
+        <p class="text-gray-500" data-testid="empty">No links filed in this folder yet.</p>
+    }
+    else
+    {
+        <table class="data-table" data-testid="link-table">
+            <thead>
+            <tr><th>URL</th><th>Mode</th><th class="text-right">Clicks</th><th class="text-right">Unique</th></tr>
+            </thead>
+            <tbody>
+            @foreach (var l in _links)
+            {
+                <tr>
+                    <td class="truncate max-w-[360px]"><a class="text-blue-700 hover:underline" href="/links/@l.Id">@(l.Nickname ?? l.Url)</a></td>
+                    <td>@l.Mode</td>
+                    <td class="text-right">@l.TotalClicks</td>
+                    <td class="text-right">@l.UniqueClicks</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    }
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+    [Parameter] public Guid Id { get; set; }
+
+    bool _loaded, _notFound, _authResolved, _canWrite, _editing;
+    Guid _uid, _accountId;
+    string _name = string.Empty;
+    string _editName = string.Empty;
+    List<LinkRow> _links = [];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!_authResolved)
+        {
+            var principal = (await AuthState).User;
+            var userId = principal.GetUserId();
+            if (userId is null) { _notFound = true; _loaded = true; return; }
+            _uid = userId.Value;
+            await using (var db = await DbFactory.CreateDbContextAsync())
+            {
+                var ctx = await AccountRoleContext.ResolveAsync(db, principal);
+                if (ctx is not null) { _accountId = ctx.AccountId; _canWrite = ctx.CanManageResources; }
+            }
+            _authResolved = true;
+        }
+        await LoadAsync();
+    }
+
+    async Task LoadAsync()
+    {
+        _loaded = false;
+        _notFound = false;
+
+        ShortLynx.Data.Entities.FolderEntity? folder;
+        await using (var scope = ScopeFactory.CreateAsyncScope())
+        {
+            var svc = scope.ServiceProvider.GetRequiredService<IFolderService>();
+            folder = await svc.GetAsync(Id, _accountId);
+        }
+        if (folder is null) { _notFound = true; _loaded = true; return; }
+        _name = folder.Name;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        var links = await db.LinkEntities
+            .Where(l => l.FolderId == Id && l.AccountId == _accountId)
+            .Select(l => new { l.Id, l.OriginalUrl, l.Mode, l.Nickname })
+            .ToListAsync();
+        var linkIds = links.Select(l => l.Id).ToList();
+
+        var tagged = await LinkVisitQueries.LoadRowsByLinkAsync(db, linkIds);
+        var byLink = tagged.ToLookup(x => x.LinkId, x => x.Row);
+        _links = links
+            .Select(l =>
+            {
+                var rows = byLink[l.Id].ToList();
+                return new LinkRow(l.Id, l.OriginalUrl, l.Nickname, l.Mode.ToString(),
+                    rows.Count, rows.Select(r => r.HashedIp).Distinct().Count());
+            })
+            .OrderByDescending(l => l.TotalClicks)
+            .ToList();
+
+        _loaded = true;
+    }
+
+    void BeginRename()
+    {
+        if (!_canWrite) return;
+        _editName = _name;
+        _editing = true;
+    }
+
+    async Task SaveName()
+    {
+        if (!_canWrite) return;
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        var svc = scope.ServiceProvider.GetRequiredService<IFolderService>();
+        var updated = await svc.UpdateAsync(Id, _accountId, new FolderInput(_editName));
+        if (updated is not null) _name = updated.Name;
+        _editing = false;
+    }
+
+    sealed record LinkRow(Guid Id, string Url, string? Nickname, string Mode, long TotalClicks, long UniqueClicks);
+}

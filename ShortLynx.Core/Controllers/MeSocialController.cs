@@ -23,7 +23,7 @@ public class MeSocialController(ISocialConnectionService social) : SessionContro
 
     // POST /me/social — validate credentials against the platform and store the connection.
     [HttpPost]
-    [RequireAccountAction(AccountAction.ManageResources)]
+    [RequireAccountAction(AccountAction.ManageIntegrations)]
     public async Task<IActionResult> Connect([FromBody] ConnectSocialRequest request, CancellationToken ct)
     {
         if (!Enum.TryParse<SocialPlatform>(request.Platform, ignoreCase: true, out var platform))
@@ -55,7 +55,7 @@ public class MeSocialController(ISocialConnectionService social) : SessionContro
 
     // DELETE /me/social/{id} — disconnect (destroys the stored tokens with the row).
     [HttpDelete("{id:guid}")]
-    [RequireAccountAction(AccountAction.ManageResources)]
+    [RequireAccountAction(AccountAction.ManageIntegrations)]
     public async Task<IActionResult> Disconnect(Guid id, CancellationToken ct)
         => await social.DisconnectAsync(id, AccountId, ct) ? NoContent() : NotFound();
 

@@ -31,7 +31,7 @@ public class MeApiKeysController(IApiKeyService apiKeys, ShortLynxDbContext db) 
     // ManageResources-gated: an API key acts with whatever scopes it was minted with, role-blind, so
     // letting a Viewer mint one would bypass their read-only role entirely.
     [HttpPost]
-    [RequireAccountAction(AccountAction.ManageResources)]
+    [RequireAccountAction(AccountAction.ManageIntegrations)]
     public async Task<IActionResult> Create([FromBody] CreateMyApiKeyRequest request, CancellationToken ct)
     {
         var requested = (request.Scopes ?? []).Distinct(StringComparer.Ordinal).ToArray();
@@ -51,7 +51,7 @@ public class MeApiKeysController(IApiKeyService apiKeys, ShortLynxDbContext db) 
 
     // DELETE /me/api-keys/{id}
     [HttpDelete("{id:guid}")]
-    [RequireAccountAction(AccountAction.ManageResources)]
+    [RequireAccountAction(AccountAction.ManageIntegrations)]
     public async Task<IActionResult> Revoke(Guid id, CancellationToken ct)
         => await apiKeys.RevokeAsync(id, AccountId, ct) ? NoContent() : NotFound();
 }

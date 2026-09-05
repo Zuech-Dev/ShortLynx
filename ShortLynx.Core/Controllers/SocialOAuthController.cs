@@ -85,13 +85,13 @@ public sealed class SocialOAuthController(
         if (string.IsNullOrEmpty(code))
             return ReturnError(platform, "missing_code");
 
-        // This endpoint *creates* a connection — same ManageResources gate MeSocialController.Connect
-        // uses for the credential-based platforms, or a Viewer could complete the OAuth flow directly
+        // This endpoint *creates* a connection — same ManageIntegrations gate MeSocialController.Connect
+        // uses for the credential-based platforms, or a Member could complete the OAuth flow directly
         // and bypass the UI gate. Checked manually (not via [RequireAccountAction]) so a denial can
         // redirect the browser back to the dashboard with a readable error instead of a bare 403 JSON
         // body — this endpoint is a full-page navigation target, not an XHR call.
         var role = await accounts.GetRoleAsync(AccountId, CurrentUserId, ct);
-        if (role is not { } r || !AccountPermissions.Can(r, AccountAction.ManageResources))
+        if (role is not { } r || !AccountPermissions.Can(r, AccountAction.ManageIntegrations))
             return ReturnError(platform, "forbidden");
 
         try

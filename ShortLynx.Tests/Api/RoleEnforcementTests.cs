@@ -9,9 +9,11 @@ using ShortLynx.Services.ApiKeys;
 namespace ShortLynx.Tests.Api;
 
 /// <summary>
-/// Verifies that <c>AccountPermissions.ManageResources</c> (Member+) is enforced on every
-/// <c>/me/*</c> write endpoint — a Viewer must be read-only, and in particular must not be able to
-/// mint an API key (which would act role-blind with whatever scopes it was given).
+/// Verifies role enforcement on every <c>/me/*</c> write endpoint — a Viewer must be read-only
+/// everywhere (<c>ManageResources</c>, Member+); API keys, domains, and social connections need
+/// <c>ManageIntegrations</c> (Admin+) specifically, so a plain Member must not be able to mint an API
+/// key (which would act role-blind with whatever scopes it was given) even though a Member can create
+/// links/campaigns/folders/tags just fine.
 /// </summary>
 public class RoleEnforcementTests : IClassFixture<ApiFactory>
 {
@@ -119,12 +121,48 @@ public class RoleEnforcementTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Member_CanMintApiKey()
+    public async Task Member_CannotMintApiKey()
     {
+        // API keys are an "integration" (AccountAction.ManageIntegrations, Admin+), not a plain
+        // resource (ManageResources, Member+) -- a Member can create links but not credentials.
         var (client, _, _) = await _factory.CreateSessionClientAsync(AccountRole.Member);
         var response = await client.PostAsJsonAsync("/me/api-keys",
             new CreateMyApiKeyRequest("ok", [Scopes.LinksRead]));
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Admin_CanMintApiKey()
+    {
+        var (client, _, _) = await _factory.CreateSessionClientAsync(AccountRole.Admin);
+        var response = await client.PostAsJsonAsync("/me/api-keys",
+            new CreateMyApiKeyRequest("ok", [Scopes.LinksRead]));
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Member_CannotAddDomain()
+    {
+        var (client, _, _) = await _factory.CreateSessionClientAsync(AccountRole.Member);
+        var response = await client.PostAsJsonAsync("/me/domains", new AddDomainRequest($"{Guid.NewGuid():N}.example.com"));
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Admin_CanAddDomain()
+    {
+        var (client, _, _) = await _factory.CreateSessionClientAsync(AccountRole.Admin);
+        var response = await client.PostAsJsonAsync("/me/domains", new AddDomainRequest($"{Guid.NewGuid():N}.example.com"));
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Member_CannotConnectSocial()
+    {
+        var (client, _, _) = await _factory.CreateSessionClientAsync(AccountRole.Member);
+        var response = await client.PostAsJsonAsync("/me/social",
+            new ConnectSocialRequest("Bluesky", "user.bsky.social", "app-password"));
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
     // ── Role comes from the DB, not the token ─────────────────────────────────
@@ -169,7 +207,7 @@ public class RoleEnforcementTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task ApiKey_UnknownScopes_Rejected()
     {
-        var (client, _, _) = await _factory.CreateSessionClientAsync(AccountRole.Member);
+        var (client, _, _) = await _factory.CreateSessionClientAsync(AccountRole.Admin);
         var response = await client.PostAsJsonAsync("/me/api-keys",
             new CreateMyApiKeyRequest("bad", ["links:write", "admin:everything"]));
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -180,7 +218,7 @@ public class RoleEnforcementTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task ApiKey_EmptyScopes_Rejected()
     {
-        var (client, _, _) = await _factory.CreateSessionClientAsync(AccountRole.Member);
+        var (client, _, _) = await _factory.CreateSessionClientAsync(AccountRole.Admin);
         var response = await client.PostAsJsonAsync("/me/api-keys", new CreateMyApiKeyRequest("none", []));
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -188,7 +226,7 @@ public class RoleEnforcementTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task ApiKey_DuplicateScopes_Deduplicated()
     {
-        var (client, _, _) = await _factory.CreateSessionClientAsync(AccountRole.Member);
+        var (client, _, _) = await _factory.CreateSessionClientAsync(AccountRole.Admin);
         var response = await client.PostAsJsonAsync("/me/api-keys",
             new CreateMyApiKeyRequest("dupes", [Scopes.LinksRead, Scopes.LinksRead]));
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -199,7 +237,7 @@ public class RoleEnforcementTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task ApiKey_KnownScopes_Accepted()
     {
-        var (client, _, _) = await _factory.CreateSessionClientAsync(AccountRole.Member);
+        var (client, _, _) = await _factory.CreateSessionClientAsync(AccountRole.Admin);
         var response = await client.PostAsJsonAsync("/me/api-keys",
             new CreateMyApiKeyRequest("good", Scopes.All));
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);

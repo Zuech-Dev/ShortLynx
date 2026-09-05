@@ -7,8 +7,10 @@ public enum AccountAction
 {
     /// <summary>View links, domains, API keys, and analytics.</summary>
     ReadResources,
-    /// <summary>Create / edit / delete links, domains, and API keys.</summary>
+    /// <summary>Create / edit / delete links, campaigns, and folders.</summary>
     ManageResources,
+    /// <summary>Create/edit/delete custom domains, API keys, and social connections.</summary>
+    ManageIntegrations,
     /// <summary>Invite, change the role of, or remove members.</summary>
     ManageMembers,
     /// <summary>Rename, deactivate, transfer, or delete the account.</summary>
@@ -25,6 +27,7 @@ public static class AccountPermissions
     {
         AccountAction.ReadResources => role >= AccountRole.Viewer,
         AccountAction.ManageResources => role >= AccountRole.Member,
+        AccountAction.ManageIntegrations => role >= AccountRole.Admin,
         AccountAction.ManageMembers => role >= AccountRole.Admin,
         AccountAction.ManageAccount => role >= AccountRole.Owner,
         _ => false,
@@ -32,6 +35,7 @@ public static class AccountPermissions
 
     public static bool CanReadResources(AccountRole role) => Can(role, AccountAction.ReadResources);
     public static bool CanManageResources(AccountRole role) => Can(role, AccountAction.ManageResources);
+    public static bool CanManageIntegrations(AccountRole role) => Can(role, AccountAction.ManageIntegrations);
     public static bool CanManageMembers(AccountRole role) => Can(role, AccountAction.ManageMembers);
     public static bool CanManageAccount(AccountRole role) => Can(role, AccountAction.ManageAccount);
 

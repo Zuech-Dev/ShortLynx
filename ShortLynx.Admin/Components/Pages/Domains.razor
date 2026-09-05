@@ -120,7 +120,7 @@ else
             var db = scope.ServiceProvider.GetRequiredService<ShortLynxDbContext>();
             var ctx = await AccountRoleContext.ResolveAsync(db, principal);
             if (ctx is null) { _loaded = true; return; }
-            (_uid, _accountId, _canWrite) = (ctx.UserId, ctx.AccountId, ctx.CanManageResources);
+            (_uid, _accountId, _canWrite) = (ctx.UserId, ctx.AccountId, ctx.CanManageIntegrations);
         }
         _resolved = true;
         await LoadAsync();

@@ -17,8 +17,11 @@ namespace ShortLynx.Admin.Components;
 /// </summary>
 public sealed record AccountRoleContext(Guid UserId, Guid AccountId, AccountRole Role)
 {
-    /// <summary>Create / edit / delete links, domains, campaigns, social connections, API keys.</summary>
+    /// <summary>Create / edit / delete links, campaigns, folders, and tags.</summary>
     public bool CanManageResources => AccountPermissions.CanManageResources(Role);
+
+    /// <summary>Create / edit / delete custom domains, API keys, and social connections. Admin+.</summary>
+    public bool CanManageIntegrations => AccountPermissions.CanManageIntegrations(Role);
 
     /// <summary>Account-level configuration (e.g. Settings' privacy/terms URLs).</summary>
     public bool CanManageAccount => AccountPermissions.CanManageAccount(Role);

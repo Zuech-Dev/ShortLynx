@@ -6,15 +6,16 @@ namespace ShortLynx.Tests.Services.Accounts;
 public class AccountPermissionsTests
 {
     [Theory]
-    [InlineData(AccountRole.Viewer, true, false, false, false)]
-    [InlineData(AccountRole.Member, true, true, false, false)]
-    [InlineData(AccountRole.Admin, true, true, true, false)]
-    [InlineData(AccountRole.Owner, true, true, true, true)]
+    [InlineData(AccountRole.Viewer, true, false, false, false, false)]
+    [InlineData(AccountRole.Member, true, true, false, false, false)]
+    [InlineData(AccountRole.Admin, true, true, true, true, false)]
+    [InlineData(AccountRole.Owner, true, true, true, true, true)]
     public void Matrix_GrantsExpectedCapabilities(
-        AccountRole role, bool read, bool manageResources, bool manageMembers, bool manageAccount)
+        AccountRole role, bool read, bool manageResources, bool manageIntegrations, bool manageMembers, bool manageAccount)
     {
         Assert.Equal(read, AccountPermissions.CanReadResources(role));
         Assert.Equal(manageResources, AccountPermissions.CanManageResources(role));
+        Assert.Equal(manageIntegrations, AccountPermissions.CanManageIntegrations(role));
         Assert.Equal(manageMembers, AccountPermissions.CanManageMembers(role));
         Assert.Equal(manageAccount, AccountPermissions.CanManageAccount(role));
     }

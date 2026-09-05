@@ -37,6 +37,12 @@ public partial class ShortLynxDbContext
                           .WithMany(c => c.Links)
                           .HasForeignKey(e => e.CampaignId)
                           .OnDelete(DeleteBehavior.SetNull);
+                    // Optional folder grouping, same shape as Campaign: deleting a folder unassigns
+                    // its links (SetNull) rather than cascading the delete to the links themselves.
+                    entity.HasOne(e => e.Folder)
+                          .WithMany(f => f.Links)
+                          .HasForeignKey(e => e.FolderId)
+                          .OnDelete(DeleteBehavior.SetNull);
                     // Owning account — deleting an account removes its links.
                     entity.HasOne(e => e.Account)
                           .WithMany()
@@ -45,6 +51,7 @@ public partial class ShortLynxDbContext
                     entity.Property(e => e.Id).ValueGeneratedNever();
                     entity.Property(e => e.Mode).HasConversion<int>();
                     entity.Property(e => e.OriginalUrl).IsRequired();
+                    entity.Property(e => e.Nickname).HasMaxLength(200);
                 }
             )
            .Entity<UserLinkCodeEntity>(entity =>
@@ -188,6 +195,56 @@ public partial class ShortLynxDbContext
                           .WithMany()
                           .HasForeignKey(e => e.UserAccountId)
                           .OnDelete(DeleteBehavior.NoAction);
+                }
+            )
+           .Entity<FolderEntity>(entity =>
+                {
+                    entity.HasKey(e => e.Id);
+                    entity.Property(e => e.Id).ValueGeneratedNever();
+                    entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
+                    // Owning account — deleting an account removes its folders.
+                    entity.HasOne(e => e.Account)
+                          .WithMany()
+                          .HasForeignKey(e => e.AccountId)
+                          .OnDelete(DeleteBehavior.Cascade);
+                    // Audit-only creator; deleting the user doesn't touch the folder.
+                    entity.HasOne(e => e.UserAccount)
+                          .WithMany()
+                          .HasForeignKey(e => e.UserAccountId)
+                          .OnDelete(DeleteBehavior.NoAction);
+                }
+            )
+           .Entity<TagEntity>(entity =>
+                {
+                    entity.HasKey(e => e.Id);
+                    entity.Property(e => e.Id).ValueGeneratedNever();
+                    entity.Property(e => e.Name).IsRequired().HasMaxLength(50);
+                    // A tag name is unique within an account (case sensitivity enforced in the service
+                    // layer, since that's provider-agnostic; the index just prevents exact duplicates).
+                    entity.HasIndex(e => new { e.AccountId, e.Name }).IsUnique();
+                    entity.HasOne(e => e.Account)
+                          .WithMany()
+                          .HasForeignKey(e => e.AccountId)
+                          .OnDelete(DeleteBehavior.Cascade);
+                }
+            )
+           .Entity<LinkTagEntity>(entity =>
+                {
+                    entity.HasKey(e => e.Id);
+                    entity.Property(e => e.Id).ValueGeneratedNever();
+                    // A link carries a given tag at most once.
+                    entity.HasIndex(e => new { e.LinkId, e.TagId }).IsUnique();
+                    // Pure join row: deleting either side removes the association, unlike Campaign/
+                    // Folder's SetNull — there's no orphaned-but-still-visible state that makes sense
+                    // for a join table.
+                    entity.HasOne(e => e.Link)
+                          .WithMany()
+                          .HasForeignKey(e => e.LinkId)
+                          .OnDelete(DeleteBehavior.Cascade);
+                    entity.HasOne(e => e.Tag)
+                          .WithMany()
+                          .HasForeignKey(e => e.TagId)
+                          .OnDelete(DeleteBehavior.Cascade);
                 }
             )
            .Entity<MembershipEntity>(entity =>

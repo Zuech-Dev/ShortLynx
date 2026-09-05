@@ -18,7 +18,9 @@ public partial class ShortLynxDbContext(DbContextOptions<ShortLynxDbContext> opt
     public DbSet<CityClickDailyEntity> CityClickDailyEntities { get; set; }
     public DbSet<CityClickDailyVisitorEntity> CityClickDailyVisitorEntities { get; set; }
     public DbSet<CustomDomainEntity> CustomDomainEntities { get; set; }
+    public DbSet<FolderEntity> FolderEntities { get; set; }
     public DbSet<LinkEntity> LinkEntities { get; set; }
+    public DbSet<LinkTagEntity> LinkTagEntities { get; set; }
     public DbSet<MembershipEntity> MembershipEntities { get; set; }
     public DbSet<RefreshTokenEntity> RefreshTokenEntities { get; set; }
     public DbSet<SocialConnectionEntity> SocialConnectionEntities { get; set; }
@@ -26,6 +28,7 @@ public partial class ShortLynxDbContext(DbContextOptions<ShortLynxDbContext> opt
     public DbSet<SocialPostCodeEntity> SocialPostCodeEntities { get; set; }
     public DbSet<MagicLinkTokenEntity> MagicLinkTokenEntities { get; set; }
     public DbSet<ShortCodeEntity> ShortCodeEntities { get; set; }
+    public DbSet<TagEntity> TagEntities { get; set; }
     public DbSet<UserAccountEntity> UserAccountEntities { get; set; }
     public DbSet<UserLinkCodeEntity> UserLinkCodeEntities { get; set; }
     public DbSet<UserVisitEntity> UserVisitEntities { get; set; }

@@ -32,6 +32,13 @@ public class LinkEntity
     // Null = ungrouped. Deleting the campaign unassigns (SetNull), never deletes the link.
     public Guid? CampaignId { get; set; }
 
+    // Optional: file this link into a folder, pure organization (no UTM, no redirect-time effect).
+    // Null = unfiled. Deleting the folder unassigns (SetNull), never deletes the link.
+    public Guid? FolderId { get; set; }
+
+    // Optional human-friendly display name, distinct from OriginalUrl and the short code itself.
+    public string? Nickname { get; set; }
+
     public ICollection<VisitEntity> Visits { get; set; } = [];
     public UserLinkCodeEntity? UserLinkCode { get; set; } = null;
     public virtual AccountEntity Account { get; set; } = null!;
@@ -39,4 +46,5 @@ public class LinkEntity
     public virtual UserAccountEntity? UserAccount { get; set; }
     public virtual CustomDomainEntity? CustomDomain { get; set; }
     public virtual CampaignEntity? Campaign { get; set; }
+    public virtual FolderEntity? Folder { get; set; }
 }

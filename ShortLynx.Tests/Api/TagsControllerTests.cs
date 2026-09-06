@@ -84,10 +84,41 @@ public class TagsControllerTests : IClassFixture<ApiFactory>
             new CreateLinkRequest("https://example.com", TagIds: [tag!.Id]));
         Assert.Equal(HttpStatusCode.Created, resp.StatusCode);
         var link = await resp.Content.ReadFromJsonAsync<LinkResponse>();
+        Assert.Equal([tag.Id], link!.TagIds);
 
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ShortLynx.Data.Context.ShortLynxDbContext>();
-        Assert.True(await db.LinkTagEntities.AnyAsync(lt => lt.LinkId == link!.Id && lt.TagId == tag.Id));
+        Assert.True(await db.LinkTagEntities.AnyAsync(lt => lt.LinkId == link.Id && lt.TagId == tag.Id));
+    }
+
+    [Fact]
+    public async Task LinkResponse_CarriesTagIds_OnGetAndList()
+    {
+        var client = await CreateKeyClientAsync([Scopes.LinksWrite, Scopes.LinksRead, Scopes.TagsWrite]);
+        var tag = await (await client.PostAsJsonAsync("/tags", new CreateTagRequest("api-tag")))
+            .Content.ReadFromJsonAsync<TagResponse>();
+
+        var created = await (await client.PostAsJsonAsync("/links", new CreateLinkRequest("https://example.com")))
+            .Content.ReadFromJsonAsync<LinkResponse>();
+        Assert.Empty(created!.TagIds);
+
+        // This API-key controller has no PUT /links/{id}/tags of its own (only /links accepts TagIds,
+        // at creation) -- assign directly via the DB to isolate this test to the read path being verified.
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ShortLynx.Data.Context.ShortLynxDbContext>();
+            db.LinkTagEntities.Add(new ShortLynx.Data.Entities.LinkTagEntity
+            {
+                Id = Guid.CreateVersion7(), LinkId = created.Id, TagId = tag!.Id, CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var fetched = await (await client.GetAsync($"/links/{created.Id}")).Content.ReadFromJsonAsync<LinkResponse>();
+        Assert.Equal([tag.Id], fetched!.TagIds);
+
+        var listed = await client.GetFromJsonAsync<List<LinkResponse>>("/links");
+        Assert.Equal([tag.Id], Assert.Single(listed!, l => l.Id == created.Id).TagIds);
     }
 
     [Fact]

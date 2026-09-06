@@ -50,25 +50,6 @@ public static class ServiceExtensions
         return services;
     }
 
-    /// <summary>
-    /// SQLite has no dedicated migrations project (see CLAUDE.md's Architecture section) and
-    /// <see cref="AddShortLynxDatabase"/> above never configures a <c>MigrationsAssembly</c> for it —
-    /// EnsureCreated is the only schema-creation path for that provider, mirroring what
-    /// <c>ApiFactory</c> does for the test host. It's a cheap no-op once the tables exist, so this is
-    /// safe to call unconditionally at startup. Postgres is untouched: it keeps using real EF
-    /// migrations via <see cref="DatabaseMigrationGuard"/>.
-    /// </summary>
-    public static void EnsureSqliteSchemaCreated(IServiceProvider services, IConfiguration configuration)
-    {
-        var provider = configuration["Database:Provider"] ?? "sqlite";
-        var isPostgres = provider.Equals("postgresql", StringComparison.OrdinalIgnoreCase) ||
-                          provider.Equals("postgres", StringComparison.OrdinalIgnoreCase);
-        if (isPostgres) return;
-
-        using var db = services.GetRequiredService<IDbContextFactory<ShortLynxDbContext>>().CreateDbContext();
-        db.Database.EnsureCreated();
-    }
-
     public static IServiceCollection AddShortLynxServices(
         this IServiceCollection services, IConfiguration configuration)
     {

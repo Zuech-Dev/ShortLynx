@@ -92,8 +92,8 @@ builder.Services.AddHealthChecks();
 
 var app = builder.Build();
 
-// SQLite has no migrations project — create its schema directly (see ServiceExtensions.EnsureSqliteSchemaCreated).
-ServiceExtensions.EnsureSqliteSchemaCreated(app.Services, app.Configuration);
+// SQLite has no migrations project — create its schema directly (see DatabaseSchemaBootstrap).
+DatabaseSchemaBootstrap.EnsureSqliteSchemaCreated(app.Services, app.Configuration);
 
 // Dev-only guard: fail fast at startup if the database is behind the migrations, so schema drift
 // (a generated-but-unapplied migration) surfaces here instead of as a cryptic query-time error like

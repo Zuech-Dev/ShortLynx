@@ -289,7 +289,9 @@ test for the fix, not for the bug.
 
 ## Pull requests
 
-- Branch from `implementation` (the integration branch), not `main`.
+- Branch from `main`. (`implementation` was the integration branch at one point but has received no
+  unique commits in a long time — `main` is 40+ commits ahead of it as of this check — so it's stale;
+  treat `main` as the actual integration branch until `implementation` is either revived or deleted.)
 - `dotnet build ShortLynx.slnx` and `dotnet test ShortLynx.slnx` green before pushing.
 - CI runs build + all tests + the Tailwind staleness check. It must be green before merge.
 - Keep commit messages explanatory: what changed, and *why* the obvious alternative wasn't chosen.

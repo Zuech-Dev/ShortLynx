@@ -75,10 +75,17 @@ public class MeLinksController(
             .GroupBy(c => c.LinkId)
             .ToDictionary(g => g.Key, g => g.First());
 
+        var tagsByLink = (await db.LinkTagEntities
+                .Where(lt => linkIds.Contains(lt.LinkId))
+                .Select(lt => new { lt.LinkId, lt.TagId })
+                .ToListAsync(ct))
+            .GroupBy(t => t.LinkId)
+            .ToDictionary(g => g.Key, g => g.Select(t => t.TagId).ToArray());
+
         return Ok(links.Select(l =>
         {
             var c = codeMap.GetValueOrDefault(l.Id);
-            return ToLinkResponse(l, c?.Code ?? string.Empty, c?.IsCustom ?? false);
+            return ToLinkResponse(l, c?.Code ?? string.Empty, c?.IsCustom ?? false, tagsByLink.GetValueOrDefault(l.Id, []));
         }));
     }
 
@@ -96,12 +103,12 @@ public class MeLinksController(
             if (isUserAttributed)
             {
                 var link = await linkService.CreateUserAttributedLinkAsync(request.Url, AccountId, CurrentUserId, request.CampaignId, ct);
-                return CreatedAtAction(nameof(Get), new { id = link.Id }, ToLinkResponse(link, string.Empty, false));
+                return CreatedAtAction(nameof(Get), new { id = link.Id }, ToLinkResponse(link, string.Empty, false, []));
             }
 
             var result = await linkService.CreateAnonymousLinkAsync(request.Url, AccountId, CurrentUserId, request.CampaignId, request.CustomCode, ct);
             return CreatedAtAction(nameof(Get), new { id = result.Link.Id },
-                ToLinkResponse(result.Link, result.ShortCode.Code, result.ShortCode.IsCustom));
+                ToLinkResponse(result.Link, result.ShortCode.Code, result.ShortCode.IsCustom, []));
         }
         catch (CustomCodeTakenException ex)
         {
@@ -126,7 +133,8 @@ public class MeLinksController(
         if (link is null) return NotFound();
         var sc = await db.ShortCodeEntities.Where(x => x.LinkId == id)
             .Select(x => new { x.Code, x.IsCustom }).FirstOrDefaultAsync(ct);
-        return Ok(ToLinkResponse(link, sc?.Code ?? "", sc?.IsCustom ?? false));
+        var tagIds = await db.LinkTagEntities.Where(lt => lt.LinkId == id).Select(lt => lt.TagId).ToArrayAsync(ct);
+        return Ok(ToLinkResponse(link, sc?.Code ?? "", sc?.IsCustom ?? false, tagIds));
     }
 
     // POST /me/links/{id}/codes — provision user-attributed codes. Either userIds (bare, no labels,
@@ -395,9 +403,9 @@ public class MeLinksController(
         return sc2 is null ? null : new ResolvedCode(sc2.Code, sc2.IsCustom);
     }
 
-    private static LinkResponse ToLinkResponse(LinkEntity link, string shortCode, bool isCustom)
+    private static LinkResponse ToLinkResponse(LinkEntity link, string shortCode, bool isCustom, Guid[] tagIds)
         => new(link.Id, link.OriginalUrl, link.Mode.ToString(), shortCode, link.CreatedAt, link.ExpiresAt,
-               link.CampaignId, isCustom, link.CustomDomainId, link.FolderId, link.Nickname);
+               link.CampaignId, isCustom, link.CustomDomainId, link.FolderId, link.Nickname, tagIds);
 
     // Null means neither field was usably supplied — the caller returns 400.
     private static IReadOnlyCollection<CodeRecipient>? ResolveRecipients(CreateUserCodesRequest request)

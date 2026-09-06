@@ -22,6 +22,15 @@ public class LinksControllerTests : IClassFixture<ApiFactory>
     private async Task<(HttpClient Client, string PlaintextKey)> CreateAuthenticatedClientAsync(
         string[]? scopes = null)
     {
+        var (client, plaintext, _) = await CreateAuthenticatedClientWithAccountAsync(scopes);
+        return (client, plaintext);
+    }
+
+    // Same as above, but also returns the account id -- needed by tests that seed account-scoped
+    // fixtures (e.g. campaigns) directly against the DB.
+    private async Task<(HttpClient Client, string PlaintextKey, Guid AccountId)> CreateAuthenticatedClientWithAccountAsync(
+        string[]? scopes = null)
+    {
         var accountId = await _factory.SeedAccountAsync();
         using var scope = _factory.Services.CreateScope();
         var svc = scope.ServiceProvider.GetRequiredService<IApiKeyService>();
@@ -30,7 +39,20 @@ public class LinksControllerTests : IClassFixture<ApiFactory>
 
         var client = _factory.CreateClient();
         client.DefaultRequestHeaders.Add("Authorization", $"Bearer {plaintext}");
-        return (client, plaintext);
+        return (client, plaintext, accountId);
+    }
+
+    private async Task<Guid> SeedCampaignAsync(Guid accountId, string name = "Launch")
+    {
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ShortLynxDbContext>();
+        var campaign = new CampaignEntity
+        {
+            Id = Guid.CreateVersion7(), AccountId = accountId, Name = name, CreatedAt = DateTimeOffset.UtcNow,
+        };
+        db.CampaignEntities.Add(campaign);
+        await db.SaveChangesAsync();
+        return campaign.Id;
     }
 
     // ── Authentication ────────────────────────────────────────────────────────
@@ -348,5 +370,105 @@ public class LinksControllerTests : IClassFixture<ApiFactory>
         var (narrowClient, _) = await CreateAuthenticatedClientAsync([Scopes.LinksRead, Scopes.LinksWrite]);
         var response = await narrowClient.GetAsync($"/links/{link!.Id}/analytics");
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    // ── POST /links — Mode ────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task CreateLink_ModeUserAttributed_CreatesLinkWithNoShortCode()
+    {
+        var (client, _) = await CreateAuthenticatedClientAsync();
+        var response = await client.PostAsJsonAsync("/links",
+            new CreateLinkRequest("https://example.com", Mode: "UserAttributed"));
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<LinkResponse>();
+        Assert.Equal("UserAttributed", body!.Mode);
+        Assert.Equal(string.Empty, body.ShortCode);
+    }
+
+    [Fact]
+    public async Task CreateLink_ModeIsCaseInsensitive()
+    {
+        var (client, _) = await CreateAuthenticatedClientAsync();
+        var response = await client.PostAsJsonAsync("/links",
+            new CreateLinkRequest("https://example.com", Mode: "userattributed"));
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<LinkResponse>();
+        Assert.Equal("UserAttributed", body!.Mode);
+    }
+
+    [Fact]
+    public async Task CreateLink_NoMode_DefaultsToAnonymous()
+    {
+        var (client, _) = await CreateAuthenticatedClientAsync();
+        var response = await client.PostAsJsonAsync("/links", new CreateLinkRequest("https://example.com"));
+
+        var body = await response.Content.ReadFromJsonAsync<LinkResponse>();
+        Assert.Equal("Anonymous", body!.Mode);
+    }
+
+    [Fact]
+    public async Task CreateLink_ModeUserAttributedWithCustomCode_Returns400()
+    {
+        var (client, _) = await CreateAuthenticatedClientAsync();
+        var response = await client.PostAsJsonAsync("/links",
+            new CreateLinkRequest("https://example.com", CustomCode: "my-code", Mode: "UserAttributed"));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    // ── POST /links — CampaignId ──────────────────────────────────────────────
+
+    [Fact]
+    public async Task CreateLink_WithCampaignId_AssignsCampaign()
+    {
+        var (client, _, accountId) = await CreateAuthenticatedClientWithAccountAsync();
+        var campaignId = await SeedCampaignAsync(accountId);
+
+        var response = await client.PostAsJsonAsync("/links",
+            new CreateLinkRequest("https://example.com", CampaignId: campaignId));
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<LinkResponse>();
+        Assert.Equal(campaignId, body!.CampaignId);
+    }
+
+    [Fact]
+    public async Task CreateLink_UserAttributedWithCampaignId_AssignsCampaign()
+    {
+        var (client, _, accountId) = await CreateAuthenticatedClientWithAccountAsync();
+        var campaignId = await SeedCampaignAsync(accountId);
+
+        var response = await client.PostAsJsonAsync("/links",
+            new CreateLinkRequest("https://example.com", Mode: "UserAttributed", CampaignId: campaignId));
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<LinkResponse>();
+        Assert.Equal(campaignId, body!.CampaignId);
+    }
+
+    [Fact]
+    public async Task CreateLink_WithAnotherAccountsCampaignId_Returns400()
+    {
+        var (client, _, _) = await CreateAuthenticatedClientWithAccountAsync();
+        var otherAccountId = await _factory.SeedAccountAsync();
+        var otherCampaignId = await SeedCampaignAsync(otherAccountId);
+
+        var response = await client.PostAsJsonAsync("/links",
+            new CreateLinkRequest("https://example.com", CampaignId: otherCampaignId));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task CreateLink_WithUnknownCampaignId_Returns400()
+    {
+        var (client, _) = await CreateAuthenticatedClientAsync();
+        var response = await client.PostAsJsonAsync("/links",
+            new CreateLinkRequest("https://example.com", CampaignId: Guid.CreateVersion7()));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 }

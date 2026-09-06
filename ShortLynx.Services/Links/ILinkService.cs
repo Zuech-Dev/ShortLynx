@@ -13,8 +13,10 @@ public interface ILinkService
     /// API-key path. Optional <paramref name="customCode"/> mints an operator-chosen (vanity) code
     /// instead of a random one — entitlement- and format-gated; throws <see cref="Entitlements.EntitlementException"/>,
     /// <see cref="ArgumentException"/> (invalid), or <see cref="ShortCodes.CustomCodeTakenException"/> (409).
+    /// Optional <paramref name="campaignId"/> assigns the link to one of the key's account's campaigns
+    /// at creation — throws <see cref="ArgumentException"/> if the campaign isn't the account's.
     /// </summary>
-    Task<AnonymousLinkResult> CreateAnonymousLinkAsync(string url, ApiKeyEntity owner, string? customCode = null, CancellationToken ct = default);
+    Task<AnonymousLinkResult> CreateAnonymousLinkAsync(string url, ApiKeyEntity owner, string? customCode = null, Guid? campaignId = null, CancellationToken ct = default);
 
     /// <summary>
     /// Creates a link owned by an account (admin dashboard); no owning API key. Optionally assigns it to

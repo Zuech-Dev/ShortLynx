@@ -198,7 +198,7 @@ internal sealed class FakeLinkService : ILinkService
 
     public readonly List<string?> CreatedCustomCodes = [];
 
-    public Task<AnonymousLinkResult> CreateAnonymousLinkAsync(string url, ApiKeyEntity owner, string? customCode = null, CancellationToken ct = default)
+    public Task<AnonymousLinkResult> CreateAnonymousLinkAsync(string url, ApiKeyEntity owner, string? customCode = null, Guid? campaignId = null, CancellationToken ct = default)
         => throw new NotSupportedException();
 
     public Task<AnonymousLinkResult> CreateAnonymousLinkAsync(string url, Guid accountId, Guid? createdByUserAccountId = null, Guid? campaignId = null, string? customCode = null, CancellationToken ct = default)

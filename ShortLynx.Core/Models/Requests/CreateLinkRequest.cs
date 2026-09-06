@@ -7,8 +7,13 @@ namespace ShortLynx.Core.Models.Requests;
 /// <c>TagIds</c> requires the <c>tags:write</c> scope in addition to <c>links:write</c> -- a key
 /// without it gets 403, not a silently-ignored TagIds (a caller who thinks tagging happened when it
 /// didn't is worse than an explicit rejection).
+/// <c>Mode</c> is "Anonymous" (default) or "UserAttributed"; UserAttributed links can't take a
+/// CustomCode. <c>CampaignId</c> assigns the link to one of the key's account's campaigns at
+/// creation -- listing campaigns requires the separate <c>campaigns:read</c> scope (GET /campaigns).
 /// </summary>
 public sealed record CreateLinkRequest(
     [Required, Url] string Url,
     string? CustomCode = null,
-    Guid[]? TagIds = null);
+    Guid[]? TagIds = null,
+    string? Mode = null,
+    Guid? CampaignId = null);

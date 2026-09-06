@@ -19,8 +19,8 @@ public sealed class LinkService(
 
     /// <summary>Creates an API-key-owned link (REST API path) for the key's account.</summary>
     public Task<AnonymousLinkResult> CreateAnonymousLinkAsync(
-        string url, ApiKeyEntity owner, string? customCode = null, CancellationToken ct = default)
-        => CreateLinkAsync(url, owner.AccountId, link => link.ApiKeyId = owner.Id, campaignId: null, customCode, ct);
+        string url, ApiKeyEntity owner, string? customCode = null, Guid? campaignId = null, CancellationToken ct = default)
+        => CreateLinkAsync(url, owner.AccountId, link => link.ApiKeyId = owner.Id, campaignId, customCode, ct);
 
     /// <summary>Creates a link owned by an account (admin dashboard path).</summary>
     public Task<AnonymousLinkResult> CreateAnonymousLinkAsync(

@@ -43,13 +43,34 @@ public class LinksController(
                 new { error = $"This API key lacks the '{Scopes.TagsWrite}' scope." });
         }
 
+        var isUserAttributed = string.Equals(request.Mode, nameof(LinkMode.UserAttributed), StringComparison.OrdinalIgnoreCase);
+        if (isUserAttributed && !string.IsNullOrWhiteSpace(request.CustomCode))
+            return BadRequest(new { error = "Custom codes are only available for anonymous links." });
+
         try
         {
-            var result = await linkService.CreateAnonymousLinkAsync(request.Url, CurrentKey, request.CustomCode, ct);
+            Guid linkId;
+            LinkResponse response;
+
+            if (isUserAttributed)
+            {
+                var link = await linkService.CreateUserAttributedLinkAsync(
+                    request.Url, CurrentKey.AccountId, CurrentKey.UserAccountId, request.CampaignId, ct);
+                linkId = link.Id;
+                response = ToLinkResponse(link, string.Empty, false);
+            }
+            else
+            {
+                var result = await linkService.CreateAnonymousLinkAsync(
+                    request.Url, CurrentKey, request.CustomCode, request.CampaignId, ct);
+                linkId = result.Link.Id;
+                response = ToLinkResponse(result.Link, result.ShortCode.Code, result.ShortCode.IsCustom);
+            }
+
             if (request.TagIds is { Length: > 0 } tagIds)
-                await tagService.SetLinkTagsAsync(result.Link.Id, tagIds, CurrentKey.AccountId, ct);
-            var response = ToLinkResponse(result.Link, result.ShortCode.Code, result.ShortCode.IsCustom);
-            return CreatedAtAction(nameof(GetLink), new { id = result.Link.Id }, response);
+                await tagService.SetLinkTagsAsync(linkId, tagIds, CurrentKey.AccountId, ct);
+
+            return CreatedAtAction(nameof(GetLink), new { id = linkId }, response);
         }
         catch (CustomCodeTakenException ex)
         {

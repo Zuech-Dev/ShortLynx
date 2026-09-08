@@ -94,11 +94,17 @@ public sealed class BackgroundVisitWriter(
                 // Bots are excluded the same way ClickAggregator excludes them from human-engagement
                 // stats: they'd otherwise inflate small-city buckets past the k threshold with noise,
                 // and a bot's "location" isn't a real visitor's location to reveal. Privacy-signal rows
-                // are already excluded implicitly -- Derive returns City = null for them below.
-                if (cityEligible && d.City is not null && d.Device != DeviceType.Bot)
+                // are already excluded implicitly -- Derive returns Country = null for them below.
+                //
+                // Gated on Country, not City: MaxMind routinely resolves Country/State while City
+                // itself is empty (mobile/business IP blocks), and the city->state->country cascade
+                // needs those clicks to still become a row (they fall through to the state or country
+                // tier at read time) rather than silently vanishing before ever reaching "Other".
+                if (cityEligible && d.Country is not null && d.Device != DeviceType.Bot)
                 {
                     cityItems.Add(new CityClickItem(
-                        linkId, d.City, d.Country, DateOnly.FromDateTime(e.ClickedAt.UtcDateTime), hashedIp));
+                        LinkId: linkId, City: d.City, State: d.State, Country: d.Country,
+                        Date: DateOnly.FromDateTime(e.ClickedAt.UtcDateTime), HashedIp: hashedIp));
                 }
 
                 return new VisitEntity
@@ -196,14 +202,14 @@ public sealed class BackgroundVisitWriter(
     // Reduces a visit's raw signals to the stored low-entropy dimensions. A privacy signal (DNT / Sec-GPC)
     // suppresses every derived dimension — the click still counts, but carries no profile. includeCity
     // must only ever be true for a Mode 1 event whose account has opted into city aggregates (resolved
-    // by ResolveCityEligibilityAsync); City here never reaches VisitEntity/UserVisitEntity itself --
-    // callers collect it into a CityClickItem instead. See MaxMindGeoIpResolver for why this is safe to
+    // by ResolveCityEligibilityAsync); City/State here never reach VisitEntity/UserVisitEntity itself --
+    // callers collect them into a CityClickItem instead. See MaxMindGeoIpResolver for why this is safe to
     // ask for unconditionally rather than gating inside the resolver.
     private (ClickSource Source, DeviceType Device, string? Browser, string? Os, string? ReferrerHost,
-        string? Country, string? TimeZone, string? Language, string? NavigationType, string? City) Derive(VisitEvent e, bool includeCity = false)
+        string? Country, string? TimeZone, string? Language, string? NavigationType, string? City, string? State) Derive(VisitEvent e, bool includeCity = false)
     {
         if (e.PrivacySignal)
-            return (ClickSource.Direct, DeviceType.Unknown, null, null, null, null, null, null, null, null);
+            return (ClickSource.Direct, DeviceType.Unknown, null, null, null, null, null, null, null, null, null);
 
         var ua = uaParser.Parse(e.UserAgent);
         var nav = string.IsNullOrWhiteSpace(e.SecFetchSite) ? null : e.SecFetchSite.Trim().ToLowerInvariant();
@@ -218,7 +224,8 @@ public sealed class BackgroundVisitWriter(
             geo.TimeZone,
             languageReducer.Primary(e.AcceptLanguage),
             nav,
-            geo.City);
+            geo.City,
+            geo.State);
     }
 
     // IP hashing is keyed with a secret pepper (HMAC) so the small IPv4 space can't be brute-forced

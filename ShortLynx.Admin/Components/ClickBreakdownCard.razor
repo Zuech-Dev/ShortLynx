@@ -76,13 +76,20 @@
                 <div class="mt-4" data-testid="cities">
                     <h6 class="font-semibold text-sm mb-2">By city</h6>
                     <p class="text-gray-400 text-xs mb-2">
-                        Only shown once a city has at least @CityAggregator.AnonymityThreshold distinct
-                        visitors — "Other" is everything below that.
+                        Shown by city where at least @CityAggregator.AnonymityThreshold distinct visitors
+                        clicked. Smaller cities are folded into their state, then their country, to stay
+                        anonymous — a <span class="badge badge-gray">State</span> or
+                        <span class="badge badge-gray">Country</span> tag marks a folded row. "Other" is
+                        whatever has no country data at all.
                     </p>
                     @foreach (var c in Cities)
                     {
                         <div class="flex items-center gap-2 text-sm mb-1">
-                            <span class="w-32 shrink-0 truncate">@c.City@(c.Country is null ? "" : $", {c.Country}")</span>
+                            <span class="w-32 shrink-0 truncate" title="@CityLabel(c)">@CityLabel(c)</span>
+                            @if (c.Granularity != CityGranularity.City)
+                            {
+                                <span class="badge badge-gray shrink-0" data-testid="city-granularity">@c.Granularity</span>
+                            }
                             <span class="flex-1 bg-gray-100 rounded h-3"><span class="block bg-orange-500 h-3 rounded" style="width:@BarPct(c.Count, b.TotalClicks)%"></span></span>
                             <span class="w-10 text-right text-gray-600">@c.Count</span>
                         </div>
@@ -245,6 +252,15 @@
             ("By UTM medium", b.UtmMediums, "utm-mediums"),
             ("By UTM campaign", b.UtmCampaigns, "utm-campaigns"),
         }.Where(x => x.Item2.Count > 0).ToList();
+
+    // The finest field the row's Granularity guarantees is populated -- see CityAggregator.Summarize.
+    private static string CityLabel(CityCount c) => c.Granularity switch
+    {
+        CityGranularity.City => c.Country is null ? c.City! : $"{c.City}, {c.Country}",
+        CityGranularity.State => c.Country is null ? c.State! : $"{c.State}, {c.Country}",
+        CityGranularity.Country => c.Country!,
+        _ => "Other",
+    };
 
     // Bar size as a percent of a basis (total clicks for source/device, busiest day for the timeline). Clamped 0–100.
     static int BarPct(long count, long basis) => basis <= 0 ? 0 : (int)Math.Clamp(Math.Round(100.0 * count / basis), 0, 100);

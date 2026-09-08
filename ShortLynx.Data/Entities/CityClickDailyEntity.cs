@@ -15,13 +15,20 @@ namespace ShortLynx.Data.Entities;
 /// per-visitor presence data does not linger once it has done its job. Reveal-gating uses
 /// <see cref="UniqueCount"/>, never <see cref="Count"/> — a single person refreshing six times must
 /// not be enough to reveal a city, which is why this column exists instead of reusing a plain count.
+///
+/// <see cref="City"/> is nullable and <see cref="State"/> exists to support the city→state→country
+/// generalization cascade (CITY_GEO_PLAN.md's later revision): MaxMind can resolve Country/State
+/// while City is empty (mobile/business IP blocks), and a city that doesn't individually clear the
+/// anonymity threshold rolls up into its state before falling back to its country. See
+/// CityAggregator.Summarize for the cascade itself — this table stays a flat, ungrouped rollup.
 /// </summary>
 [Table("CityClickDaily")]
 public class CityClickDailyEntity
 {
     public Guid Id { get; set; }
     public Guid LinkId { get; set; }
-    public required string City { get; set; }
+    public string? City { get; set; }
+    public string? State { get; set; }
     public string? Country { get; set; }
     public DateOnly Date { get; set; }
     public long Count { get; set; }

@@ -306,8 +306,10 @@ public partial class ShortLynxDbContext
                 {
                     entity.HasKey(e => e.Id);
                     entity.Property(e => e.Id).ValueGeneratedNever();
-                    // One row per (link, city, country, date); flush-time upserts key off exactly this.
-                    entity.HasIndex(e => new { e.LinkId, e.City, e.Country, e.Date }).IsUnique();
+                    // One row per (link, city, state, country, date); flush-time upserts key off exactly
+                    // this. State joins the key so a same-named city in two different states/countries
+                    // doesn't merge into one row (Springfield, IL vs. Springfield, MO).
+                    entity.HasIndex(e => new { e.LinkId, e.City, e.State, e.Country, e.Date }).IsUnique();
                     // The only FK this table has, by design -- see the entity's own doc comment.
                     entity.HasOne(e => e.Link)
                           .WithMany()
@@ -319,12 +321,12 @@ public partial class ShortLynxDbContext
                 {
                     entity.HasKey(e => e.Id);
                     entity.Property(e => e.Id).ValueGeneratedNever();
-                    // Presence marker: at most one row per (link, city, country, date, hashed IP). No
-                    // navigation property to LinkEntity at all -- this table is meant to be short-lived
-                    // and gone long before a cascade delete would ever matter, and per the entity's doc
-                    // comment it deliberately carries no relationship that would make it feel more
-                    // permanent than it is.
-                    entity.HasIndex(e => new { e.LinkId, e.City, e.Country, e.Date, e.HashedIp }).IsUnique();
+                    // Presence marker: at most one row per (link, city, state, country, date, hashed
+                    // IP). No navigation property to LinkEntity at all -- this table is meant to be
+                    // short-lived and gone long before a cascade delete would ever matter, and per the
+                    // entity's own doc comment it deliberately carries no relationship that would make
+                    // it feel more permanent than it is.
+                    entity.HasIndex(e => new { e.LinkId, e.City, e.State, e.Country, e.Date, e.HashedIp }).IsUnique();
                 }
             )
            .Entity<SocialConnectionEntity>(entity =>

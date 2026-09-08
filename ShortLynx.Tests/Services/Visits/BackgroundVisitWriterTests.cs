@@ -11,7 +11,7 @@ namespace ShortLynx.Tests.Services.Visits;
 public class BackgroundVisitWriterTests
 {
     private static async Task<(InMemoryVisitEventSink Sink, FakeDbOperations Db, BackgroundVisitWriter Writer, TestDatabase TestDb)>
-        MakeWriter(int drainMs = 20, int batchSize = 100)
+        MakeWriter(int drainMs = 20, int batchSize = 100, ShortLynx.Services.Analytics.IGeoIpResolver? geoIpResolver = null)
     {
         var opts = Options.Create(new VisitSinkOptions
         {
@@ -38,7 +38,7 @@ public class BackgroundVisitWriterTests
             new ShortLynx.Services.Analytics.UserAgentParser(),
             new ShortLynx.Services.Analytics.ReferrerReducer(),
             new ShortLynx.Services.Analytics.LanguageReducer(),
-            new StubGeoIpResolver());
+            geoIpResolver ?? new StubGeoIpResolver());
         return (sink, db, writer, testDb);
     }
 
@@ -272,39 +272,41 @@ public class BackgroundVisitWriterTests
         Assert.Equal(5, db.InsertedVisits.Count);
     }
 
+    // Seeds one account with EnableCityAggregates on, one link, one short code -- the minimum graph
+    // ResolveCityEligibilityAsync needs to say yes -- and returns the short code to click through.
+    private static async Task<Guid> SeedCityEligibleAccountAsync(TestDatabase testDb)
+    {
+        await using var seed = testDb.CreateContext();
+        var accountId = Guid.CreateVersion7();
+        var linkId = Guid.CreateVersion7();
+        var shortCodeId = Guid.CreateVersion7();
+        seed.AccountEntities.Add(new ShortLynx.Data.Entities.AccountEntity
+        {
+            Id = accountId, Name = "Acme", CreatedAt = DateTimeOffset.UtcNow, IsActive = true,
+            PrivacyPolicyUrl = "https://acme.example/privacy", EnableCityAggregates = true,
+        });
+        seed.LinkEntities.Add(new ShortLynx.Data.Entities.LinkEntity
+        {
+            Id = linkId, AccountId = accountId, OriginalUrl = "https://acme.example",
+            CreatedAt = DateTimeOffset.UtcNow, IsActive = true,
+            Mode = ShortLynx.Data.Enums.LinkMode.Anonymous,
+        });
+        seed.ShortCodeEntities.Add(new ShortLynx.Data.Entities.ShortCodeEntity
+        {
+            Id = shortCodeId, LinkId = linkId, Code = "abc123",
+            CreatedAt = DateTimeOffset.UtcNow, IsActive = true,
+        });
+        await seed.SaveChangesAsync();
+        return shortCodeId;
+    }
+
     [Fact]
     public async Task Writer_CityEligibleAccount_UpsertsCityClicks()
     {
         var (sink, db, writer, testDb) = await MakeWriter(drainMs: 20);
         await using var _ = testDb;
         using var cts = new CancellationTokenSource();
-
-        // Seed one account with EnableCityAggregates on, one link, one short code -- the minimum
-        // graph ResolveCityEligibilityAsync needs to say yes.
-        Guid shortCodeId;
-        await using (var seed = testDb.CreateContext())
-        {
-            var accountId = Guid.CreateVersion7();
-            var linkId = Guid.CreateVersion7();
-            shortCodeId = Guid.CreateVersion7();
-            seed.AccountEntities.Add(new ShortLynx.Data.Entities.AccountEntity
-            {
-                Id = accountId, Name = "Acme", CreatedAt = DateTimeOffset.UtcNow, IsActive = true,
-                PrivacyPolicyUrl = "https://acme.example/privacy", EnableCityAggregates = true,
-            });
-            seed.LinkEntities.Add(new ShortLynx.Data.Entities.LinkEntity
-            {
-                Id = linkId, AccountId = accountId, OriginalUrl = "https://acme.example",
-                CreatedAt = DateTimeOffset.UtcNow, IsActive = true,
-                Mode = ShortLynx.Data.Enums.LinkMode.Anonymous,
-            });
-            seed.ShortCodeEntities.Add(new ShortLynx.Data.Entities.ShortCodeEntity
-            {
-                Id = shortCodeId, LinkId = linkId, Code = "abc123",
-                CreatedAt = DateTimeOffset.UtcNow, IsActive = true,
-            });
-            await seed.SaveChangesAsync();
-        }
+        var shortCodeId = await SeedCityEligibleAccountAsync(testDb);
 
         var evt = new VisitEvent(
             ShortCodeId: shortCodeId, UserLinkCodeId: null, UserId: null, SocialPostCodeId: null,
@@ -317,6 +319,35 @@ public class BackgroundVisitWriterTests
 
         var item = Assert.Single(db.UpsertedCityClicks);
         Assert.Equal("Chicago", item.City); // StubGeoIpResolver's city answer when includeCity is true
+        Assert.Equal("IL", item.State);
+        Assert.Equal("US", item.Country);
+    }
+
+    [Fact]
+    public async Task Writer_CountryAndStateOnly_NoCity_StillUpsertsCityClick()
+    {
+        // Regression test for the BackgroundVisitWriter eligibility-gate fix: MaxMind can resolve
+        // Country/State while City comes back empty (common for mobile/business IP blocks). The old
+        // gate was `d.City is not null`, which silently dropped this traffic entirely instead of
+        // letting it through as a City=null row -- which the State-then-Country cascade can still
+        // reveal at a coarser tier rather than losing the geo signal altogether.
+        var (sink, db, writer, testDb) = await MakeWriter(drainMs: 20, geoIpResolver: new StubGeoIpResolverNoCity());
+        await using var _ = testDb;
+        using var cts = new CancellationTokenSource();
+        var shortCodeId = await SeedCityEligibleAccountAsync(testDb);
+
+        var evt = new VisitEvent(
+            ShortCodeId: shortCodeId, UserLinkCodeId: null, UserId: null, SocialPostCodeId: null,
+            RawIp: "1.2.3.4", Referrer: null, UserAgent: "test-agent", ClickedAt: DateTimeOffset.UtcNow);
+
+        await writer.StartAsync(cts.Token);
+        await sink.EnqueueAsync(evt);
+        await WaitUntilAsync(() => db.VisitCount >= 1);
+        await cts.CancelAsync();
+
+        var item = Assert.Single(db.UpsertedCityClicks);
+        Assert.Null(item.City);
+        Assert.Equal("IL", item.State);
         Assert.Equal("US", item.Country);
     }
 
@@ -401,9 +432,18 @@ public class BackgroundVisitWriterTests
 
     // Fixed geo answer so tests can assert the writer stores exactly country + timezone and no more --
     // and, when includeCity is true, a fixed city so the city-aggregation path is exercisable too.
+    // State resolves whenever Country does, regardless of includeCity, matching MaxMindGeoIpResolver.
     private sealed class StubGeoIpResolver : ShortLynx.Services.Analytics.IGeoIpResolver
     {
         public ShortLynx.Services.Analytics.GeoLocation Resolve(string rawIp, bool includeCity = false)
-            => new("US", "America/Chicago", includeCity ? "Chicago" : null);
+            => new("US", "America/Chicago", includeCity ? "Chicago" : null, "IL");
+    }
+
+    // Simulates MaxMind resolving Country/State but not a specific City -- the real-world case the
+    // BackgroundVisitWriter gate fix (d.Country is not null, not d.City is not null) exists for.
+    private sealed class StubGeoIpResolverNoCity : ShortLynx.Services.Analytics.IGeoIpResolver
+    {
+        public ShortLynx.Services.Analytics.GeoLocation Resolve(string rawIp, bool includeCity = false)
+            => new("US", "America/Chicago", null, "IL");
     }
 }

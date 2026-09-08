@@ -22,11 +22,12 @@ public class CityClickDailyVisitorEntity
 {
     public Guid Id { get; set; }
     public Guid LinkId { get; set; }
-    public required string City { get; set; }
-    // Carried even though it's "redundant" with City for most cities: city names collide across
-    // countries (Paris, France vs. Paris, Texas; Cambridge, UK vs. Cambridge, MA), so City alone is not
-    // a safe dedupe key. Must match CityClickDailyEntity's keying exactly, or uniqueness silently
-    // undercounts or overcounts across a same-named city in two countries.
+    public string? City { get; set; }
+    // Carried for the same reason State is: city names collide across states within a country
+    // (Springfield, IL vs. Springfield, MO) as well as across countries (Paris, France vs. Paris,
+    // Texas), so City alone is not a safe dedupe key. Must match CityClickDailyEntity's keying
+    // exactly, or uniqueness silently undercounts or overcounts across a same-named place.
+    public string? State { get; set; }
     public string? Country { get; set; }
     public DateOnly Date { get; set; }
     public required string HashedIp { get; set; }

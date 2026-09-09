@@ -59,6 +59,13 @@ developer-oriented tool given it needs an API key and a self-hosted server, but 
 | `activeTab` | Reads the URL of the page the user is currently viewing, only at the moment they open the popup, to pre-fill the destination field. Not used in the background and not used on any tab the user hasn't actively invoked the extension on. |
 | Host permission (optional, requested at runtime) | The extension calls the API of the user's own self-hosted ShortLynx server to create links — an address that can't be known in advance since every deployer runs their own instance at their own domain. Permission for that specific origin is requested only once the user enters it on the options page (`chrome.permissions.request`), never as a blanket install-time grant, and never for any domain the user hasn't explicitly configured. |
 
+**Remote code use:** answer **No** — this extension does not execute remote code.
+> All logic ships inside the extension package (`background.js`, `popup`/`options` bundles) built
+> at release time; nothing is fetched and executed at runtime. The extension does make network
+> requests to the user's configured ShortLynx server, but only to exchange JSON data (link and
+> campaign objects) — that data is parsed and rendered via the DOM (`textContent`, form values), it
+> is never `eval`'d, injected as a `<script>`, or otherwise executed as code.
+
 **Data usage disclosure** (the categories Chrome asks you to check):
 
 - ☑ **Authentication information** — the API key the user pastes into the options page. Stored

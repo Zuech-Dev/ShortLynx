@@ -14,8 +14,9 @@ public static class Scopes
     public const string DomainsWrite = "domains:write";
     public const string TagsRead = "tags:read";
     public const string TagsWrite = "tags:write";
+    public const string CampaignsRead = "campaigns:read";
 
     /// <summary>All known scopes, for UI listing.</summary>
     public static readonly string[] All =
-        [LinksRead, LinksWrite, CodesWrite, AnalyticsRead, DomainsRead, DomainsWrite, TagsRead, TagsWrite];
+        [LinksRead, LinksWrite, CodesWrite, AnalyticsRead, DomainsRead, DomainsWrite, TagsRead, TagsWrite, CampaignsRead];
 }

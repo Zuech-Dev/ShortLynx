@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>ShortLynx</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <main>
+    <header>
+      <h1>ShortLynx</h1>
+      <button id="settings-btn" type="button" title="Settings" aria-label="Settings">⚙</button>
+    </header>
+
+    <div id="setup-prompt" hidden>
+      <p>Connect this extension to your ShortLynx server to get started.</p>
+      <button id="open-options-btn" type="button">Open settings</button>
+    </div>
+
+    <form id="create-form" hidden>
+      <label>
+        Destination
+        <input type="url" id="url" required placeholder="https://example.com" />
+      </label>
+
+      <fieldset id="mode-field">
+        <legend>Link type</legend>
+        <label class="radio"><input type="radio" name="mode" value="Anonymous" checked /> Anonymous</label>
+        <label class="radio"><input type="radio" name="mode" value="UserAttributed" /> User-attributed</label>
+      </fieldset>
+
+      <label id="custom-code-field">
+        Custom code <span class="optional">(optional)</span>
+        <input type="text" id="custom-code" placeholder="my-link" pattern="[a-z0-9]+(-[a-z0-9]+)*" />
+      </label>
+
+      <label id="campaign-field" hidden>
+        Campaign <span class="optional">(optional)</span>
+        <select id="campaign">
+          <option value="">None</option>
+        </select>
+      </label>
+
+      <button type="submit" id="submit-btn">Create link</button>
+      <p id="form-error" class="error" hidden></p>
+    </form>
+
+    <div id="result" hidden>
+      <p id="result-message">Your short link is ready:</p>
+      <div class="result-row">
+        <input type="text" id="result-url" readonly />
+        <button id="copy-btn" type="button">Copy</button>
+      </div>
+      <button id="create-another-btn" type="button" class="secondary">Create another</button>
+    </div>
+  </main>
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>

@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>ShortLynx settings</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <main>
+    <h1>ShortLynx</h1>
+    <p class="subtitle">Connect this extension to your ShortLynx server.</p>
+
+    <form id="settings-form">
+      <label>
+        Server URL
+        <input type="url" id="server-url" placeholder="https://api.short.ly" required />
+      </label>
+      <p class="hint">The base URL of your ShortLynx API (ShortLynx.Core), no trailing slash.</p>
+
+      <label>
+        API key
+        <input type="password" id="api-key" placeholder="Paste a key from your account's API Keys page" required />
+      </label>
+      <p class="hint">
+        Create one with the <code>links:write</code> scope (add <code>campaigns:read</code> too if you
+        want the campaign picker). Generate it from your ShortLynx dashboard's API Keys page.
+      </p>
+
+      <details>
+        <summary>Advanced</summary>
+        <label>
+          Short link domain
+          <input type="url" id="short-link-domain" placeholder="Defaults to the server URL above" />
+        </label>
+        <p class="hint">
+          Only set this if short links resolve on a different domain than the API above (Core and the
+          redirect app can be separate origins in a self-hosted deployment).
+        </p>
+
+        <label>
+          Custom code route prefix
+          <input type="text" id="custom-route-prefix" placeholder="c" />
+        </label>
+        <p class="hint">
+          Only set this if your server overrides <code>ShortCode__CustomRoutePrefix</code> from its
+          default of <code>c</code>. Used only to build the URL for links created with a custom code.
+        </p>
+      </details>
+
+      <div class="actions">
+        <button type="submit" id="save-btn">Save</button>
+      </div>
+
+      <p id="status" class="status" hidden></p>
+    </form>
+  </main>
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>

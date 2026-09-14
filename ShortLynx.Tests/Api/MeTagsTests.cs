@@ -90,12 +90,50 @@ public class MeTagsTests : IClassFixture<ApiFactory>
         var fetchedTag1 = await (await client.GetAsync($"/me/tags/{tag1.Id}")).Content.ReadFromJsonAsync<TagResponse>();
         Assert.Equal(1, fetchedTag1!.LinkCount);
 
+        var fetchedLink = await (await client.GetAsync($"/me/links/{link.Id}")).Content.ReadFromJsonAsync<LinkResponse>();
+        Assert.Equal([tag1.Id, tag2.Id], fetchedLink!.TagIds.OrderBy(id => id));
+
         // Full replace: dropping tag1 from the set removes just that association.
         await client.PutAsJsonAsync($"/me/links/{link.Id}/tags", new SetLinkTagsRequest([tag2.Id]));
         var afterTag1 = await (await client.GetAsync($"/me/tags/{tag1.Id}")).Content.ReadFromJsonAsync<TagResponse>();
         Assert.Equal(0, afterTag1!.LinkCount);
         var afterTag2 = await (await client.GetAsync($"/me/tags/{tag2.Id}")).Content.ReadFromJsonAsync<TagResponse>();
         Assert.Equal(1, afterTag2!.LinkCount);
+
+        var afterLink = await (await client.GetAsync($"/me/links/{link.Id}")).Content.ReadFromJsonAsync<LinkResponse>();
+        Assert.Equal([tag2.Id], afterLink!.TagIds);
+    }
+
+    [Fact]
+    public async Task LinkResponse_CarriesTagIds_SoAClientCanShowTheCurrentAssignment()
+    {
+        var (client, _, _) = await _factory.CreateSessionClientAsync();
+
+        var tag = await (await client.PostAsJsonAsync("/me/tags", new CreateTagRequest("checked")))
+            .Content.ReadFromJsonAsync<TagResponse>();
+        var link = await (await client.PostAsJsonAsync("/me/links", new CreateMyLinkRequest("https://example.com/tagged-link")))
+            .Content.ReadFromJsonAsync<LinkResponse>();
+
+        // Untagged is an empty array, not null — a client can iterate it directly without a null check.
+        Assert.Empty(link!.TagIds);
+
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await client.PutAsJsonAsync($"/me/links/{link.Id}/tags", new SetLinkTagsRequest([tag!.Id]))).StatusCode);
+
+        // The assignment has to be READABLE, not just writable — same "PUT sets it, nothing could read
+        // it back" gap CampaignId/FolderId/CustomDomainId were fixed for. Without this a tag multi-select
+        // has no way to show which tags are already checked.
+        var fetched = await (await client.GetAsync($"/me/links/{link.Id}")).Content.ReadFromJsonAsync<LinkResponse>();
+        Assert.Equal([tag.Id], fetched!.TagIds);
+
+        // The batched list path (GET /me/links) must carry it too, not just the single-link GET.
+        var listed = await (await client.GetAsync("/me/links")).Content.ReadFromJsonAsync<List<LinkResponse>>();
+        Assert.Equal([tag.Id], Assert.Single(listed!, l => l.Id == link.Id).TagIds);
+
+        // Clearing the set comes back as an empty array, not the stale previous ids.
+        await client.PutAsJsonAsync($"/me/links/{link.Id}/tags", new SetLinkTagsRequest([]));
+        var cleared = await (await client.GetAsync($"/me/links/{link.Id}")).Content.ReadFromJsonAsync<LinkResponse>();
+        Assert.Empty(cleared!.TagIds);
     }
 
     [Fact]

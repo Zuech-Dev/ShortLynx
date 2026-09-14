@@ -16,15 +16,17 @@ internal static class CityClickUpsert
     {
         if (items.Count == 0) return;
 
-        // Click counts per (link, city, country, date) -- the CityClickDailyEntity key.
+        // Click counts per (link, city, state, country, date) -- the CityClickDailyEntity key. State
+        // joins the key for the same reason City+Country already did: a same-named city/state pair
+        // shouldn't merge across a different one (Springfield, IL vs. Springfield, MO).
         var byGroup = items
-            .GroupBy(i => (i.LinkId, i.City, i.Country, i.Date))
+            .GroupBy(i => (i.LinkId, i.City, i.State, i.Country, i.Date))
             .ToList();
 
-        // Distinct (link, city, country, date, hashedIp) touched by this batch, deduped within the
-        // batch itself -- the same visitor can click the same link's short code twice in one flush.
+        // Distinct (link, city, state, country, date, hashedIp) touched by this batch, deduped within
+        // the batch itself -- the same visitor can click the same link's short code twice in one flush.
         var candidates = items
-            .Select(i => (i.LinkId, i.City, i.Country, i.Date, i.HashedIp))
+            .Select(i => (i.LinkId, i.City, i.State, i.Country, i.Date, i.HashedIp))
             .Distinct()
             .ToList();
 
@@ -35,9 +37,9 @@ internal static class CityClickUpsert
         var dates = candidates.Select(c => c.Date).Distinct().ToList();
         var existing = (await db.Set<CityClickDailyVisitorEntity>()
                 .Where(v => linkIds.Contains(v.LinkId) && dates.Contains(v.Date))
-                .Select(v => new { v.LinkId, v.City, v.Country, v.Date, v.HashedIp })
+                .Select(v => new { v.LinkId, v.City, v.State, v.Country, v.Date, v.HashedIp })
                 .ToListAsync(ct))
-            .Select(v => (v.LinkId, v.City, v.Country, v.Date, v.HashedIp))
+            .Select(v => (v.LinkId, v.City, v.State, v.Country, v.Date, v.HashedIp))
             .ToHashSet();
 
         var newVisitors = candidates.Where(c => !existing.Contains(c)).ToList();
@@ -48,6 +50,7 @@ internal static class CityClickUpsert
                 Id = Guid.CreateVersion7(),
                 LinkId = v.LinkId,
                 City = v.City,
+                State = v.State,
                 Country = v.Country,
                 Date = v.Date,
                 HashedIp = v.HashedIp,
@@ -55,17 +58,17 @@ internal static class CityClickUpsert
         }
 
         var newUniqueByGroup = newVisitors
-            .GroupBy(v => (v.LinkId, v.City, v.Country, v.Date))
+            .GroupBy(v => (v.LinkId, v.City, v.State, v.Country, v.Date))
             .ToDictionary(g => g.Key, g => (long)g.Count());
 
         foreach (var group in byGroup)
         {
-            var (linkId, city, country, date) = group.Key;
+            var (linkId, city, state, country, date) = group.Key;
             var clickCount = group.LongCount();
             var newUnique = newUniqueByGroup.GetValueOrDefault(group.Key, 0);
 
             var daily = await db.Set<CityClickDailyEntity>()
-                .FirstOrDefaultAsync(d => d.LinkId == linkId && d.City == city && d.Country == country && d.Date == date, ct);
+                .FirstOrDefaultAsync(d => d.LinkId == linkId && d.City == city && d.State == state && d.Country == country && d.Date == date, ct);
             if (daily is null)
             {
                 db.Set<CityClickDailyEntity>().Add(new CityClickDailyEntity
@@ -73,6 +76,7 @@ internal static class CityClickUpsert
                     Id = Guid.CreateVersion7(),
                     LinkId = linkId,
                     City = city,
+                    State = state,
                     Country = country,
                     Date = date,
                     Count = clickCount,

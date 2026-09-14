@@ -26,8 +26,10 @@ public static class ServiceExtensions
                 services.AddScoped<IDbOperations, PostgresDbOperations>();
                 break;
             case "sqlite":
-                services.AddDbContext<ShortLynxDbContext>(o =>
-                    o.UseSqlite(connectionString, x => x.MigrationsAssembly("ShortLynx.Data.Sqlite")));
+                // No MigrationsAssembly here — SQLite has no dedicated migrations project (see
+                // CLAUDE.md's Architecture section); DatabaseSchemaBootstrap.EnsureSqliteSchemaCreated
+                // builds its schema via EnsureCreated instead.
+                services.AddDbContext<ShortLynxDbContext>(o => o.UseSqlite(connectionString));
                 services.AddScoped<IDbOperations, EfCoreDbOperations>();
                 break;
             default:

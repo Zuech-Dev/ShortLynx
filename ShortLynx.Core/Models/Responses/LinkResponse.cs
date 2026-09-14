@@ -30,4 +30,13 @@ public sealed record LinkResponse(
     // it back" gap as CampaignId/CustomDomainId.
     Guid? FolderId = null,
     // Optional display name, distinct from Url and ShortCode. Set via PUT /me/links/{id}/nickname.
-    string? Nickname = null);
+    string? Nickname = null,
+    // The tags currently assigned to this link. Same "PUT sets it, nothing could read it back" gap as
+    // CampaignId/CustomDomainId/FolderId — PUT /me/links/{id}/tags full-replaces the set but a tag
+    // multi-select control had no way to show which tags were already checked. The parameter is
+    // nullable only because a non-null Guid[] default isn't a compile-time constant (CS1736); the
+    // property below normalizes it so callers always see an empty, never null, array.
+    Guid[]? TagIds = null)
+{
+    public Guid[] TagIds { get; init; } = TagIds ?? [];
+}

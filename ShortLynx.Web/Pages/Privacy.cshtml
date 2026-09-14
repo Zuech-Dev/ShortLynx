@@ -32,8 +32,10 @@
     <li>
         If the operator of this link has opted in, clicks may also be aggregated by city (in addition to
         country) — never for links created in "user-attributed" mode, and a city is only ever shown once
-        enough distinct visitors from it have clicked to protect anonymity. This is never recorded on an
-        individual click record, only in a separate aggregate count.
+        enough distinct visitors from it have clicked to protect anonymity. A smaller city is folded into
+        its state instead, or its country if the state is still too small, so what's shown is only ever
+        as specific as stays anonymous — a plain country total, like the one above, has no such minimum.
+        This is never recorded on an individual click record, only in a separate aggregate count.
     </li>
     <li>
         For links created in "user-attributed" mode (used for outreach and sales tracking), the specific

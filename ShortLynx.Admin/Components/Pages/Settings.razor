@@ -133,7 +133,9 @@ else
                 Off by default. When on, clicks are aggregated by city (in addition to the existing
                 country breakdown) — never stored on an individual click record, and a city is only ever
                 shown once at least @ShortLynx.Services.Analytics.CityAggregator.AnonymityThreshold
-                distinct visitors have clicked, so a single person can't reveal one on their own.
+                distinct visitors have clicked, so a single person can't reveal one on their own. A city
+                below that bar is folded into its state, then its country, so smaller places still show
+                up at whatever granularity stays anonymous instead of disappearing entirely.
                 Never enabled for user-attributed (Mode 2) links, regardless of this setting.
             </p>
 

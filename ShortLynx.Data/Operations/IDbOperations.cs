@@ -3,8 +3,11 @@ using ShortLynx.Data.Entities;
 namespace ShortLynx.Data.Operations;
 
 /// <summary>One eligible click, pre-filtered by the caller (not a privacy signal, not a bot, Mode 1,
-/// account has EnableCityAggregates on) — see CityClickDailyEntity/CityClickDailyVisitorEntity.</summary>
-public sealed record CityClickItem(Guid LinkId, string City, string? Country, DateOnly Date, string HashedIp);
+/// account has EnableCityAggregates on) — see CityClickDailyEntity/CityClickDailyVisitorEntity.
+/// <see cref="City"/> is nullable: MaxMind can resolve Country/State while City itself is empty
+/// (common for mobile/business IP blocks) — construct with named arguments, not positionally, since
+/// several fields share the same <c>string?</c> shape.</summary>
+public sealed record CityClickItem(Guid LinkId, string? City, string? State, string? Country, DateOnly Date, string HashedIp);
 
 public interface IDbOperations
 {

@@ -50,26 +50,38 @@ public class LinksController(
         try
         {
             Guid linkId;
-            LinkResponse response;
+            LinkEntity linkEntity;
+            string shortCode;
+            bool isCustom;
 
             if (isUserAttributed)
             {
                 var link = await linkService.CreateUserAttributedLinkAsync(
                     request.Url, CurrentKey.AccountId, CurrentKey.UserAccountId, request.CampaignId, ct);
                 linkId = link.Id;
-                response = ToLinkResponse(link, string.Empty, false);
+                linkEntity = link;
+                shortCode = string.Empty;
+                isCustom = false;
             }
             else
             {
                 var result = await linkService.CreateAnonymousLinkAsync(
                     request.Url, CurrentKey, request.CustomCode, request.CampaignId, ct);
                 linkId = result.Link.Id;
-                response = ToLinkResponse(result.Link, result.ShortCode.Code, result.ShortCode.IsCustom);
+                linkEntity = result.Link;
+                shortCode = result.ShortCode.Code;
+                isCustom = result.ShortCode.IsCustom;
             }
 
-            if (request.TagIds is { Length: > 0 } tagIds)
-                await tagService.SetLinkTagsAsync(linkId, tagIds, CurrentKey.AccountId, ct);
+            var assignedTagIds = Array.Empty<Guid>();
+            if (request.TagIds is { Length: > 0 } tagIds &&
+                await tagService.SetLinkTagsAsync(linkId, tagIds, CurrentKey.AccountId, ct))
+            {
+                assignedTagIds = await db.LinkTagEntities
+                    .Where(lt => lt.LinkId == linkId).Select(lt => lt.TagId).ToArrayAsync(ct);
+            }
 
+            var response = ToLinkResponse(linkEntity, shortCode, isCustom, assignedTagIds);
             return CreatedAtAction(nameof(GetLink), new { id = linkId }, response);
         }
         catch (CustomCodeTakenException ex)
@@ -119,11 +131,18 @@ public class LinksController(
             .GroupBy(c => c.LinkId)
             .ToDictionary(g => g.Key, g => g.First());
 
+        var tagsByLink = (await db.LinkTagEntities
+                .Where(lt => linkIds.Contains(lt.LinkId))
+                .Select(lt => new { lt.LinkId, lt.TagId })
+                .ToListAsync(ct))
+            .GroupBy(t => t.LinkId)
+            .ToDictionary(g => g.Key, g => g.Select(t => t.TagId).ToArray());
+
         var items = links
             .Select(l =>
             {
                 var c = codeMap.GetValueOrDefault(l.Id);
-                return ToLinkResponse(l, c?.Code ?? string.Empty, c?.IsCustom ?? false);
+                return ToLinkResponse(l, c?.Code ?? string.Empty, c?.IsCustom ?? false, tagsByLink.GetValueOrDefault(l.Id, []));
             })
             .ToList();
 
@@ -146,7 +165,8 @@ public class LinksController(
             .Select(x => new { x.Code, x.IsCustom })
             .FirstOrDefaultAsync(ct);
 
-        return Ok(ToLinkResponse(link, sc?.Code ?? string.Empty, sc?.IsCustom ?? false));
+        var tagIds = await db.LinkTagEntities.Where(lt => lt.LinkId == id).Select(lt => lt.TagId).ToArrayAsync(ct);
+        return Ok(ToLinkResponse(link, sc?.Code ?? string.Empty, sc?.IsCustom ?? false, tagIds));
     }
 
     // POST /links/{id}/codes
@@ -233,9 +253,9 @@ public class LinksController(
             b.UtmSources, b.UtmMediums, b.UtmCampaigns));
     }
 
-    private static LinkResponse ToLinkResponse(LinkEntity link, string shortCode, bool isCustom) =>
+    private static LinkResponse ToLinkResponse(LinkEntity link, string shortCode, bool isCustom, Guid[] tagIds) =>
         new(link.Id, link.OriginalUrl, link.Mode.ToString(), shortCode, link.CreatedAt, link.ExpiresAt,
-            link.CampaignId, isCustom, link.CustomDomainId, link.FolderId, link.Nickname);
+            link.CampaignId, isCustom, link.CustomDomainId, link.FolderId, link.Nickname, tagIds);
 
     // Null means neither field was usably supplied — the caller returns 400.
     private static IReadOnlyCollection<CodeRecipient>? ResolveRecipients(CreateUserCodesRequest request)

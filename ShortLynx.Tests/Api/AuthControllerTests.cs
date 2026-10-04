@@ -65,6 +65,34 @@ public class AuthControllerTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task Session_StampsLastSignInAt()
+    {
+        var (token, userId, _) = await SeedTokenForMemberAsync();
+        var before = DateTimeOffset.UtcNow.AddSeconds(-1);
+
+        var response = await _factory.CreateClient().PostAsJsonAsync("/auth/session", new CreateSessionRequest(token));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ShortLynxDbContext>();
+        var user = await db.UserAccountEntities.AsNoTracking().SingleAsync(u => u.Id == userId);
+        Assert.NotNull(user.LastSignInAt);
+        Assert.True(user.LastSignInAt >= before);
+    }
+
+    [Fact]
+    public async Task Session_RejectedSignIn_DoesNotStampLastSignInAt()
+    {
+        var (_, userId, _) = await SeedTokenForMemberAsync();
+
+        await _factory.CreateClient().PostAsJsonAsync("/auth/session", new CreateSessionRequest("not-a-real-token"));
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ShortLynxDbContext>();
+        Assert.Null((await db.UserAccountEntities.AsNoTracking().SingleAsync(u => u.Id == userId)).LastSignInAt);
+    }
+
+    [Fact]
     public async Task Session_WithInvalidToken_Returns401()
     {
         var client = _factory.CreateClient();

@@ -54,13 +54,15 @@ public class ConfirmModel(
 
         var isSuperAdmin = opts.IsSuperAdmin(user.Email);
 
-        // Config is the source of truth for admin status at sign-in; keep the persisted flag in sync.
-        if (user.IsAdmin != isSuperAdmin)
+        // Config is the source of truth for admin status at sign-in; keep the persisted flag in sync,
+        // and stamp the sign-in time in the same statement.
+        await using (var db = await dbFactory.CreateDbContextAsync(ct))
         {
-            await using var db = await dbFactory.CreateDbContextAsync(ct);
             await db.UserAccountEntities
                 .Where(u => u.Id == user.Id)
-                .ExecuteUpdateAsync(s => s.SetProperty(u => u.IsAdmin, isSuperAdmin), ct);
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(u => u.IsAdmin, isSuperAdmin)
+                    .SetProperty(u => u.LastSignInAt, DateTimeOffset.UtcNow), ct);
         }
 
         var claims = new List<Claim>

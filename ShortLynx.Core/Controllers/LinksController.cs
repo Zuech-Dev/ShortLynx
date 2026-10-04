@@ -43,18 +43,46 @@ public class LinksController(
                 new { error = $"This API key lacks the '{Scopes.TagsWrite}' scope." });
         }
 
+        var isUserAttributed = string.Equals(request.Mode, nameof(LinkMode.UserAttributed), StringComparison.OrdinalIgnoreCase);
+        if (isUserAttributed && !string.IsNullOrWhiteSpace(request.CustomCode))
+            return BadRequest(new { error = "Custom codes are only available for anonymous links." });
+
         try
         {
-            var result = await linkService.CreateAnonymousLinkAsync(request.Url, CurrentKey, request.CustomCode, ct);
+            Guid linkId;
+            LinkEntity linkEntity;
+            string shortCode;
+            bool isCustom;
+
+            if (isUserAttributed)
+            {
+                var link = await linkService.CreateUserAttributedLinkAsync(
+                    request.Url, CurrentKey.AccountId, CurrentKey.UserAccountId, request.CampaignId, ct);
+                linkId = link.Id;
+                linkEntity = link;
+                shortCode = string.Empty;
+                isCustom = false;
+            }
+            else
+            {
+                var result = await linkService.CreateAnonymousLinkAsync(
+                    request.Url, CurrentKey, request.CustomCode, request.CampaignId, ct);
+                linkId = result.Link.Id;
+                linkEntity = result.Link;
+                shortCode = result.ShortCode.Code;
+                isCustom = result.ShortCode.IsCustom;
+            }
+
             var assignedTagIds = Array.Empty<Guid>();
             if (request.TagIds is { Length: > 0 } tagIds &&
-                await tagService.SetLinkTagsAsync(result.Link.Id, tagIds, CurrentKey.AccountId, ct))
+                await tagService.SetLinkTagsAsync(linkId, tagIds, CurrentKey.AccountId, ct))
             {
                 assignedTagIds = await db.LinkTagEntities
-                    .Where(lt => lt.LinkId == result.Link.Id).Select(lt => lt.TagId).ToArrayAsync(ct);
+                    .Where(lt => lt.LinkId == linkId).Select(lt => lt.TagId).ToArrayAsync(ct);
             }
-            var response = ToLinkResponse(result.Link, result.ShortCode.Code, result.ShortCode.IsCustom, assignedTagIds);
-            return CreatedAtAction(nameof(GetLink), new { id = result.Link.Id }, response);
+
+            var response = ToLinkResponse(linkEntity, shortCode, isCustom, assignedTagIds);
+            return CreatedAtAction(nameof(GetLink), new { id = linkId }, response);
         }
         catch (CustomCodeTakenException ex)
         {

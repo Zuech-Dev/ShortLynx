@@ -13,6 +13,13 @@ public class UserAccountEntity
     public bool IsActive { get; set; }
 
     /// <summary>
+    /// When the user last completed a sign-in (magic-link exchange in Core, or the Admin confirm page).
+    /// Token refreshes don't touch it, so it's "last sign-in", not "last seen". Null = never since this
+    /// column existed. Read by platform-admin overviews; never shown to other tenants.
+    /// </summary>
+    public DateTimeOffset? LastSignInAt { get; set; }
+
+    /// <summary>
     /// Grants access to cross-tenant admin pages (user list, global totals). Driven by the
     /// Admin:SuperAdminEmails allowlist at sign-in time; tenants without it see only their own data.
     /// </summary>

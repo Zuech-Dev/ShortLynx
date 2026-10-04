@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using ShortLynx.Core.Auth;
 using ShortLynx.Core.Models.Requests;
@@ -69,6 +70,10 @@ public class AuthController(
             accountId = await AccountResolver.GetOrCreatePersonalAccountIdAsync(db, user.Id, user.Email, ct);
             role = AccountRole.Owner;
         }
+
+        await db.UserAccountEntities
+            .Where(u => u.Id == user.Id)
+            .ExecuteUpdateAsync(s => s.SetProperty(u => u.LastSignInAt, DateTimeOffset.UtcNow), ct);
 
         var tokens = await sessions.IssueAsync(user, accountId, role, ct);
         SetSessionCookies(tokens);

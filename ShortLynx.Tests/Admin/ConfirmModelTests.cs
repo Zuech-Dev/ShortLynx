@@ -36,6 +36,10 @@ public class ConfirmModelTests
     {
         var conn = new SqliteConnection("DataSource=:memory:");
         conn.Open();
+        // Sign-in always writes to the user row now (IsAdmin sync + LastSignInAt stamp), so the schema
+        // must exist even when the user's admin flag is already correct.
+        using (var db = new StubDbContextFactory(conn).CreateDbContext())
+            db.Database.EnsureCreated();
 
         var services = new ServiceCollection();
         services.AddLogging();

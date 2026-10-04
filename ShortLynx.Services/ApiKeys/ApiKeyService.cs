@@ -4,16 +4,23 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using ShortLynx.Data.Context;
 using ShortLynx.Data.Entities;
+using ShortLynx.Services.Entitlements;
 
 namespace ShortLynx.Services.ApiKeys;
 
-public sealed class ApiKeyService(ShortLynxDbContext db, IOptions<ApiKeyOptions> options) : IApiKeyService
+public sealed class ApiKeyService(
+    ShortLynxDbContext db, IOptions<ApiKeyOptions> options, IEntitlements entitlements) : IApiKeyService
 {
     public async Task<(ApiKeyEntity Record, string PlaintextKey)> CreateAsync(
         string name, string[] scopes, Guid accountId, Guid? createdByUserAccountId = null, CancellationToken ct = default)
     {
         if (!await db.AccountEntities.AnyAsync(a => a.Id == accountId, ct))
             throw new ArgumentException($"No account exists with id {accountId}.", nameof(accountId));
+
+        // Gates minting new keys only. Keys already issued keep authenticating (grandfathered), so a
+        // downgrade never breaks an integration mid-flight.
+        if (!await entitlements.IsFeatureEnabledAsync(accountId, PlanFeature.ApiAccess, ct))
+            throw new EntitlementException("API access isn't available on your plan.");
 
         var keyBytes = RandomNumberGenerator.GetBytes(32);
         var plaintext = Convert.ToHexString(keyBytes); // 64-char hex key

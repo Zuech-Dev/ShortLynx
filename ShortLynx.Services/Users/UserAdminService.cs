@@ -50,6 +50,8 @@ public sealed class UserAdminService(
         return await GetViewAsync(created.Id, ct);
     }
 
+    // Super-admin path: deliberately NOT seat-gated (unlike AccountService.InviteMemberAsync), so the
+    // platform operator can set up beta testers and handle support without changing an account's plan.
     public async Task<bool> AssignToAccountAsync(Guid userId, Guid accountId, AccountRole role, CancellationToken ct = default)
     {
         if (!await db.AccountEntities.AnyAsync(a => a.Id == accountId, ct))

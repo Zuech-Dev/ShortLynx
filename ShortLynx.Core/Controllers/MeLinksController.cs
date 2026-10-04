@@ -24,8 +24,13 @@ public class MeLinksController(
     ILinkService linkService, ITagService tagService, ShortLynxDbContext db,
     IQrCodeService qr, IOptions<LinkUrlOptions> linkOptions,
     IOptions<ShortCodeOptions> shortCodeOptions,
-    IOptions<AnalyticsOptions> analyticsOptions) : SessionControllerBase
+    IOptions<AnalyticsOptions> analyticsOptions,
+    IEntitlements entitlements) : SessionControllerBase
 {
+    // Plan retention: clicks older than this are hidden from every analytics read (never deleted).
+    private Task<DateTimeOffset?> RetentionCutoffAsync(CancellationToken ct)
+        => RetentionCutoff.ForAccountAsync(entitlements, AccountId, ct);
+
     private int AnonymityThreshold => analyticsOptions.Value.EnforceAnonymity ? ClickAggregator.AnonymityThreshold : 0;
     private int CityAnonymityThreshold => analyticsOptions.Value.EnforceAnonymity ? CityAggregator.AnonymityThreshold : 0;
 
@@ -219,13 +224,14 @@ public class MeLinksController(
         var link = await db.LinkEntities.FirstOrDefaultAsync(l => l.Id == id && l.AccountId == AccountId, ct);
         if (link is null) return NotFound();
 
-        var rows = await LinkVisitQueries.LoadLinkRowsAsync(db, link, ct);
-        var codeStats = (await LinkVisitQueries.LoadCodeCountsAsync(db, link, ct))
+        var cutoff = await RetentionCutoffAsync(ct);
+        var rows = await LinkVisitQueries.LoadLinkRowsAsync(db, link, cutoff, ct);
+        var codeStats = (await LinkVisitQueries.LoadCodeCountsAsync(db, link, cutoff, ct))
             .Select(c => new CodeClickStats(c.Code, c.UserId, c.Clicks, c.Recipient))
             .ToList();
 
         var b = ClickAggregator.Summarize(rows, AnonymityThreshold);
-        var cities = CityAggregator.Summarize(await CityClickQueries.LoadForLinksAsync(db, [id], ct), CityAnonymityThreshold);
+        var cities = CityAggregator.Summarize(await CityClickQueries.LoadForLinksAsync(db, [id], cutoff, ct), CityAnonymityThreshold);
         return Ok(new LinkAnalyticsResponse(
             id, link.OriginalUrl, link.Mode.ToString(),
             b.TotalClicks, b.UniqueClicks, b.HumanClicks, b.HumanUniqueClicks, b.BotClicks,
@@ -243,27 +249,9 @@ public class MeLinksController(
         var link = await db.LinkEntities.FirstOrDefaultAsync(l => l.Id == id && l.AccountId == AccountId, ct);
         if (link is null) return NotFound();
 
-        List<VisitRow> rows;
-        if (link.Mode == LinkMode.Anonymous)
-        {
-            var sc = await db.ShortCodeEntities.FirstOrDefaultAsync(x => x.LinkId == id, ct);
-            rows = sc is null
-                ? []
-                : (await db.VisitEntities.Where(v => v.ShortCodeId == sc.Id)
-                        .Select(v => new { v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Browser, v.Os, v.Country, v.Language, v.NavigationType, v.TimeZone, v.UtmSource, v.UtmMedium, v.UtmCampaign })
-                        .ToListAsync(ct))
-                    .Select(v => new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Browser, v.Os, v.Country, v.Language, v.NavigationType, v.TimeZone, v.UtmSource, v.UtmMedium, v.UtmCampaign))
-                    .ToList();
-        }
-        else
-        {
-            var codeIds = await db.UserLinkCodeEntities.Where(c => c.LinkId == id).Select(c => c.Id).ToListAsync(ct);
-            rows = (await db.UserVisitEntities.Where(v => codeIds.Contains(v.UserLinkCodeId))
-                    .Select(v => new { v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Browser, v.Os, v.Country, v.Language, v.NavigationType, v.TimeZone, v.UtmSource, v.UtmMedium, v.UtmCampaign })
-                    .ToListAsync(ct))
-                .Select(v => new VisitRow(v.HashedIp, v.Source, v.Device, v.ClickedAt, v.Browser, v.Os, v.Country, v.Language, v.NavigationType, v.TimeZone, v.UtmSource, v.UtmMedium, v.UtmCampaign))
-                .ToList();
-        }
+        // The same shared loader /analytics uses, so the CSV can't drift from the on-screen breakdown
+        // (the hand-rolled query this replaced skipped per-post clicks) and honours plan retention.
+        var rows = await LinkVisitQueries.LoadLinkRowsAsync(db, link, await RetentionCutoffAsync(ct), ct);
 
         var csv = ClickBreakdownCsv.Format(ClickAggregator.Summarize(rows, AnonymityThreshold));
         return File(System.Text.Encoding.UTF8.GetBytes(csv), "text/csv", $"link-{id}-analytics.csv");
@@ -331,7 +319,7 @@ public class MeLinksController(
 
         // Exact per-post clicks (each post has its own code) alongside the platform's engagement — so a
         // caller can compare "40 likes" against "1 click" without guessing from referrers.
-        var clicksByPost = (await LinkVisitQueries.LoadAttributionSplitAsync(db, linkId, ct))
+        var clicksByPost = (await LinkVisitQueries.LoadAttributionSplitAsync(db, linkId, await RetentionCutoffAsync(ct), ct))
             .Posts.ToDictionary(p => p.SocialPostId, p => (p.Clicks, p.UniqueClicks));
 
         return posts.Select(p =>

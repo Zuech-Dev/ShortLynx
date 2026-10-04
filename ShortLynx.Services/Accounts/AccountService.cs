@@ -2,11 +2,13 @@ using Microsoft.EntityFrameworkCore;
 using ShortLynx.Data.Context;
 using ShortLynx.Data.Entities;
 using ShortLynx.Data.Enums;
+using ShortLynx.Services.Entitlements;
 using ShortLynx.Services.MagicLinks;
 
 namespace ShortLynx.Services.Accounts;
 
-public sealed class AccountService(ShortLynxDbContext db, IMagicLinkService magicLinks) : IAccountService
+public sealed class AccountService(
+    ShortLynxDbContext db, IMagicLinkService magicLinks, IEntitlements entitlements) : IAccountService
 {
     public async Task<AccountEntity> CreateAccountWithOwnerAsync(string name, string ownerEmail, CancellationToken ct = default)
     {
@@ -48,6 +50,11 @@ public sealed class AccountService(ShortLynxDbContext db, IMagicLinkService magi
             throw new UnauthorizedAccessException("You don't have permission to invite members.");
         if (!AccountPermissions.CanAssignRole(actorRole, role))
             throw new ArgumentException($"You can't grant the '{role}' role.", nameof(role));
+
+        // Seat limit. Only this owner/admin invite path is gated — a platform super-admin assigning
+        // users (UserAdminService) deliberately bypasses it for setup and support.
+        if (!await entitlements.CanAddMemberAsync(accountId, ct))
+            throw new EntitlementException("Your plan's seat limit has been reached.");
 
         var normalised = Normalise(email);
         var user = await GetOrCreateUserAsync(normalised, ct);

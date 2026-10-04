@@ -1,3 +1,5 @@
+using ShortLynx.Services.Analytics;
+using ShortLynx.Services.Entitlements;
 using Microsoft.AspNetCore.Mvc;
 using ShortLynx.Data.Context;
 using ShortLynx.Services.Visits;
@@ -19,7 +21,7 @@ namespace ShortLynx.Core.Controllers;
 /// the window; a server-side aggregate endpoint is the answer if that becomes the common case.
 /// </summary>
 [Route("me/clicks")]
-public class MeClicksController(ShortLynxDbContext db) : SessionControllerBase
+public class MeClicksController(ShortLynxDbContext db, IEntitlements entitlements) : SessionControllerBase
 {
     /// <summary>Hard cap on rows returned, whatever the caller asks for.</summary>
     public const int MaxLimit = 5000;
@@ -36,7 +38,10 @@ public class MeClicksController(ShortLynxDbContext db) : SessionControllerBase
         [FromQuery] int limit = 1000,
         CancellationToken ct = default)
     {
-        var from = since ?? DateTimeOffset.UtcNow.AddDays(-DefaultWindowDays);
+        // Never earlier than the plan's retention window — older clicks are hidden, not deleted.
+        var from = RetentionCutoff.Clamp(
+            since ?? DateTimeOffset.UtcNow.AddDays(-DefaultWindowDays),
+            await RetentionCutoff.ForAccountAsync(entitlements, AccountId, ct));
         var capped = Math.Clamp(limit, 1, MaxLimit);
 
         var rows = await LiveVisitQueries.LoadSinceAsync(db, AccountId, from, capped, ct);

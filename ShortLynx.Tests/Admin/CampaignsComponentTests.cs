@@ -1,3 +1,5 @@
+using ShortLynx.Services.Entitlements;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using System.Security.Claims;
 using Bunit;
 using Bunit.TestDoubles;
@@ -25,6 +27,7 @@ public class CampaignsComponentTests : BunitContext
         Services.AddDbContextFactory<ShortLynxDbContext>(o => o.UseSqlite(_conn));
         Services.AddScoped<ShortLynxDbContext>(sp =>
             sp.GetRequiredService<IDbContextFactory<ShortLynxDbContext>>().CreateDbContext());
+        Services.TryAddSingleton<IEntitlements, UnlimitedEntitlements>();
         Services.AddScoped<ICampaignService, CampaignService>();
 
         var auth = AddAuthorization();
@@ -112,6 +115,7 @@ public class CampaignDetailComponentTests : BunitContext
         Services.AddDbContextFactory<ShortLynxDbContext>(o => o.UseSqlite(_conn));
         Services.AddScoped<ShortLynxDbContext>(sp =>
             sp.GetRequiredService<IDbContextFactory<ShortLynxDbContext>>().CreateDbContext());
+        Services.TryAddSingleton<IEntitlements, UnlimitedEntitlements>();
         Services.AddScoped<ICampaignService, CampaignService>();
 
         var auth = AddAuthorization();

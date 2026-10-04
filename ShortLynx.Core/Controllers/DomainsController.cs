@@ -13,6 +13,7 @@ namespace ShortLynx.Core.Controllers;
 [ApiController]
 [Route("domains")]
 [Authorize(AuthenticationSchemes = ApiKeyAuthHandler.SchemeName)]
+[EntitlementExceptionFilter]
 public class DomainsController(
     ICustomDomainService domains,
     IOptions<CustomDomainOptions> domainOptions) : ControllerBase

@@ -1,3 +1,5 @@
+using ShortLynx.Tests.Infrastructure;
+using ShortLynx.Services.Entitlements;
 using Microsoft.EntityFrameworkCore;
 using ShortLynx.Data.Context;
 using ShortLynx.Data.Entities;
@@ -21,8 +23,9 @@ public class AccountServiceTests
             => Task.FromResult<UserAccountEntity?>(null);
     }
 
-    private static AccountService MakeSvc(ShortLynxDbContext ctx, FakeMagicLinkService? magic = null)
-        => new(ctx, magic ?? new FakeMagicLinkService());
+    private static AccountService MakeSvc(
+        ShortLynxDbContext ctx, FakeMagicLinkService? magic = null, IEntitlements? entitlements = null)
+        => new(ctx, magic ?? new FakeMagicLinkService(), entitlements ?? new FakeEntitlements());
 
     // Seeds an account with a member at the given role, returning (accountId, userId).
     private static async Task<(Guid AccountId, Guid UserId)> SeedMemberAsync(
@@ -244,5 +247,33 @@ public class AccountServiceTests
         Assert.Equal(2, accounts.Count);
         Assert.Contains(accounts, a => a.AccountId == a1 && a.Role == AccountRole.Owner);
         Assert.Contains(accounts, a => a.AccountId == account2.Id && a.Role == AccountRole.Member);
+    }
+
+    [Fact]
+    public async Task Invite_SeatLimitReached_ThrowsEntitlement_AndAddsNoMemberOrUser()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+        var magic = new FakeMagicLinkService();
+        var (accountId, ownerId) = await SeedMemberAsync(db, AccountRole.Owner, "owner@example.com");
+
+        await Assert.ThrowsAsync<EntitlementException>(() =>
+            MakeSvc(db.CreateContext(), magic, new FakeEntitlements { AllowMembers = false })
+                .InviteMemberAsync(accountId, "member@example.com", AccountRole.Member, ownerId));
+
+        await using var verify = db.CreateContext();
+        Assert.Single(verify.MembershipEntities.Where(m => m.AccountId == accountId));
+        Assert.DoesNotContain(verify.UserAccountEntities, u => u.Email == "member@example.com");
+    }
+
+    [Fact]
+    public async Task Invite_PermissionCheckRunsBeforeSeatCheck()
+    {
+        // A Viewer on a full account should hear "no permission", not "upgrade your plan".
+        await using var db = await TestDatabase.CreateAsync();
+        var (accountId, viewerId) = await SeedMemberAsync(db, AccountRole.Viewer, "viewer@example.com");
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            MakeSvc(db.CreateContext(), entitlements: new FakeEntitlements { AllowMembers = false })
+                .InviteMemberAsync(accountId, "x@example.com", AccountRole.Member, viewerId));
     }
 }

@@ -24,11 +24,14 @@ public static class CityClickQueries
     /// LinkVisitQueries.LoadLinkRowsAsync's all-time convention for the rest of a link's analytics.
     /// </summary>
     public static async Task<List<CityDailyRow>> LoadForLinksAsync(
-        ShortLynxDbContext db, IReadOnlyCollection<Guid> linkIds, CancellationToken ct = default)
+        ShortLynxDbContext db, IReadOnlyCollection<Guid> linkIds, DateTimeOffset? since = null, CancellationToken ct = default)
     {
         if (linkIds.Count == 0) return [];
+        // Retention cutoff at day granularity — these rows are daily aggregates. DateOnly compares fine
+        // in SQL on both providers, unlike DateTimeOffset.
+        var fromDate = since is { } cutoff ? DateOnly.FromDateTime(cutoff.UtcDateTime) : DateOnly.MinValue;
         return await db.CityClickDailyEntities
-            .Where(c => linkIds.Contains(c.LinkId))
+            .Where(c => linkIds.Contains(c.LinkId) && c.Date >= fromDate)
             .Select(c => new CityDailyRow(c.City, c.State, c.Country, c.Count, c.UniqueCount))
             .ToListAsync(ct);
     }

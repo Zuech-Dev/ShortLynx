@@ -1,3 +1,4 @@
+using ShortLynx.Services.Entitlements;
 using Microsoft.EntityFrameworkCore;
 using ShortLynx.Data.Context;
 using ShortLynx.Services.Campaigns;
@@ -7,7 +8,8 @@ namespace ShortLynx.Tests.Services.Campaigns;
 
 public class CampaignServiceTests
 {
-    private static CampaignService MakeSvc(ShortLynxDbContext ctx) => new(ctx);
+    private static CampaignService MakeSvc(ShortLynxDbContext ctx, IEntitlements? entitlements = null)
+        => new(ctx, entitlements ?? new FakeEntitlements());
 
     private static async Task<Guid> SeedAccountAsync(TestDatabase db)
     {
@@ -141,5 +143,19 @@ public class CampaignServiceTests
         var created = await MakeSvc(db.CreateContext()).CreateAsync(a, new CampaignInput("A1"));
 
         Assert.False(await MakeSvc(db.CreateContext()).DeleteAsync(created.Id, b));
+    }
+
+    [Fact]
+    public async Task Create_CampaignsNotOnPlan_ThrowsEntitlement_AndCreatesNothing()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+        var accountId = await SeedAccountAsync(db);
+
+        await Assert.ThrowsAsync<EntitlementException>(() =>
+            MakeSvc(db.CreateContext(), FakeEntitlements.Without(PlanFeature.Campaigns))
+                .CreateAsync(accountId, new CampaignInput("Launch", null, null, null, null)));
+
+        await using var verify = db.CreateContext();
+        Assert.Empty(verify.CampaignEntities);
     }
 }

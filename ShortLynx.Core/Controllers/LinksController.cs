@@ -22,7 +22,7 @@ namespace ShortLynx.Core.Controllers;
 [Authorize(AuthenticationSchemes = ApiKeyAuthHandler.SchemeName)]
 public class LinksController(
     ILinkService linkService, ITagService tagService, ShortLynxDbContext db,
-    IOptions<AnalyticsOptions> analyticsOptions) : ControllerBase
+    IOptions<AnalyticsOptions> analyticsOptions, IEntitlements entitlements) : ControllerBase
 {
     private int AnonymityThreshold => analyticsOptions.Value.EnforceAnonymity ? ClickAggregator.AnonymityThreshold : 0;
     private int CityAnonymityThreshold => analyticsOptions.Value.EnforceAnonymity ? CityAggregator.AnonymityThreshold : 0;
@@ -237,13 +237,15 @@ public class LinksController(
         // reimplement a narrower version by hand (HashedIp/Source/Device/ClickedAt only), which meant
         // this endpoint's Browser/OS/language/country/UTM breakdowns would always come back empty
         // rather than actually reflecting Browser/OS/etc.
-        var rows = await LinkVisitQueries.LoadLinkRowsAsync(db, link, ct);
-        var codeStats = (await LinkVisitQueries.LoadCodeCountsAsync(db, link, ct))
+        // Plan retention: older clicks hidden, never deleted.
+        var cutoff = await RetentionCutoff.ForAccountAsync(entitlements, CurrentKey.AccountId, ct);
+        var rows = await LinkVisitQueries.LoadLinkRowsAsync(db, link, cutoff, ct);
+        var codeStats = (await LinkVisitQueries.LoadCodeCountsAsync(db, link, cutoff, ct))
             .Select(c => new CodeClickStats(c.Code, c.UserId, c.Clicks, c.Recipient))
             .ToList();
 
         var b = ClickAggregator.Summarize(rows, AnonymityThreshold);
-        var cities = CityAggregator.Summarize(await CityClickQueries.LoadForLinksAsync(db, [id], ct), CityAnonymityThreshold);
+        var cities = CityAggregator.Summarize(await CityClickQueries.LoadForLinksAsync(db, [id], cutoff, ct), CityAnonymityThreshold);
         return Ok(new LinkAnalyticsResponse(
             id, link.OriginalUrl, link.Mode.ToString(),
             b.TotalClicks, b.UniqueClicks, b.HumanClicks, b.HumanUniqueClicks, b.BotClicks,

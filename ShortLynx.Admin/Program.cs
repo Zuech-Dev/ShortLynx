@@ -194,7 +194,7 @@ app.MapGet("/export/link/{linkId:guid}", async (
         var link = await db.LinkEntities.FirstOrDefaultAsync(l => l.Id == linkId && l.AccountId == accountId, ct);
         if (link is null) return Results.NotFound();
 
-        var rows = await ShortLynx.Services.Analytics.LinkVisitQueries.LoadLinkRowsAsync(db, link, ct);
+        var rows = await ShortLynx.Services.Analytics.LinkVisitQueries.LoadLinkRowsAsync(db, link, ct: ct);
         var csv = ShortLynx.Services.Analytics.ClickBreakdownCsv.Format(
             ShortLynx.Services.Analytics.ClickAggregator.Summarize(rows));
         return Results.File(System.Text.Encoding.UTF8.GetBytes(csv), "text/csv", $"link-{linkId}-analytics.csv");
@@ -215,7 +215,7 @@ app.MapGet("/export/campaign/{campaignId:guid}", async (
         if (!await db.CampaignEntities.AnyAsync(c => c.Id == campaignId && c.AccountId == accountId, ct))
             return Results.NotFound();
 
-        var rows = await ShortLynx.Services.Analytics.LinkVisitQueries.LoadCampaignRowsAsync(db, campaignId, accountId, ct);
+        var rows = await ShortLynx.Services.Analytics.LinkVisitQueries.LoadCampaignRowsAsync(db, campaignId, accountId, ct: ct);
         var csv = ShortLynx.Services.Analytics.ClickBreakdownCsv.Format(
             ShortLynx.Services.Analytics.ClickAggregator.Summarize(rows));
         return Results.File(System.Text.Encoding.UTF8.GetBytes(csv), "text/csv", $"campaign-{campaignId}-analytics.csv");

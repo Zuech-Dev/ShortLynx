@@ -1,10 +1,11 @@
 using Microsoft.EntityFrameworkCore;
 using ShortLynx.Data.Context;
 using ShortLynx.Data.Entities;
+using ShortLynx.Services.Entitlements;
 
 namespace ShortLynx.Services.Campaigns;
 
-public sealed class CampaignService(ShortLynxDbContext db) : ICampaignService
+public sealed class CampaignService(ShortLynxDbContext db, IEntitlements entitlements) : ICampaignService
 {
     public async Task<CampaignEntity> CreateAsync(
         Guid accountId, CampaignInput input, Guid? createdByUserAccountId = null, CancellationToken ct = default)
@@ -12,6 +13,10 @@ public sealed class CampaignService(ShortLynxDbContext db) : ICampaignService
         var name = (input.Name ?? string.Empty).Trim();
         if (name.Length == 0)
             throw new ArgumentException("Enter a campaign name.", nameof(input));
+
+        // Gates creating campaigns only; existing ones (and assigning links to them) keep working.
+        if (!await entitlements.IsFeatureEnabledAsync(accountId, PlanFeature.Campaigns, ct))
+            throw new EntitlementException("Campaigns aren't available on your plan.");
 
         var entity = new CampaignEntity
         {

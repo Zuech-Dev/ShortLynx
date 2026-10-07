@@ -3,6 +3,7 @@ using ShortLynx.Data.Context;
 using ShortLynx.Data.Entities;
 using ShortLynx.Data.Enums;
 using ShortLynx.Services.Accounts;
+using ShortLynx.Services.Entitlements;
 using ShortLynx.Services.MagicLinks;
 using ShortLynx.Services.Users;
 using ShortLynx.Tests.Infrastructure;
@@ -26,7 +27,7 @@ public class UserAdminServiceTests
     private static (UserAdminService Svc, FakeMagic Magic) MakeSvc(ShortLynxDbContext ctx)
     {
         var magic = new FakeMagic();
-        var accounts = new AccountService(ctx, magic);
+        var accounts = new AccountService(ctx, magic, new UnlimitedEntitlements());
         return (new UserAdminService(ctx, accounts, magic), magic);
     }
 

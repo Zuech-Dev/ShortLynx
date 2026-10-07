@@ -1,3 +1,4 @@
+using ShortLynx.Services.Entitlements;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -14,12 +15,33 @@ namespace ShortLynx.Core.Controllers;
 [Route("me")]
 public class MeController(
     IAccountService accounts, ShortLynxDbContext db, IUserSessionService sessions,
-    IOptions<JwtOptions> jwtOptions) : SessionControllerBase
+    IOptions<JwtOptions> jwtOptions, IEntitlements entitlements) : SessionControllerBase
 {
     // GET /me — the current session's user + active account.
     [HttpGet]
     public IActionResult Get() => Ok(new UserSummary(
         CurrentUserId, User.Email(), User.IsAdmin(), AccountId, User.Role()));
+
+    // GET /me/entitlements — what the active account's plan allows, for hiding unavailable features in
+    // the UI. Readable by every member (unlike /me/billing, which is Owner-only), since anyone who can
+    // create links needs to know which link options exist. Advisory: the create paths still enforce.
+    [HttpGet("entitlements")]
+    public async Task<IActionResult> Entitlements(CancellationToken ct)
+    {
+        Task<bool> Feature(PlanFeature f) => entitlements.IsFeatureEnabledAsync(AccountId, f, ct);
+        return Ok(new EntitlementsResponse(
+            CanCreateLink: await entitlements.CanCreateLinkAsync(AccountId, ct),
+            CustomCodes: await entitlements.CanCreateCustomCodeAsync(AccountId, ct),
+            UserAttributedLinks: await Feature(PlanFeature.UserAttributedLinks),
+            Campaigns: await Feature(PlanFeature.Campaigns),
+            CustomDomains: await Feature(PlanFeature.CustomDomains),
+            CanAddCustomDomain: await entitlements.CanAddCustomDomainAsync(AccountId, ct),
+            SocialPublishing: await Feature(PlanFeature.SocialPublishing),
+            ApiAccess: await Feature(PlanFeature.ApiAccess),
+            Conversions: await Feature(PlanFeature.Conversions),
+            CanAddMember: await entitlements.CanAddMemberAsync(AccountId, ct),
+            RetentionDays: await entitlements.GetRetentionDaysAsync(AccountId, ct)));
+    }
 
     // GET /me/accounts — the accounts the user belongs to (for account switching).
     [HttpGet("accounts")]

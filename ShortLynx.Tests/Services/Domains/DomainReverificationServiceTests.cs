@@ -1,3 +1,5 @@
+using ShortLynx.Services.Entitlements;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using System.Diagnostics;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -39,6 +41,7 @@ public class DomainReverificationServiceTests
         services.AddDbContext<ShortLynxDbContext>(o => o.UseSqlite(connection));
         services.AddSingleton(Options.Create(new CustomDomainOptions()));
         services.AddSingleton<IDnsResolver>(dns);
+        services.TryAddSingleton<IEntitlements, UnlimitedEntitlements>();
         services.AddScoped<ICustomDomainService, CustomDomainService>();
         var provider = services.BuildServiceProvider();
 

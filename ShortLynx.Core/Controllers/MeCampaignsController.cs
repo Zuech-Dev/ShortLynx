@@ -1,3 +1,4 @@
+using ShortLynx.Services.Entitlements;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -14,8 +15,13 @@ namespace ShortLynx.Core.Controllers;
 
 [Route("me/campaigns")]
 public class MeCampaignsController(
-    ICampaignService campaigns, ShortLynxDbContext db, IOptions<AnalyticsOptions> analyticsOptions) : SessionControllerBase
+    ICampaignService campaigns, ShortLynxDbContext db, IOptions<AnalyticsOptions> analyticsOptions,
+    IEntitlements entitlements) : SessionControllerBase
 {
+    // Plan retention: clicks older than this are hidden from every analytics read (never deleted).
+    private Task<DateTimeOffset?> RetentionCutoffAsync(CancellationToken ct)
+        => RetentionCutoff.ForAccountAsync(entitlements, AccountId, ct);
+
     private int AnonymityThreshold => analyticsOptions.Value.EnforceAnonymity ? ClickAggregator.AnonymityThreshold : 0;
     private int CityAnonymityThreshold => analyticsOptions.Value.EnforceAnonymity ? CityAggregator.AnonymityThreshold : 0;
 
@@ -107,7 +113,7 @@ public class MeCampaignsController(
 
         var b = ClickAggregator.Summarize(tagged.Select(x => x.Row).ToList(), AnonymityThreshold);
         var cities = CityAggregator.Summarize(
-            await CityClickQueries.LoadForLinksAsync(db, links.Select(l => l.Id).ToList(), ct), CityAnonymityThreshold);
+            await CityClickQueries.LoadForLinksAsync(db, links.Select(l => l.Id).ToList(), await RetentionCutoffAsync(ct), ct), CityAnonymityThreshold);
         var engagement = await RecipientEngagementAsync(links.Select(l => l.Id).ToList(), ct);
         return Ok(new CampaignAnalyticsResponse(
             campaign.Id, campaign.Name, links.Count,
@@ -155,10 +161,12 @@ public class MeCampaignsController(
         // rows give the per-recipient click count — repeat clicks here are exact and unbounded in time
         // (a recipient code identifies the person, so no hash and no dedup window is involved).
         var codeIds = codes.Select(c => c.Id).ToList();
+        var cutoff = await RetentionCutoffAsync(ct);
         var byCode = (await db.UserVisitEntities
                 .Where(v => codeIds.Contains(v.UserLinkCodeId))
                 .Select(v => new { v.UserLinkCodeId, v.ClickedAt })
                 .ToListAsync(ct))
+            .Where(v => cutoff is null || v.ClickedAt >= cutoff)
             .GroupBy(v => v.UserLinkCodeId)
             .ToDictionary(g => g.Key, g => (First: g.Min(v => v.ClickedAt), Clicks: g.LongCount()));
 
@@ -171,7 +179,7 @@ public class MeCampaignsController(
 
     // Every visit for the given links, tagged with its link id — see LinkVisitQueries for the rule.
     private async Task<List<(Guid LinkId, VisitRow Row)>> GatherVisitsAsync(List<Guid> linkIds, CancellationToken ct)
-        => (await LinkVisitQueries.LoadRowsByLinkAsync(db, linkIds, ct))
+        => (await LinkVisitQueries.LoadRowsByLinkAsync(db, linkIds, await RetentionCutoffAsync(ct), ct))
             .Select(t => (t.LinkId, t.Row))
             .ToList();
 

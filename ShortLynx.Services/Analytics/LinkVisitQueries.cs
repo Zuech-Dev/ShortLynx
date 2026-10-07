@@ -59,9 +59,21 @@ public static class LinkVisitQueries
         => new(hashedIp, source, device, clickedAt, browser, os, country, language,
                navigationType, timeZone, utmSource, utmMedium, utmCampaign, referrerHost);
 
-    /// <summary>Every click on the given links, each tagged with its link. The core query; others build on it.</summary>
+    /// <summary>
+    /// Every click on the given links, each tagged with its link. The core query; others build on it.
+    /// <paramref name="since"/> is the plan retention cutoff (<see cref="RetentionCutoff"/>): clicks before
+    /// it are hidden, not deleted. Applied in memory because SQLite can't compare DateTimeOffset in SQL,
+    /// and these rows are loaded whole anyway.
+    /// </summary>
     public static async Task<List<LinkVisitRow>> LoadRowsByLinkAsync(
-        ShortLynxDbContext db, IReadOnlyCollection<Guid> linkIds, CancellationToken ct = default)
+        ShortLynxDbContext db, IReadOnlyCollection<Guid> linkIds, DateTimeOffset? since = null, CancellationToken ct = default)
+    {
+        var all = await LoadAllRowsByLinkAsync(db, linkIds, ct);
+        return since is { } cutoff ? all.Where(t => t.Row.ClickedAt >= cutoff).ToList() : all;
+    }
+
+    private static async Task<List<LinkVisitRow>> LoadAllRowsByLinkAsync(
+        ShortLynxDbContext db, IReadOnlyCollection<Guid> linkIds, CancellationToken ct)
     {
         var tagged = new List<LinkVisitRow>();
         if (linkIds.Count == 0) return tagged;
@@ -151,32 +163,37 @@ public static class LinkVisitQueries
 
     /// <summary>Every click on one link.</summary>
     public static async Task<List<VisitRow>> LoadLinkRowsAsync(
-        ShortLynxDbContext db, LinkEntity link, CancellationToken ct = default)
-        => (await LoadRowsByLinkAsync(db, [link.Id], ct)).Select(t => t.Row).ToList();
+        ShortLynxDbContext db, LinkEntity link, DateTimeOffset? since = null, CancellationToken ct = default)
+        => (await LoadRowsByLinkAsync(db, [link.Id], since, ct)).Select(t => t.Row).ToList();
 
     /// <summary>Every click across a campaign's links, tagged by link (for the per-link table).</summary>
     public static async Task<List<LinkVisitRow>> LoadCampaignRowsByLinkAsync(
-        ShortLynxDbContext db, Guid campaignId, Guid accountId, CancellationToken ct = default)
+        ShortLynxDbContext db, Guid campaignId, Guid accountId, DateTimeOffset? since = null, CancellationToken ct = default)
     {
         var linkIds = await db.LinkEntities
             .Where(l => l.CampaignId == campaignId && l.AccountId == accountId)
             .Select(l => l.Id)
             .ToListAsync(ct);
-        return await LoadRowsByLinkAsync(db, linkIds, ct);
+        return await LoadRowsByLinkAsync(db, linkIds, since, ct);
     }
 
     /// <summary>Every click across a campaign's links, flattened.</summary>
     public static async Task<List<VisitRow>> LoadCampaignRowsAsync(
-        ShortLynxDbContext db, Guid campaignId, Guid accountId, CancellationToken ct = default)
-        => (await LoadCampaignRowsByLinkAsync(db, campaignId, accountId, ct)).Select(t => t.Row).ToList();
+        ShortLynxDbContext db, Guid campaignId, Guid accountId, DateTimeOffset? since = null, CancellationToken ct = default)
+        => (await LoadCampaignRowsByLinkAsync(db, campaignId, accountId, since, ct)).Select(t => t.Row).ToList();
 
     /// <summary>
     /// Per-code click counts for one link — the shared code for anonymous links, or every recipient's
     /// code for Mode 2. Codes with no clicks are included (a zero-click recipient is a real answer).
     /// </summary>
     public static async Task<List<CodeClickCount>> LoadCodeCountsAsync(
-        ShortLynxDbContext db, LinkEntity link, CancellationToken ct = default)
+        ShortLynxDbContext db, LinkEntity link, DateTimeOffset? since = null, CancellationToken ct = default)
     {
+        // Retention cutoff: count from (code, ClickedAt) pairs in memory — see LoadRowsByLinkAsync for why.
+        // Only reached for limited-retention plans; the unlimited case keeps the SQL counts below.
+        if (since is { } cutoff)
+            return await LoadCodeCountsSinceAsync(db, link, cutoff, ct);
+
         if (link.Mode == Data.Enums.LinkMode.Anonymous)
         {
             var sc = await db.ShortCodeEntities
@@ -212,12 +229,73 @@ public static class LinkVisitQueries
             .ToList();
     }
 
+    private static async Task<List<CodeClickCount>> LoadCodeCountsSinceAsync(
+        ShortLynxDbContext db, LinkEntity link, DateTimeOffset cutoff, CancellationToken ct)
+    {
+        if (link.Mode == Data.Enums.LinkMode.Anonymous)
+        {
+            var sc = await db.ShortCodeEntities
+                .Where(s => s.LinkId == link.Id)
+                .Select(s => new { s.Id, s.Code })
+                .FirstOrDefaultAsync(ct);
+            if (sc is null) return [];
+
+            var times = await db.VisitEntities
+                .Where(v => v.ShortCodeId == sc.Id || v.SocialPostCode!.LinkId == link.Id)
+                .Select(v => v.ClickedAt)
+                .ToListAsync(ct);
+            return [new CodeClickCount(sc.Id, sc.Code, null, times.LongCount(t => t >= cutoff))];
+        }
+
+        var codes = await db.UserLinkCodeEntities
+            .Where(c => c.LinkId == link.Id)
+            .Select(c => new { c.Id, c.Code, c.UserId, c.Recipient })
+            .ToListAsync(ct);
+        if (codes.Count == 0) return [];
+
+        var codeIds = codes.Select(c => c.Id).ToList();
+        var countByCode = (await db.UserVisitEntities
+                .Where(v => codeIds.Contains(v.UserLinkCodeId))
+                .Select(v => new { v.UserLinkCodeId, v.ClickedAt })
+                .ToListAsync(ct))
+            .Where(v => v.ClickedAt >= cutoff)
+            .GroupBy(v => v.UserLinkCodeId)
+            .ToDictionary(g => g.Key, g => g.LongCount());
+
+        return codes
+            .Select(c => new CodeClickCount(c.Id, c.Code, c.UserId, countByCode.GetValueOrDefault(c.Id, 0), c.Recipient))
+            .ToList();
+    }
+
     /// <summary>Total clicks per link — for list views that need a number, not the rows.</summary>
     public static async Task<Dictionary<Guid, long>> CountByLinkAsync(
-        ShortLynxDbContext db, IReadOnlyCollection<Guid> linkIds, CancellationToken ct = default)
+        ShortLynxDbContext db, IReadOnlyCollection<Guid> linkIds, DateTimeOffset? since = null, CancellationToken ct = default)
     {
         var counts = new Dictionary<Guid, long>();
         if (linkIds.Count == 0) return counts;
+
+        // Retention cutoff: tally (link, ClickedAt) pairs in memory (SQLite can't filter DateTimeOffset in
+        // SQL). Limited retention only applies to the small plans, so the row volume stays small.
+        if (since is { } cutoff)
+        {
+            var times = new List<(Guid LinkId, DateTimeOffset At)>();
+            times.AddRange((await db.VisitEntities
+                    .Where(v => v.ShortCodeId != null && linkIds.Contains(v.ShortCode!.LinkId))
+                    .Select(v => new { v.ShortCode!.LinkId, v.ClickedAt }).ToListAsync(ct))
+                .Select(x => (x.LinkId, x.ClickedAt)));
+            times.AddRange((await db.VisitEntities
+                    .Where(v => v.SocialPostCodeId != null && linkIds.Contains(v.SocialPostCode!.LinkId))
+                    .Select(v => new { v.SocialPostCode!.LinkId, v.ClickedAt }).ToListAsync(ct))
+                .Select(x => (x.LinkId, x.ClickedAt)));
+            times.AddRange((await db.UserVisitEntities
+                    .Where(v => linkIds.Contains(v.UserLinkCode.LinkId))
+                    .Select(v => new { v.UserLinkCode.LinkId, v.ClickedAt }).ToListAsync(ct))
+                .Select(x => (x.LinkId, x.ClickedAt)));
+
+            foreach (var g in times.Where(t => t.At >= cutoff).GroupBy(t => t.LinkId))
+                counts[g.Key] = g.LongCount();
+            return counts;
+        }
 
         // Counted server-side rather than by loading rows — list views can span every link in an account.
         var shared = await db.VisitEntities
@@ -253,7 +331,7 @@ public static class LinkVisitQueries
     /// identifies the post, not the clicker.
     /// </summary>
     public static async Task<LinkAttributionSplit> LoadAttributionSplitAsync(
-        ShortLynxDbContext db, Guid linkId, CancellationToken ct = default)
+        ShortLynxDbContext db, Guid linkId, DateTimeOffset? since = null, CancellationToken ct = default)
     {
         var posts = await db.SocialPostEntities
             .Where(p => p.LinkId == linkId)
@@ -265,10 +343,12 @@ public static class LinkVisitQueries
 
         // Clicks per post code, plus the hashed IPs so uniques can be counted per post. Pulled as rows
         // (not GroupBy in SQL) because unique-counting needs the hashes and the set is small.
-        var postClickRows = await db.VisitEntities
+        var postClickRows = (await db.VisitEntities
             .Where(v => v.SocialPostCode!.LinkId == linkId && v.SocialPostCode.SocialPostId != null)
-            .Select(v => new { PostId = v.SocialPostCode!.SocialPostId!.Value, v.HashedIp })
-            .ToListAsync(ct);
+            .Select(v => new { PostId = v.SocialPostCode!.SocialPostId!.Value, v.HashedIp, v.ClickedAt })
+            .ToListAsync(ct))
+            .Where(v => since is null || v.ClickedAt >= since)
+            .ToList();
 
         var byPost = postClickRows
             .GroupBy(r => r.PostId)
@@ -276,8 +356,13 @@ public static class LinkVisitQueries
                 g => g.Key,
                 g => (Clicks: g.LongCount(), Unique: g.Select(x => x.HashedIp).Distinct().LongCount()));
 
-        var organic = await db.VisitEntities
-            .LongCountAsync(v => v.ShortCodeId != null && v.ShortCode!.LinkId == linkId, ct);
+        var organic = since is { } cutoff
+            ? (await db.VisitEntities
+                    .Where(v => v.ShortCodeId != null && v.ShortCode!.LinkId == linkId)
+                    .Select(v => v.ClickedAt).ToListAsync(ct))
+                .LongCount(t => t >= cutoff)
+            : await db.VisitEntities
+                .LongCountAsync(v => v.ShortCodeId != null && v.ShortCode!.LinkId == linkId, ct);
 
         return new LinkAttributionSplit(
             AttributedClicks: postClickRows.Count,
@@ -296,8 +381,10 @@ public static class LinkVisitQueries
 
     /// <summary>Total clicks across every link in an account (all code types).</summary>
     public static async Task<long> CountForAccountAsync(
-        ShortLynxDbContext db, Guid accountId, CancellationToken ct = default)
-        => await db.VisitEntities.LongCountAsync(
+        ShortLynxDbContext db, Guid accountId, DateTimeOffset? since = null, CancellationToken ct = default)
+        => since is { } cutoff
+            ? await CountForAccountInRangeAsync(db, accountId, cutoff, DateTimeOffset.MaxValue, ct)
+            : await db.VisitEntities.LongCountAsync(
                v => (v.ShortCodeId != null && v.ShortCode!.Link.AccountId == accountId)
                  || (v.SocialPostCodeId != null && v.SocialPostCode!.Link.AccountId == accountId), ct)
          + await db.UserVisitEntities.LongCountAsync(v => v.UserLinkCode.Link.AccountId == accountId, ct);

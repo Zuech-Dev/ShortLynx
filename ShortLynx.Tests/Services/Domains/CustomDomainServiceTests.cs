@@ -1,3 +1,5 @@
+using ShortLynx.Tests.Infrastructure;
+using ShortLynx.Services.Entitlements;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using ShortLynx.Data.Enums;
@@ -18,8 +20,9 @@ public class CustomDomainServiceTests
 
     private static readonly CustomDomainOptions Opts = new();
 
-    private static CustomDomainService MakeSvc(ShortLynx.Data.Context.ShortLynxDbContext ctx, IDnsResolver dns)
-        => new(ctx, dns, Options.Create(Opts));
+    private static CustomDomainService MakeSvc(
+        ShortLynx.Data.Context.ShortLynxDbContext ctx, IDnsResolver dns, IEntitlements? entitlements = null)
+        => new(ctx, dns, entitlements ?? new FakeEntitlements(), Options.Create(Opts));
 
     private static async Task<Guid> SeedAccountAsync(TestDatabase db)
     {
@@ -237,5 +240,35 @@ public class CustomDomainServiceTests
         await using var ctx = db.CreateContext();
         var stored = await ctx.CustomDomainEntities.FindAsync(added.Id);
         Assert.Equal(DomainVerificationStatus.Pending, stored!.VerificationStatus);
+    }
+
+    // ── Entitlements ──────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Add_FeatureNotOnPlan_ThrowsEntitlement_AndCreatesNothing()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+        var uid = await SeedAccountAsync(db);
+
+        var ex = await Assert.ThrowsAsync<EntitlementException>(() =>
+            MakeSvc(db.CreateContext(), new FakeDnsResolver(), FakeEntitlements.Without(PlanFeature.CustomDomains))
+                .AddAsync("go.example.com", uid));
+
+        Assert.Contains("aren't available", ex.Message);
+        await using var verify = db.CreateContext();
+        Assert.Empty(verify.CustomDomainEntities);
+    }
+
+    [Fact]
+    public async Task Add_DomainLimitReached_ThrowsEntitlement()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+        var uid = await SeedAccountAsync(db);
+
+        var ex = await Assert.ThrowsAsync<EntitlementException>(() =>
+            MakeSvc(db.CreateContext(), new FakeDnsResolver(), new FakeEntitlements { AllowCustomDomainSlot = false })
+                .AddAsync("go.example.com", uid));
+
+        Assert.Contains("limit", ex.Message);
     }
 }

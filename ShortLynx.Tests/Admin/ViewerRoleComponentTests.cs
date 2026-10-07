@@ -1,3 +1,5 @@
+using ShortLynx.Services.Entitlements;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using System.Security.Claims;
 using Bunit;
 using Bunit.TestDoubles;
@@ -68,6 +70,7 @@ public class ViewerRoleComponentTests : BunitContext
         Services.AddScoped<ICustomDomainService>(_ => _domains);
         Services.AddScoped<ILinkService>(_ => _links);
         Services.AddScoped<ISocialConnectionService>(_ => _social);
+        Services.TryAddSingleton<IEntitlements, UnlimitedEntitlements>();
         Services.AddScoped<ICampaignService, CampaignService>();
         Services.AddScoped<NavPreferenceService>();
         Services.AddSingleton<IOptions<CustomDomainOptions>>(Options.Create(new CustomDomainOptions()));

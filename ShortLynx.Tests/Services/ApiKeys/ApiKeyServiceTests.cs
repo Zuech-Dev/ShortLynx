@@ -1,3 +1,5 @@
+using ShortLynx.Tests.Infrastructure;
+using ShortLynx.Services.Entitlements;
 using Microsoft.Extensions.Options;
 using ShortLynx.Data.Entities;
 using ShortLynx.Services.ApiKeys;
@@ -8,8 +10,9 @@ public class ApiKeyServiceTests
 {
     private const string Secret = "test-secret-at-least-32-chars-long!";
 
-    private static ApiKeyService MakeSvc(ShortLynx.Data.Context.ShortLynxDbContext ctx, string secret = Secret)
-        => new(ctx, Options.Create(new ApiKeyOptions { HmacSecret = secret }));
+    private static ApiKeyService MakeSvc(
+        ShortLynx.Data.Context.ShortLynxDbContext ctx, string secret = Secret, IEntitlements? entitlements = null)
+        => new(ctx, Options.Create(new ApiKeyOptions { HmacSecret = secret }), entitlements ?? new FakeEntitlements());
 
     private static async Task<Guid> SeedAccountAsync(TestDatabase db, string name = "Acct")
     {
@@ -269,5 +272,19 @@ public class ApiKeyServiceTests
         await using var db = await TestDatabase.CreateAsync();
         var revoked = await MakeSvc(db.CreateContext()).RevokeAsync(Guid.CreateVersion7(), Guid.CreateVersion7());
         Assert.False(revoked);
+    }
+
+    [Fact]
+    public async Task Create_ApiAccessNotOnPlan_ThrowsEntitlement_AndMintsNothing()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+        var accountId = await SeedAccountAsync(db);
+
+        await Assert.ThrowsAsync<EntitlementException>(() =>
+            MakeSvc(db.CreateContext(), entitlements: FakeEntitlements.Without(PlanFeature.ApiAccess))
+                .CreateAsync("Key", ["links:write"], accountId));
+
+        await using var verify = db.CreateContext();
+        Assert.Empty(verify.ApiKeyEntities);
     }
 }

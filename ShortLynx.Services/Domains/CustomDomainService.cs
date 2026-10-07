@@ -4,12 +4,14 @@ using Microsoft.Extensions.Options;
 using ShortLynx.Data.Context;
 using ShortLynx.Data.Entities;
 using ShortLynx.Data.Enums;
+using ShortLynx.Services.Entitlements;
 
 namespace ShortLynx.Services.Domains;
 
 public sealed class CustomDomainService(
     ShortLynxDbContext db,
     IDnsResolver dns,
+    IEntitlements entitlements,
     IOptions<CustomDomainOptions> options) : ICustomDomainService
 {
     private readonly CustomDomainOptions _opts = options.Value;
@@ -20,6 +22,13 @@ public sealed class CustomDomainService(
         var normalised = Normalise(domain);
         if (normalised.Length == 0)
             throw new ArgumentException("Enter a domain.", nameof(domain));
+
+        // Feature first, then count: "not on your plan" is the better message for a plan with none.
+        // Gates new adds only — domains already held are never revoked (grandfathered).
+        if (!await entitlements.IsFeatureEnabledAsync(accountId, PlanFeature.CustomDomains, ct))
+            throw new EntitlementException("Custom domains aren't available on your plan.");
+        if (!await entitlements.CanAddCustomDomainAsync(accountId, ct))
+            throw new EntitlementException("Your plan's custom domain limit has been reached.");
 
         if (await db.CustomDomainEntities.AnyAsync(d => d.Domain == normalised, ct))
             throw new InvalidOperationException($"The domain '{normalised}' is already registered.");

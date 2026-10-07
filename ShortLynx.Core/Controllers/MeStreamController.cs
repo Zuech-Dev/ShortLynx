@@ -1,3 +1,5 @@
+using ShortLynx.Services.Analytics;
+using ShortLynx.Services.Entitlements;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
@@ -25,7 +27,8 @@ namespace ShortLynx.Core.Controllers;
 public class MeStreamController(
     ShortLynxDbContext db,
     IOptions<LiveStreamOptions> options,
-    ILogger<MeStreamController> logger) : SessionControllerBase
+    ILogger<MeStreamController> logger,
+    IEntitlements entitlements) : SessionControllerBase
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
     {
@@ -59,7 +62,9 @@ public class MeStreamController(
         // The high-water mark. Each poll queries from (cursor - overlap) because a click's ClickedAt is
         // stamped at redirect time but written a batch later, so rows do not become visible in
         // ClickedAt order — see LiveVisitQueries.
-        var cursor = since ?? DateTimeOffset.UtcNow;
+        // A backfill can't reach past the plan's retention window (older clicks are hidden, not deleted).
+        var cursor = RetentionCutoff.Clamp(
+            since ?? DateTimeOffset.UtcNow, await RetentionCutoff.ForAccountAsync(entitlements, AccountId, ct));
         var overlap = TimeSpan.FromSeconds(o.OverlapSeconds);
 
         // Ids already delivered, so the overlap window doesn't re-send them. Pruned to the window on

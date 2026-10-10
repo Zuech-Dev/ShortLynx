@@ -252,7 +252,8 @@ public class LinksController(
             b.FirstClickAt, b.LastClickAt,
             codeStats, b.Sources, b.Devices, b.Timeline, b.HourlyDistribution, cities,
             b.Browsers, b.OperatingSystems, b.Languages, b.Countries, b.NavigationTypes,
-            b.UtmSources, b.UtmMediums, b.UtmCampaigns));
+            b.UtmSources, b.UtmMediums, b.UtmCampaigns,
+            b.SuspectedAutomatedClicks));
     }
 
     private static LinkResponse ToLinkResponse(LinkEntity link, string shortCode, bool isCustom, Guid[] tagIds) =>

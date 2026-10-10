@@ -22,4 +22,9 @@ public sealed record VisitEvent(
     bool PrivacySignal = false,
     // Raw query string of the inbound request; UTM tags are parsed out (and everything else
     // discarded) in the writer, keeping with the derive-at-write-time discipline.
-    string? RawQuery = null);
+    string? RawQuery = null,
+    // Whether the redirect request arrived over HTTPS (after forwarded headers). Browsers send Sec-Fetch-*
+    // only to secure origins, so a missing Sec-Fetch-Site means "scanner" only when this is true -- on a
+    // plain-HTTP deployment every real click lacks it. Defaults to false so a caller that doesn't know
+    // never gets clicks classified as SuspectedAutomated.
+    bool SecureRequest = false);

@@ -163,6 +163,37 @@ public class MeLinksAnalyticsTests : IClassFixture<ApiFactory>
         Assert.Equal(10, body.UtmCampaigns.Single(u => u.Label == "spring").Count);
     }
 
+    [Fact]
+    public async Task Analytics_ReportsSuspectedAutomated_AsSubsetOfBots()
+    {
+        var (client, _, _) = await _factory.CreateSessionClientAsync();
+        var link = await (await client.PostAsJsonAsync("/me/links", new CreateMyLinkRequest("https://example.com")))
+            .Content.ReadFromJsonAsync<LinkResponse>();
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ShortLynxDbContext>();
+            var shortCodeId = await db.ShortCodeEntities
+                .Where(s => s.LinkId == link!.Id).Select(s => s.Id).FirstAsync();
+            db.VisitEntities.AddRange(
+                Visit(shortCodeId, "h1", ClickSource.Direct, DeviceType.Mobile, Day1),
+                Visit(shortCodeId, "h2", ClickSource.Direct, DeviceType.Desktop, Day1),
+                Visit(shortCodeId, "s1", ClickSource.Direct, DeviceType.SuspectedAutomated, Day1),
+                Visit(shortCodeId, "s2", ClickSource.Direct, DeviceType.SuspectedAutomated, Day1),
+                Visit(shortCodeId, "s3", ClickSource.Direct, DeviceType.SuspectedAutomated, Day1),
+                Visit(shortCodeId, "b1", ClickSource.Direct, DeviceType.Bot, Day1));
+            await db.SaveChangesAsync();
+        }
+
+        var body = await (await client.GetAsync($"/me/links/{link!.Id}/analytics"))
+            .Content.ReadFromJsonAsync<LinkAnalyticsResponse>();
+
+        Assert.Equal(6, body!.TotalClicks);
+        Assert.Equal(2, body.HumanClicks);
+        Assert.Equal(4, body.BotClicks);
+        Assert.Equal(3, body.SuspectedAutomatedClicks);
+    }
+
     private static VisitEntity Visit(Guid shortCodeId, string ip, ClickSource source, DeviceType device, DateTimeOffset at)
         => new()
         {

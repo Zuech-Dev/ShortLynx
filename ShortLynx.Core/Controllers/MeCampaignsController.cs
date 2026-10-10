@@ -124,7 +124,8 @@ public class MeCampaignsController(
             engagement.MedianTimeToFirstClickMinutes, engagement.P90TimeToFirstClickMinutes,
             perLink, cities,
             b.Browsers, b.OperatingSystems, b.Languages, b.Countries, b.NavigationTypes,
-            b.UtmSources, b.UtmMediums, b.UtmCampaigns));
+            b.UtmSources, b.UtmMediums, b.UtmCampaigns,
+            b.SuspectedAutomatedClicks));
     }
 
     // GET /me/campaigns/{id}/analytics/export — the campaign-wide aggregate breakdown as CSV.

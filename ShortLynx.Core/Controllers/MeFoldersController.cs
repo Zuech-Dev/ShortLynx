@@ -120,7 +120,8 @@ public class MeFoldersController(
             engagement.MedianTimeToFirstClickMinutes, engagement.P90TimeToFirstClickMinutes,
             perLink, cities,
             b.Browsers, b.OperatingSystems, b.Languages, b.Countries, b.NavigationTypes,
-            b.UtmSources, b.UtmMediums, b.UtmCampaigns));
+            b.UtmSources, b.UtmMediums, b.UtmCampaigns,
+            b.SuspectedAutomatedClicks));
     }
 
     // GET /me/folders/{id}/analytics/export — the folder-wide aggregate breakdown as CSV.

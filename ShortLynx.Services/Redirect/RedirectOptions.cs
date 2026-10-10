@@ -4,6 +4,16 @@ public class RedirectOptions
 {
     public int CacheSlidingExpirationSeconds { get; set; } = 300;
 
+    /// <summary>
+    /// Hard ceiling on how long a resolved code stays cached, however often it's clicked. Without it the
+    /// sliding expiry alone keeps a hot link cached for the life of the Web process, so edits to the
+    /// link, its campaign's UTM template, its domain pin, its active flag, or the account's disclosure
+    /// settings would never reach it. Redirects are served by ShortLynx.Web, a separate process from
+    /// Core, and there's no shared cache to evict through, so this window is the staleness bound for
+    /// every such change. 0 or less disables the cap (sliding expiry only).
+    /// </summary>
+    public int CacheAbsoluteExpirationSeconds { get; set; } = 60;
+
     /// <summary>Max number of entries the redirect cache holds before evicting (each entry has Size 1).</summary>
     public long CacheSizeLimit { get; set; } = 100_000;
 

@@ -84,12 +84,20 @@ composition root via an `AddShortLynxDatabase()` extension method.
 
 Rate limit by IP → in-memory cache lookup → 302 redirect response → async visit event enqueue via `System.Threading.Channels` → background `IHostedService` batches writes via `IVisitEventSink`.
 
+The cache is a per-process `IMemoryCache` in ShortLynx.Web (`RedirectService`) — there is **no Redis
+or `IDistributedCache`** anywhere. Core is a separate process, so `IMemoryCache.Remove` in Core evicts
+nothing that serves redirects. Edits therefore reach redirects only when an entry expires:
+`Redirect:CacheAbsoluteExpirationSeconds` (default 60) is the staleness bound for every change to a
+link, its campaign UTM template, domain pin, `IsActive`, or the account's disclosure settings
+(`CacheSlidingExpirationSeconds` alone would keep a hot link cached forever). One-time-use codes are
+never cached; unknown codes are negatively cached for `CacheNegativeSeconds`. Any feature that
+changes what a code resolves to must accept this window or add real cross-process invalidation.
+
 ### Key interfaces to implement
 
 - `IShortCodeGenerator` — pluggable code generation (hash-based deterministic for Mode 2, random Base62 for Mode 1)
 - `IVisitEventSink` — abstracts the visit write path (in-process default; swappable for Hangfire/RabbitMQ)
 - `IDbOperations` — bulk DB operations abstraction (needed for efficient batch visit writes)
-- `ICacheProvider` — may replace direct Redis dependency
 
 ### IDs and short codes
 
@@ -116,7 +124,8 @@ de-duplicates by id. Polling strictly forward loses those clicks silently and pe
 Feature-complete against DESIGN.md's core spec, with a substantial test suite in `ShortLynx.Tests`
 (API integration tests via `WebApplicationFactory`, plus service and data tests). DESIGN.md's original
 "Still To Be Decided" list is mostly resolved now (see the struck-through items there and the pointers
-to where each was decided) — Redis, retention, one-time-use codes, and custom domains all shipped.
+to where each was decided) — retention, one-time-use codes, and custom domains shipped; Redis was
+decided *not* required and isn't used (see Redirect pipeline).
 DESIGN.md remains the reference for entities and the API surface; treat its still-open items (short
 code length/bit-layout specifics, click-dedup strategy, a Bloom-filter pre-flight check) as the actual
 remaining gaps, not the whole original list.

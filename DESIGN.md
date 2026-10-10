@@ -149,7 +149,7 @@ Every request signal is reduced to a low-entropy dimension in the writer, and th
 | Bulk creation abuse | Authenticate creation endpoints with API keys; enforce per-key rate limits and quotas |
 | API key storage | Store HMAC-SHA256 or Argon2 hash only; store key prefix (`first 8 chars`) in cleartext for lookup; issue plaintext key once at creation only |
 | Click data privacy (GDPR/CCPA) | Hash IP addresses with a rotating salt; design in data retention policy and deletion endpoints from the start |
-| Cache integrity | Redis must require authentication and must not be publicly exposed |
+| Cache integrity | The redirect cache is in-process (`IMemoryCache` in ShortLynx.Web), so there's no cache service to expose. If a shared cache such as Redis is ever added, it must require authentication and must not be publicly exposed |
 
 ---
 

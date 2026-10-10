@@ -18,9 +18,7 @@ public sealed class RedirectService(
     // Compared by reference; never returned to callers.
     private static readonly RedirectCacheEntry NegativeSentinel = new(string.Empty, null, null, null, null);
 
-    private readonly MemoryCacheEntryOptions _cacheOpts = new MemoryCacheEntryOptions()
-        .SetSlidingExpiration(TimeSpan.FromSeconds(options.Value.CacheSlidingExpirationSeconds))
-        .SetSize(1);
+    private readonly MemoryCacheEntryOptions _cacheOpts = PositiveCacheOptions(options.Value);
 
     private readonly MemoryCacheEntryOptions _negativeCacheOpts = new MemoryCacheEntryOptions()
         .SetAbsoluteExpiration(TimeSpan.FromSeconds(options.Value.CacheNegativeSeconds))
@@ -145,6 +143,18 @@ public sealed class RedirectService(
             .Where(x => x.Id == userLinkCodeId && !x.IsUsed)
             .ExecuteUpdateAsync(s => s.SetProperty(x => x.IsUsed, true), ct);
         return claimed > 0;
+    }
+
+    // Sliding keeps cold links from occupying the cache; the absolute cap bounds how stale a hot link can
+    // get, since nothing in Web hears about edits made through Core.
+    private static MemoryCacheEntryOptions PositiveCacheOptions(RedirectOptions o)
+    {
+        var opts = new MemoryCacheEntryOptions()
+            .SetSlidingExpiration(TimeSpan.FromSeconds(o.CacheSlidingExpirationSeconds))
+            .SetSize(1);
+        if (o.CacheAbsoluteExpirationSeconds > 0)
+            opts.SetAbsoluteExpiration(TimeSpan.FromSeconds(o.CacheAbsoluteExpirationSeconds));
+        return opts;
     }
 
     // Resolves the click-through target: the link's destination with the campaign's UTM template merged

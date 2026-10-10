@@ -165,6 +165,27 @@ public class ClickAggregatorTests
     }
 
     [Fact]
+    public void Summarize_CountsSuspectedAutomatedAsBotNotHuman()
+    {
+        var rows =
+            Many(10, i => Row($"h{i}"))
+            .Concat(Many(3, i => Row($"b{i}", device: DeviceType.Bot)))
+            // Scanners re-hitting the same IP must not show up as human repeat clicks either.
+            .Concat(Many(7, _ => Row("scanner", device: DeviceType.SuspectedAutomated)))
+            .ToList();
+
+        var b = ClickAggregator.Summarize(rows);
+
+        Assert.Equal(20, b.TotalClicks);
+        Assert.Equal(10, b.HumanClicks);
+        Assert.Equal(10, b.HumanUniqueClicks);
+        Assert.Equal(0, b.RepeatClicks);
+        Assert.Equal(10, b.BotClicks);
+        Assert.Equal(7, b.SuspectedAutomatedClicks);
+        Assert.Equal(b.TotalClicks, b.HumanClicks + b.BotClicks);
+    }
+
+    [Fact]
     public void Summarize_BuildsZeroFilledHourlyDistribution()
     {
         var at9 = new DateTimeOffset(2026, 7, 1, 9, 30, 0, TimeSpan.Zero);

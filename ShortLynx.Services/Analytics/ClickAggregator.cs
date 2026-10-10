@@ -80,7 +80,10 @@ public sealed record ClickBreakdown(
     // How many uniques clicked exactly once, exactly twice, or three-plus times.
     long UniquesClickedOnce = 0,
     long UniquesClickedTwice = 0,
-    long UniquesClickedThreePlus = 0);
+    long UniquesClickedThreePlus = 0,
+    // Subset of BotClicks: browser-looking clients that sent no Sec-Fetch-Site (link scanners, see
+    // DeviceType.SuspectedAutomated). BotClicks includes them so HumanClicks + BotClicks = TotalClicks.
+    long SuspectedAutomatedClicks = 0);
 
 /// <summary>
 /// Reduces a set of visits to click totals plus platform/device/daily and browser/OS/language/country
@@ -137,7 +140,7 @@ public static class ClickAggregator
             .ToDictionary(g => g.Key, g => g.LongCount());
         var localHourly = Enumerable.Range(0, 24).Select(h => new HourlyClicks(h, byLocalHour.GetValueOrDefault(h))).ToList();
 
-        var humanRows = rows.Where(r => r.Device != DeviceType.Bot).ToList();
+        var humanRows = rows.Where(r => r.Device is not (DeviceType.Bot or DeviceType.SuspectedAutomated)).ToList();
 
         // Repeat clicking, measured over human rows only — a bot hammering a link would otherwise
         // dominate the ratio and make it read as engagement. Bounded to one rotation day by the
@@ -173,7 +176,8 @@ public static class ClickAggregator
             ClicksPerUnique: humanUnique == 0 ? 0 : Math.Round((double)humanRows.Count / humanUnique, 2),
             UniquesClickedOnce: clicksPerHumanIp.Count(c => c == 1),
             UniquesClickedTwice: clicksPerHumanIp.Count(c => c == 2),
-            UniquesClickedThreePlus: clicksPerHumanIp.Count(c => c >= 3));
+            UniquesClickedThreePlus: clicksPerHumanIp.Count(c => c >= 3),
+            SuspectedAutomatedClicks: rows.Count(r => r.Device == DeviceType.SuspectedAutomated));
     }
 
     // Converts a click instant to the visitor's local hour. IANA ids resolve via ICU on all

@@ -13,6 +13,10 @@
                     {
                         <div class="text-xs text-gray-400" data-testid="bot-clicks">+@b.BotClicks bot@(b.BotClicks == 1 ? "" : "s") filtered</div>
                     }
+                    @if (b.SuspectedAutomatedClicks > 0)
+                    {
+                        <div class="text-xs text-gray-400" data-testid="suspected-automated-clicks" title="Clicks from a browser-like client that didn't behave like a browser navigation (no Sec-Fetch-Site header). On SMS and email sends these are almost always carrier or security link scanners opening every link.">incl. @b.SuspectedAutomatedClicks suspected link scanner@(b.SuspectedAutomatedClicks == 1 ? "" : "s")</div>
+                    }
                 </div>
                 <div>
                     <div class="text-2xl font-bold" data-testid="unique-clicks">@b.HumanUniqueClicks</div>

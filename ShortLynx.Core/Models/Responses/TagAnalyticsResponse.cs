@@ -36,4 +36,7 @@ public sealed record TagAnalyticsResponse(
     IReadOnlyList<LabelCount> NavigationTypes,
     IReadOnlyList<LabelCount> UtmSources,
     IReadOnlyList<LabelCount> UtmMediums,
-    IReadOnlyList<LabelCount> UtmCampaigns);
+    IReadOnlyList<LabelCount> UtmCampaigns,
+    // Subset of BotClicks: browser-looking clicks with no Sec-Fetch-Site over HTTPS -- link scanners on
+    // SMS/email sends (DeviceType.SuspectedAutomated). Already excluded from the human counts.
+    long SuspectedAutomatedClicks);

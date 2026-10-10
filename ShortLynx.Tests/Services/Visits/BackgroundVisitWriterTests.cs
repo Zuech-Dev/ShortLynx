@@ -257,6 +257,67 @@ public class BackgroundVisitWriterTests
         Assert.Equal(ShortLynx.Data.Enums.DeviceType.Unknown, stored.Device);
     }
 
+    [Theory]
+    // Browser-shaped UA, no Sec-Fetch-Site: a link scanner (the SMS case that motivated this).
+    [InlineData("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126.0 Safari/537.36", null, ShortLynx.Data.Enums.DeviceType.SuspectedAutomated)]
+    [InlineData("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile/15E148 Safari/604.1", null, ShortLynx.Data.Enums.DeviceType.SuspectedAutomated)]
+    // Same UAs from a real browser navigation keep their device class.
+    [InlineData("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126.0 Safari/537.36", "none", ShortLynx.Data.Enums.DeviceType.Desktop)]
+    [InlineData("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile/15E148 Safari/604.1", "cross-site", ShortLynx.Data.Enums.DeviceType.Mobile)]
+    // Declared bots stay Bot; an unclassifiable UA stays Unknown -- neither is re-labelled.
+    [InlineData("Googlebot/2.1 (+http://www.google.com/bot.html)", null, ShortLynx.Data.Enums.DeviceType.Bot)]
+    [InlineData(null, null, ShortLynx.Data.Enums.DeviceType.Unknown)]
+    public async Task Writer_ClassifiesMissingSecFetchSiteAsSuspectedAutomated(
+        string? userAgent, string? secFetchSite, ShortLynx.Data.Enums.DeviceType expected)
+        => Assert.Equal(expected, await WriteOneDeviceAsync(userAgent, secFetchSite, secure: true));
+
+    [Theory]
+    // Plain HTTP: browsers don't send Sec-Fetch-* to insecure origins, so its absence is no evidence and a
+    // self-host without TLS must not see every real click labelled a scanner.
+    [InlineData("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126.0 Safari/537.36", ShortLynx.Data.Enums.DeviceType.Desktop)]
+    [InlineData("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile/15E148 Safari/604.1", ShortLynx.Data.Enums.DeviceType.Mobile)]
+    public async Task Writer_PlainHttp_MissingSecFetchSite_KeepsDeviceClass(
+        string userAgent, ShortLynx.Data.Enums.DeviceType expected)
+        => Assert.Equal(expected, await WriteOneDeviceAsync(userAgent, secFetchSite: null, secure: false));
+
+    private static async Task<ShortLynx.Data.Enums.DeviceType> WriteOneDeviceAsync(
+        string? userAgent, string? secFetchSite, bool secure)
+    {
+        var (sink, db, writer, testDb) = await MakeWriter(drainMs: 20);
+        await using var _ = testDb;
+        using var cts = new CancellationTokenSource();
+
+        await writer.StartAsync(cts.Token);
+        await sink.EnqueueAsync(new VisitEvent(
+            ShortCodeId: Guid.CreateVersion7(), UserLinkCodeId: null, UserId: null, SocialPostCodeId: null,
+            RawIp: "1.2.3.4", Referrer: null, UserAgent: userAgent, ClickedAt: DateTimeOffset.UtcNow,
+            SecFetchSite: secFetchSite, SecureRequest: secure));
+        await WaitUntilAsync(() => db.VisitCount >= 1);
+        await cts.CancelAsync();
+
+        return db.InsertedVisits.Single().Device;
+    }
+
+    [Fact]
+    public async Task Writer_PrivacySignal_IsNeverSuspectedAutomated()
+    {
+        // DNT/GPC clicks are stored with no NavigationType by design; they are people, not scanners.
+        var (sink, db, writer, testDb) = await MakeWriter(drainMs: 20);
+        await using var _ = testDb;
+        using var cts = new CancellationTokenSource();
+
+        await writer.StartAsync(cts.Token);
+        await sink.EnqueueAsync(new VisitEvent(
+            ShortCodeId: Guid.CreateVersion7(), UserLinkCodeId: null, UserId: null, SocialPostCodeId: null,
+            RawIp: "1.2.3.4", Referrer: null,
+            UserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/126.0 Safari/537.36",
+            ClickedAt: DateTimeOffset.UtcNow, SecFetchSite: null, PrivacySignal: true, SecureRequest: true));
+        await WaitUntilAsync(() => db.VisitCount >= 1);
+        await cts.CancelAsync();
+
+        Assert.Equal(ShortLynx.Data.Enums.DeviceType.Unknown, db.InsertedVisits.Single().Device);
+    }
+
     [Fact]
     public async Task Writer_RespectsConfiguredBatchSize()
     {
@@ -310,7 +371,8 @@ public class BackgroundVisitWriterTests
 
         var evt = new VisitEvent(
             ShortCodeId: shortCodeId, UserLinkCodeId: null, UserId: null, SocialPostCodeId: null,
-            RawIp: "1.2.3.4", Referrer: null, UserAgent: "test-agent", ClickedAt: DateTimeOffset.UtcNow);
+            RawIp: "1.2.3.4", Referrer: null, UserAgent: "test-agent", ClickedAt: DateTimeOffset.UtcNow,
+            SecFetchSite: "cross-site"); // a real browser navigation; scanner clicks never become city rows
 
         await writer.StartAsync(cts.Token);
         await sink.EnqueueAsync(evt);
@@ -338,7 +400,8 @@ public class BackgroundVisitWriterTests
 
         var evt = new VisitEvent(
             ShortCodeId: shortCodeId, UserLinkCodeId: null, UserId: null, SocialPostCodeId: null,
-            RawIp: "1.2.3.4", Referrer: null, UserAgent: "test-agent", ClickedAt: DateTimeOffset.UtcNow);
+            RawIp: "1.2.3.4", Referrer: null, UserAgent: "test-agent", ClickedAt: DateTimeOffset.UtcNow,
+            SecFetchSite: "cross-site");
 
         await writer.StartAsync(cts.Token);
         await sink.EnqueueAsync(evt);

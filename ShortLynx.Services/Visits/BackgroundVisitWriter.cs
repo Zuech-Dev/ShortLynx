@@ -100,7 +100,7 @@ public sealed class BackgroundVisitWriter(
                 // itself is empty (mobile/business IP blocks), and the city->state->country cascade
                 // needs those clicks to still become a row (they fall through to the state or country
                 // tier at read time) rather than silently vanishing before ever reaching "Other".
-                if (cityEligible && d.Country is not null && d.Device != DeviceType.Bot)
+                if (cityEligible && d.Country is not null && !IsAutomated(d.Device))
                 {
                     cityItems.Add(new CityClickItem(
                         LinkId: linkId, City: d.City, State: d.State, Country: d.Country,
@@ -214,9 +214,16 @@ public sealed class BackgroundVisitWriter(
         var ua = uaParser.Parse(e.UserAgent);
         var nav = string.IsNullOrWhiteSpace(e.SecFetchSite) ? null : e.SecFetchSite.Trim().ToLowerInvariant();
         var geo = geoIp.Resolve(e.RawIp, includeCity);
+        // A browser-shaped User-Agent with no Sec-Fetch-Site is a scanner wearing a browser's UA (see
+        // DeviceType.SuspectedAutomated). Privacy-signal clicks never reach here -- they returned above.
+        // Only over HTTPS: browsers omit Sec-Fetch-* to insecure origins, where its absence proves nothing.
+        var device = e.SecureRequest && nav is null
+                     && ua.Device is DeviceType.Desktop or DeviceType.Mobile or DeviceType.Tablet
+            ? DeviceType.SuspectedAutomated
+            : ua.Device;
         return (
             SourceDetector.DetectSource(e.Referrer),
-            ua.Device,
+            device,
             ua.Browser,
             ua.Os,
             referrerReducer.Host(e.Referrer),
@@ -227,6 +234,8 @@ public sealed class BackgroundVisitWriter(
             geo.City,
             geo.State);
     }
+
+    internal static bool IsAutomated(DeviceType d) => d is DeviceType.Bot or DeviceType.SuspectedAutomated;
 
     // IP hashing is keyed with a secret pepper (HMAC) so the small IPv4 space can't be brute-forced
     // back to the original address, plus a daily rotating component (see DailyBucket) that limits how

@@ -192,7 +192,8 @@ static async Task<IResult> RecordVisitAndRedirect(HttpContext ctx, RedirectCache
         AcceptLanguage: acceptLanguage.Length > 0 ? acceptLanguage : null,
         SecFetchSite: secFetchSite.Length > 0 ? secFetchSite : null,
         PrivacySignal: privacySignal || anonByChoice,
-        RawQuery: ctx.Request.QueryString.HasValue ? ctx.Request.QueryString.Value : null));
+        RawQuery: ctx.Request.QueryString.HasValue ? ctx.Request.QueryString.Value : null,
+        SecureRequest: ctx.Request.IsHttps));
 
     return Results.Redirect(entry.OriginalUrl, permanent: false);
 }

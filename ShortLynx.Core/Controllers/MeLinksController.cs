@@ -238,7 +238,8 @@ public class MeLinksController(
             b.FirstClickAt, b.LastClickAt,
             codeStats, b.Sources, b.Devices, b.Timeline, b.HourlyDistribution, cities,
             b.Browsers, b.OperatingSystems, b.Languages, b.Countries, b.NavigationTypes,
-            b.UtmSources, b.UtmMediums, b.UtmCampaigns));
+            b.UtmSources, b.UtmMediums, b.UtmCampaigns,
+            b.SuspectedAutomatedClicks));
     }
 
     // GET /me/links/{id}/analytics/export — the same aggregate breakdown as /analytics, as CSV.

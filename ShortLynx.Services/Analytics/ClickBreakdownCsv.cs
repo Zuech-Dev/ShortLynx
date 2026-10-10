@@ -18,6 +18,7 @@ public static class ClickBreakdownCsv
         Row(sb, "totals", "total", b.TotalClicks, b.UniqueClicks);
         Row(sb, "totals", "human", b.HumanClicks, b.HumanUniqueClicks);
         Row(sb, "totals", "bot", b.BotClicks, null);
+        Row(sb, "totals", "suspected_automated", b.SuspectedAutomatedClicks, null);
 
         foreach (var s in b.Sources) Row(sb, "source", s.Source, s.Count, null);
         foreach (var d in b.Devices) Row(sb, "device", d.Device, d.Count, null);

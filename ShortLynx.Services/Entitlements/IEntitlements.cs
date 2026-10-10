@@ -46,4 +46,11 @@ public enum PlanFeature
     SocialPublishing,
     Conversions,
     ApiAccess,
+
+    /// <summary>
+    /// Styled QR codes (colours, module/eye shapes, frames). Advertised via /me/entitlements so clients
+    /// can hide the styling controls; server-side styled rendering and its 402 gate are tracked
+    /// separately. Appended last so existing values keep their numbers.
+    /// </summary>
+    StyledQr,
 }

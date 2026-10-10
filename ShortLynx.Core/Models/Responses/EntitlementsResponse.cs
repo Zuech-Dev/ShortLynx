@@ -11,6 +11,7 @@ namespace ShortLynx.Core.Models.Responses;
 /// <param name="CanAddCustomDomain">Room for another custom domain under the plan's count.</param>
 /// <param name="CanAddMember">Room for another seat.</param>
 /// <param name="RetentionDays">Click history visible in analytics, in days; null = unlimited.</param>
+/// <param name="StyledQr">The plan includes styled QR codes (see <c>PlanFeature.StyledQr</c>).</param>
 public sealed record EntitlementsResponse(
     bool CanCreateLink,
     bool CustomCodes,
@@ -22,4 +23,5 @@ public sealed record EntitlementsResponse(
     bool ApiAccess,
     bool Conversions,
     bool CanAddMember,
-    int? RetentionDays);
+    int? RetentionDays,
+    bool StyledQr);

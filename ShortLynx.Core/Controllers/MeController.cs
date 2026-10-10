@@ -40,7 +40,8 @@ public class MeController(
             ApiAccess: await Feature(PlanFeature.ApiAccess),
             Conversions: await Feature(PlanFeature.Conversions),
             CanAddMember: await entitlements.CanAddMemberAsync(AccountId, ct),
-            RetentionDays: await entitlements.GetRetentionDaysAsync(AccountId, ct)));
+            RetentionDays: await entitlements.GetRetentionDaysAsync(AccountId, ct),
+            StyledQr: await Feature(PlanFeature.StyledQr)));
     }
 
     // GET /me/accounts — the accounts the user belongs to (for account switching).

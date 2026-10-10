@@ -78,7 +78,7 @@ public class PlanGatesApiTests : IClassFixture<ApiFactory>
             AllowCustomCodes = false,
             AllowCustomDomainSlot = false,
             RetentionDays = 30,
-            DisabledFeatures = { PlanFeature.UserAttributedLinks, PlanFeature.Campaigns },
+            DisabledFeatures = { PlanFeature.UserAttributedLinks, PlanFeature.Campaigns, PlanFeature.StyledQr },
         });
 
         var e = await client.GetFromJsonAsync<EntitlementsResponse>("/me/entitlements");
@@ -91,6 +91,7 @@ public class PlanGatesApiTests : IClassFixture<ApiFactory>
         Assert.True(e.CustomDomains);
         Assert.False(e.CanAddCustomDomain);
         Assert.True(e.SocialPublishing);
+        Assert.False(e.StyledQr);
         Assert.Equal(30, e.RetentionDays);
     }
 
@@ -103,7 +104,8 @@ public class PlanGatesApiTests : IClassFixture<ApiFactory>
 
         Assert.NotNull(e);
         Assert.True(e.CanCreateLink && e.CustomCodes && e.UserAttributedLinks && e.Campaigns && e.CustomDomains
-                    && e.CanAddCustomDomain && e.SocialPublishing && e.ApiAccess && e.Conversions && e.CanAddMember);
+                    && e.CanAddCustomDomain && e.SocialPublishing && e.ApiAccess && e.Conversions && e.CanAddMember
+                    && e.StyledQr);
         Assert.Null(e.RetentionDays);
     }
 

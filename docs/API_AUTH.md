@@ -219,6 +219,20 @@ account to have a (resulting) `privacyPolicyUrl` set.
 | `GET /admin/accounts/{id}` | Full settings: `{ id, name, privacyPolicyUrl, termsOfServiceUrl, enableCityAggregates }` |
 | `PUT /admin/accounts/{id}` `{ name, privacyPolicyUrl?, termsOfServiceUrl?, confirmsDisclosure?, enableCityAggregates? }` | Update any account's settings |
 
+### `/admin/maintenance` — one-off data fixes
+
+Super-admin-only operations that depend on something only the operator knows about the deployment, so
+they never run on their own.
+
+| Method & path | Purpose |
+|---|---|
+| `POST /admin/maintenance/reclassify-link-scanners` `{ before, dryRun? }` | Mark old clicks a link scanner made (browser User-Agent, no `Sec-Fetch-Site`) as `SuspectedAutomated`, the way new clicks are classified since pkg-v0.9.11. Returns `{ visits, userVisits, dryRun }`. **Dry run unless `dryRun: false`**; idempotent. |
+
+`before` is required and can't be in the future. Pass the end of a period when **all** redirects were
+served over HTTPS: browsers don't send `Sec-Fetch-Site` to plain-HTTP origins, so on a period with
+HTTP traffic real clicks would be relabelled. Privacy-signal (DNT/GPC) clicks are never touched; they
+are stored as device `Unknown`. City aggregates aren't affected; they hold no per-click device.
+
 ---
 
 ## 5. Config the operator must set (Core)

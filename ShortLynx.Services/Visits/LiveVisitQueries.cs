@@ -50,15 +50,19 @@ public readonly record struct LiveVisitRow(
 public static class LiveVisitQueries
 {
     /// <summary>
-    /// Clicks on any of <paramref name="accountId"/>'s links with <c>ClickedAt &gt; since</c>, oldest
-    /// first, capped at <paramref name="limit"/> rows.
+    /// Clicks on any of <paramref name="accountId"/>'s links with <c>ClickedAt &gt; since</c> (and
+    /// <c>&lt; until</c> when given), oldest first, capped at <paramref name="limit"/> rows.
+    /// <paramref name="humanOnly"/> drops declared bots and suspected link scanners in the query itself,
+    /// so they don't use up the row cap.
     /// </summary>
     public static async Task<List<LiveVisitRow>> LoadSinceAsync(
         ShortLynxDbContext db,
         Guid accountId,
         DateTimeOffset since,
         int limit,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        DateTimeOffset? until = null,
+        bool humanOnly = false)
     {
         var rows = new List<LiveVisitRow>();
 
@@ -76,12 +80,13 @@ public static class LiveVisitQueries
 
             var visits = await FilterByClickedAtAsync(
                 db,
-                db.VisitEntities.Where(v => v.ShortCodeId != null && ids.Contains(v.ShortCodeId.Value)),
+                db.VisitEntities.Where(v => v.ShortCodeId != null && ids.Contains(v.ShortCodeId.Value)
+                    && (!humanOnly || (v.Device != DeviceType.Bot && v.Device != DeviceType.SuspectedAutomated))),
                 v => v.ClickedAt,
                 v => new Projection(
                     v.Id, v.ShortCodeId!.Value, null, v.ClickedAt, v.Source, v.Device, v.Browser, v.Os,
                     v.Country, v.TimeZone, v.Language, v.ReferrerHost, v.UtmSource, v.UtmMedium, v.UtmCampaign),
-                since, limit, ct);
+                since, until, limit, ct);
 
             rows.AddRange(visits.Select(v => ToRow(v, meta[v.CodeId])));
         }
@@ -99,12 +104,13 @@ public static class LiveVisitQueries
 
             var visits = await FilterByClickedAtAsync(
                 db,
-                db.UserVisitEntities.Where(v => ids.Contains(v.UserLinkCodeId)),
+                db.UserVisitEntities.Where(v => ids.Contains(v.UserLinkCodeId)
+                    && (!humanOnly || (v.Device != DeviceType.Bot && v.Device != DeviceType.SuspectedAutomated))),
                 v => v.ClickedAt,
                 v => new Projection(
                     v.Id, v.UserLinkCodeId, v.UserId, v.ClickedAt, v.Source, v.Device, v.Browser, v.Os,
                     v.Country, v.TimeZone, v.Language, v.ReferrerHost, v.UtmSource, v.UtmMedium, v.UtmCampaign),
-                since, limit, ct);
+                since, until, limit, ct);
 
             rows.AddRange(visits.Select(v => ToRow(v, meta[v.CodeId])));
         }
@@ -143,34 +149,39 @@ public static class LiveVisitQueries
         System.Linq.Expressions.Expression<Func<TEntity, DateTimeOffset>> clickedAt,
         System.Linq.Expressions.Expression<Func<TEntity, Projection>> project,
         DateTimeOffset since,
+        DateTimeOffset? until,
         int limit,
         CancellationToken ct)
     {
         if (db.Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true)
         {
             var all = await source.Select(project).ToListAsync(ct);
-            return all.Where(p => p.ClickedAt > since)
+            return all.Where(p => p.ClickedAt > since && (until is null || p.ClickedAt < until))
                       .OrderBy(p => p.ClickedAt)
                       .Take(limit)
                       .ToList();
         }
 
         return await source
-            .Where(SinceFilter(clickedAt, since))
+            .Where(WindowFilter(clickedAt, since, until))
             .OrderBy(clickedAt)
             .Take(limit)
             .Select(project)
             .ToListAsync(ct);
     }
 
-    /// <summary>Builds <c>entity =&gt; clickedAt(entity) &gt; since</c> as one expression tree, so the
-    /// comparison reaches the provider as a plain column predicate rather than a call to
-    /// <paramref name="clickedAt"/> the translator would have to inline itself.</summary>
-    private static System.Linq.Expressions.Expression<Func<TEntity, bool>> SinceFilter<TEntity>(
-        System.Linq.Expressions.Expression<Func<TEntity, DateTimeOffset>> clickedAt, DateTimeOffset since)
+    /// <summary>Builds <c>entity =&gt; clickedAt(entity) &gt; since [&amp;&amp; clickedAt(entity) &lt; until]</c> as
+    /// one expression tree, so the comparison reaches the provider as a plain column predicate rather than
+    /// a call to <paramref name="clickedAt"/> the translator would have to inline itself.</summary>
+    private static System.Linq.Expressions.Expression<Func<TEntity, bool>> WindowFilter<TEntity>(
+        System.Linq.Expressions.Expression<Func<TEntity, DateTimeOffset>> clickedAt, DateTimeOffset since,
+        DateTimeOffset? until)
     {
-        var body = System.Linq.Expressions.Expression.GreaterThan(
+        System.Linq.Expressions.Expression body = System.Linq.Expressions.Expression.GreaterThan(
             clickedAt.Body, System.Linq.Expressions.Expression.Constant(since));
+        if (until is { } end)
+            body = System.Linq.Expressions.Expression.AndAlso(body, System.Linq.Expressions.Expression.LessThan(
+                clickedAt.Body, System.Linq.Expressions.Expression.Constant(end)));
         return System.Linq.Expressions.Expression.Lambda<Func<TEntity, bool>>(body, clickedAt.Parameters[0]);
     }
 }

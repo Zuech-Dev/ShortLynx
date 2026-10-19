@@ -108,6 +108,9 @@ changes what a code resolves to must accept this window or add real cross-proces
 
 `GET /me/stream` is an account-scoped SSE feed of clicks as they land; `GET /me/clicks` returns the
 same row shape for a historical window, so a client merges the two into one list.
+`/me/clicks` takes `since`, an optional exclusive `until` (so a past day or range loads on its own), and
+`humanOnly=true`, which drops `Bot` and `SuspectedAutomated` rows **in the query** — filtering client-side
+instead lets automated traffic fill the 5,000-row cap and push real clicks out of the window.
 
 It **tails the visits table** rather than subscribing to `IVisitEventSink`. That looks like the
 obvious wiring and cannot work: redirects are served by `ShortLynx.Web`, a different process from the

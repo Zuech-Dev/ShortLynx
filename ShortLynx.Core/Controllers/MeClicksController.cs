@@ -30,25 +30,34 @@ public class MeClicksController(ShortLynxDbContext db, IEntitlements entitlement
 
     /// <summary>
     /// Clicks on this account's links, oldest first. <paramref name="since"/> defaults to 30 days ago;
-    /// <paramref name="limit"/> is clamped to <see cref="MaxLimit"/>.
+    /// <paramref name="until"/> (exclusive) defaults to now, so a past day or range can be loaded on its
+    /// own; <paramref name="limit"/> is clamped to <see cref="MaxLimit"/>. <paramref name="humanOnly"/>
+    /// leaves out declared bots and suspected link scanners server-side, so automated traffic can't fill
+    /// the row cap and push real clicks out of the window.
     /// </summary>
     [HttpGet]
     public async Task<IActionResult> List(
         [FromQuery] DateTimeOffset? since,
+        [FromQuery] DateTimeOffset? until,
         [FromQuery] int limit = 1000,
+        [FromQuery] bool humanOnly = false,
         CancellationToken ct = default)
     {
+        if (until is { } end && since is { } start && end <= start)
+            return BadRequest(new { error = "`until` must be after `since`." });
+
         // Never earlier than the plan's retention window — older clicks are hidden, not deleted.
         var from = RetentionCutoff.Clamp(
             since ?? DateTimeOffset.UtcNow.AddDays(-DefaultWindowDays),
             await RetentionCutoff.ForAccountAsync(entitlements, AccountId, ct));
         var capped = Math.Clamp(limit, 1, MaxLimit);
 
-        var rows = await LiveVisitQueries.LoadSinceAsync(db, AccountId, from, capped, ct);
+        var rows = await LiveVisitQueries.LoadSinceAsync(db, AccountId, from, capped, ct, until, humanOnly);
 
         return Ok(new
         {
             since = from,
+            until,
             // Lets a client tell "this is everything" from "this is the first page of a larger window"
             // without comparing counts against a limit it would have to know.
             truncated = rows.Count >= capped,

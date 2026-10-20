@@ -1,3 +1,4 @@
+using ShortLynx.Data.Enums;
 using ShortLynx.Services.Visits;
 using ShortLynx.Tests.Infrastructure;
 
@@ -176,6 +177,133 @@ public class LiveVisitQueriesTests
             // IN (...) it would otherwise build.
             var rows = await LiveVisitQueries.LoadSinceAsync(db, emptyId, DateTimeOffset.UtcNow.AddDays(-1), 100);
             Assert.Empty(rows);
+        }
+    }
+
+    [Fact]
+    public async Task LoadSince_WithUntil_ReturnsOnlyTheWindow()
+    {
+        await using var testDb = await TestDatabase.CreateAsync();
+        var since = DateTimeOffset.UtcNow.AddDays(-3);
+        var until = since.AddDays(1);
+        Guid accountId;
+
+        await using (var db = testDb.CreateContext())
+        {
+            var account = EntityFactory.Account();
+            var link = EntityFactory.AnonymousLink(account.Id);
+            var sc = EntityFactory.ShortCode(link.Id, "win00001");
+            var user = EntityFactory.UserAccount();
+            var code = EntityFactory.UserLinkCode(link.Id, user.Id, "win00002");
+            db.AddRange(account, link, sc, user, code);
+
+            foreach (var at in new[] { since.AddHours(1), until.AddMinutes(-1), until, until.AddHours(1) })
+            {
+                var v = EntityFactory.Visit(sc.Id);
+                v.ClickedAt = at;
+                db.Add(v);
+            }
+            var inside = EntityFactory.UserVisit(code.Id, user.Id);
+            inside.ClickedAt = since.AddHours(2);
+            var outside = EntityFactory.UserVisit(code.Id, user.Id);
+            outside.ClickedAt = until.AddHours(2);
+            db.AddRange(inside, outside);
+            await db.SaveChangesAsync();
+            accountId = account.Id;
+        }
+
+        await using (var db = testDb.CreateContext())
+        {
+            var rows = await LiveVisitQueries.LoadSinceAsync(db, accountId, since, 100, until: until);
+
+            // `until` is exclusive, like `since`, so back-to-back windows never count a click twice.
+            Assert.Equal(3, rows.Count);
+            Assert.All(rows, r => Assert.True(r.ClickedAt > since && r.ClickedAt < until));
+        }
+    }
+
+    [Fact]
+    public async Task LoadSince_HumanOnly_DropsBotsAndScannersFromBothTables()
+    {
+        await using var testDb = await TestDatabase.CreateAsync();
+        var since = DateTimeOffset.UtcNow.AddMinutes(-30);
+        Guid accountId;
+
+        await using (var db = testDb.CreateContext())
+        {
+            var account = EntityFactory.Account();
+            var link = EntityFactory.AnonymousLink(account.Id);
+            var sc = EntityFactory.ShortCode(link.Id, "hum00001");
+            var user = EntityFactory.UserAccount();
+            var code = EntityFactory.UserLinkCode(link.Id, user.Id, "hum00002");
+            db.AddRange(account, link, sc, user, code);
+
+            var n = 0;
+            foreach (var device in new[]
+                     {
+                         DeviceType.Desktop, DeviceType.Mobile, DeviceType.Unknown,
+                         DeviceType.Bot, DeviceType.SuspectedAutomated,
+                     })
+            {
+                var v = EntityFactory.Visit(sc.Id);
+                v.Device = device;
+                v.ClickedAt = since.AddMinutes(++n);
+                db.Add(v);
+            }
+            var uvHuman = EntityFactory.UserVisit(code.Id, user.Id);
+            uvHuman.Device = DeviceType.Tablet;
+            uvHuman.ClickedAt = since.AddMinutes(10);
+            var uvScanner = EntityFactory.UserVisit(code.Id, user.Id);
+            uvScanner.Device = DeviceType.SuspectedAutomated;
+            uvScanner.ClickedAt = since.AddMinutes(11);
+            db.AddRange(uvHuman, uvScanner);
+            await db.SaveChangesAsync();
+            accountId = account.Id;
+        }
+
+        await using (var db = testDb.CreateContext())
+        {
+            var all = await LiveVisitQueries.LoadSinceAsync(db, accountId, since, 100);
+            var human = await LiveVisitQueries.LoadSinceAsync(db, accountId, since, 100, humanOnly: true);
+
+            Assert.Equal(7, all.Count);
+            // Unknown is a person who sent DNT/GPC, not a bot, so it stays.
+            Assert.Equal(
+                new[] { DeviceType.Desktop, DeviceType.Mobile, DeviceType.Unknown, DeviceType.Tablet },
+                human.Select(r => r.Device).ToArray());
+        }
+    }
+
+    [Fact]
+    public async Task LoadSince_HumanOnly_AppliesBeforeTheRowCap()
+    {
+        await using var testDb = await TestDatabase.CreateAsync();
+        var since = DateTimeOffset.UtcNow.AddMinutes(-30);
+        Guid accountId;
+
+        await using (var db = testDb.CreateContext())
+        {
+            var account = EntityFactory.Account();
+            var link = EntityFactory.AnonymousLink(account.Id);
+            var sc = EntityFactory.ShortCode(link.Id, "cap00001");
+            db.AddRange(account, link, sc);
+            // Five scanner clicks first, then two people. Filtering after the cap would return nothing.
+            for (var i = 1; i <= 7; i++)
+            {
+                var v = EntityFactory.Visit(sc.Id);
+                v.Device = i <= 5 ? DeviceType.SuspectedAutomated : DeviceType.Mobile;
+                v.ClickedAt = since.AddMinutes(i);
+                db.Add(v);
+            }
+            await db.SaveChangesAsync();
+            accountId = account.Id;
+        }
+
+        await using (var db = testDb.CreateContext())
+        {
+            var rows = await LiveVisitQueries.LoadSinceAsync(db, accountId, since, 2, humanOnly: true);
+            Assert.Equal(2, rows.Count);
+            Assert.All(rows, r => Assert.Equal(DeviceType.Mobile, r.Device));
         }
     }
 }

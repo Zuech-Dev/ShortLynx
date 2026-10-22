@@ -8,7 +8,7 @@
   </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.7" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.13" />
         <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.18.0" />
         <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.1" />
         <!-- UseSentry() needs the ASP.NET Core shared framework, which only a Web SDK project like this

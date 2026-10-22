@@ -11,12 +11,14 @@
     <ItemGroup>
         <PackageReference Include="DnsClient" Version="1.8.0" />
         <PackageReference Include="MailKit" Version="4.17.0" />
+        <!-- MimeKit (via MailKit) asks for Pkcs 10.0.0, which has high-severity advisories; lift it. -->
+        <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
         <PackageReference Include="MaxMind.GeoIP2" Version="5.3.0" />
-        <PackageReference Include="Microsoft.AspNetCore.DataProtection.Abstractions" Version="10.0.7" />
-        <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.7" />
-        <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.7" />
-        <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.7" />
-        <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.7" />
+        <PackageReference Include="Microsoft.AspNetCore.DataProtection.Abstractions" Version="10.0.13" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.13" />
+        <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.13" />
+        <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.13" />
+        <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.13" />
         <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.18.0" />
         <PackageReference Include="QRCoder" Version="1.8.0" />
         <!-- Observability (ShortLynx.Services.Observability): shared here, not in ShortLynx.Core, so

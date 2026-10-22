@@ -9,8 +9,8 @@
   </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Microsoft.AspNetCore.App.Internal.Assets" Version="10.0.7" />
-        <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.7" />
+        <PackageReference Include="Microsoft.AspNetCore.App.Internal.Assets" Version="10.0.13" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.13" />
         <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.18.0" />
         <PackageReference Include="Microsoft.TypeScript.MSBuild" Version="7.0.0-beta">
           <PrivateAssets>all</PrivateAssets>
